@@ -56,14 +56,16 @@ type ChatMessage struct {
 }
 
 type ChatCompletionRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
+	Model      string        `json:"model"`
+	Messages   []ChatMessage `json:"messages"`
+	Modalities []string      `json:"modalities,omitempty"`
 }
 
 type ChatCompletionResponse struct {
 	Choices []struct {
 		Message struct {
 			Content interface{} `json:"content"`
+			Images  []string    `json:"images,omitempty"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -99,14 +101,15 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
 
 	reqPayload := ChatCompletionRequest{
-		Model: model,
+		Model:      model,
+		Modalities: []string{"image", "text"},
 		Messages: []ChatMessage{
 			{
 				Role: "user",
 				Content: []ChatMessageContentPart{
 					{
 						Type: "text",
-						Text: promptText,
+						Text: promptText + "\n\nCRITICAL: Return the output image in your response payload. Do not return conversational text only.",
 					},
 					{
 						Type: "image_url",
@@ -162,10 +165,22 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
 	}
 
-	rawContent := fmt.Sprintf("%v", chatResp.Choices[0].Message.Content)
+	choice := chatResp.Choices[0]
+
+	// 1. Checa se o OpenRouter retornou no campo `message.images`
+	if len(choice.Message.Images) > 0 {
+		imgStr := choice.Message.Images[0]
+		bytes, ext, err := c.extractImageBytesFromResponse(imgStr)
+		if err == nil {
+			return bytes, ext, nil
+		}
+	}
+
+	// 2. Checa o conteúdo raw
+	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("falha ao extrair imagem (raw: %s): %w", string(bodyBytes), err)
 	}
 
 	return outBytes, outExt, nil
@@ -223,12 +238,7 @@ func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, 
 		return decBytes, "png", nil
 	}
 
-	// Se falhar tudo, exibe trecho do conteúdo para diagnóstico
-	snippet := content
-	if len(snippet) > 300 {
-		snippet = snippet[:300] + "..."
-	}
-	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem da resposta da IA. Resposta recebida: %q", snippet)
+	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem")
 }
 
 // downloadImageFromURL baixa os bytes de uma imagem via HTTP GET
