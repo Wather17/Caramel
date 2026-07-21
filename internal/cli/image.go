@@ -13,6 +13,7 @@ import (
 var (
 	imgOutputDir string
 	imgModelName string
+	verboseFlag  bool
 )
 
 var imageCmd = &cobra.Command{
@@ -45,7 +46,7 @@ var imageColorizeCmd = &cobra.Command{
 		}
 
 		fmt.Printf("🎨 Colorindo imagem '%s' com o modelo '%s'...\n", filepath.Base(imgPath), imgModelName)
-		res, err := ai.ColorizeSingleImage(imgPath, targetDir, cfg.OpenRouterAPIKey, imgModelName)
+		res, err := ai.ColorizeSingleImage(imgPath, targetDir, cfg.OpenRouterAPIKey, imgModelName, verboseFlag)
 		if err != nil {
 			return err
 		}
@@ -58,6 +59,7 @@ var imageColorizeCmd = &cobra.Command{
 func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: mesma pasta da imagem original)")
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
+	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)

@@ -17,6 +17,7 @@ var (
 	listOnly  bool
 	colorize  bool
 	modelName string
+	docxVerbose bool
 )
 
 // docxCmd representa o grupo de comandos relacionados a arquivos .docx
@@ -81,7 +82,7 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 			}
 
 			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-			results, err := ai.ColorizeDocxImages(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName)
+			results, err := ai.ColorizeDocxImages(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, docxVerbose)
 			if err != nil {
 				return err
 			}
@@ -124,7 +125,8 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
-	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/nano-banana-2)")
+	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
+	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
 	// Registra subcomandos
 	docxCmd.AddCommand(docxExtractCmd)

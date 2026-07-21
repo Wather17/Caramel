@@ -24,6 +24,7 @@ var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
 // Client representa o cliente HTTP para a API do OpenRouter
 type Client struct {
 	APIKey     string
+	Verbose    bool
 	HTTPClient *http.Client
 }
 
@@ -64,8 +65,8 @@ type ChatCompletionRequest struct {
 type ChatCompletionResponse struct {
 	Choices []struct {
 		Message struct {
-			Content interface{} `json:"content"`
-			Images  []string    `json:"images,omitempty"`
+			Content interface{}   `json:"content"`
+			Images  []interface{} `json:"images,omitempty"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -148,13 +149,17 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
 
+	if c.Verbose {
+		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter:\n%s\n\n", string(bodyBytes))
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("API OpenRouter retornou status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta: %w", err)
+		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta (Raw JSON: %s): %w", string(bodyBytes), err)
 	}
 
 	if chatResp.Error != nil {
@@ -162,17 +167,19 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
+		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter. Raw: %s", string(bodyBytes))
 	}
 
 	choice := chatResp.Choices[0]
 
 	// 1. Checa se o OpenRouter retornou no campo `message.images`
 	if len(choice.Message.Images) > 0 {
-		imgStr := choice.Message.Images[0]
-		bytes, ext, err := c.extractImageBytesFromResponse(imgStr)
-		if err == nil {
-			return bytes, ext, nil
+		for _, imgObj := range choice.Message.Images {
+			imgStr := fmt.Sprintf("%v", imgObj)
+			bytes, ext, err := c.extractImageBytesFromResponse(imgStr)
+			if err == nil {
+				return bytes, ext, nil
+			}
 		}
 	}
 
@@ -180,7 +187,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
-		return nil, "", fmt.Errorf("falha ao extrair imagem (raw: %s): %w", string(bodyBytes), err)
+		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta (Raw JSON: %s): %w", string(bodyBytes), err)
 	}
 
 	return outBytes, outExt, nil

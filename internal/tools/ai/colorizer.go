@@ -12,16 +12,17 @@ import (
 
 // ColorizeResult contém o relatório do processo de coloração
 type ColorizeResult struct {
-	OriginalPath string
+	OriginalPath  string
 	ColorizedPath string
 }
 
 // ColorizeSingleImage recebe o caminho de uma imagem, envia para a IA e salva a versão colorida
-func ColorizeSingleImage(imagePath string, outputDir string, apiKey string, model string) (*ColorizeResult, error) {
+func ColorizeSingleImage(imagePath string, outputDir string, apiKey string, model string, verbose bool) (*ColorizeResult, error) {
 	client, err := NewClient(apiKey)
 	if err != nil {
 		return nil, err
 	}
+	client.Verbose = verbose
 
 	prompt := prompts.GetColorizationPrompt()
 	imgBytes, ext, err := client.ColorizeImage(imagePath, prompt, model)
@@ -48,7 +49,7 @@ func ColorizeSingleImage(imagePath string, outputDir string, apiKey string, mode
 }
 
 // ColorizeDocxImages extrai as imagens de um arquivo .docx e colorida cada uma delas via IA
-func ColorizeDocxImages(docxPath string, outputDir string, apiKey string, model string) ([]ColorizeResult, error) {
+func ColorizeDocxImages(docxPath string, outputDir string, apiKey string, model string, verbose bool) ([]ColorizeResult, error) {
 	// 1. Extrai as imagens originais para uma pasta temporária de trabalho
 	tempExtractDir := filepath.Join(outputDir, ".temp_raw_images")
 	extractRes, err := docx.ExtractImages(docxPath, tempExtractDir)
@@ -64,7 +65,7 @@ func ColorizeDocxImages(docxPath string, outputDir string, apiKey string, model 
 	var results []ColorizeResult
 	for _, img := range extractRes.Images {
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ColorizeSingleImage(imgPath, outputDir, apiKey, model)
+		res, err := ColorizeSingleImage(imgPath, outputDir, apiKey, model, verbose)
 		if err != nil {
 			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
 			continue
