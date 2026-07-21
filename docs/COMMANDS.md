@@ -8,7 +8,7 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 
 - [`caramel version`](#1-caramel-version) - Exibe detalhes da versão e compilação.
 - [`caramel config`](#2-caramel-config) - Gerencia configurações e chaves de API (OpenRouter).
-- [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai e colore todas as imagens de um `.docx` de uma só vez.
+- [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai e colore todas as imagens de um `.docx` de uma só vez (com filtro automático de brasões/logos).
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
 
@@ -54,9 +54,10 @@ caramel config show
 
 Executa o fluxo fim-a-fim automatizado para um arquivo `.docx`:
 1. Inspeciona o arquivo `.docx`
-2. Extrai todas as imagens para uma pasta com nome higienizado (ex: `./imagens prova de geografia/`)
-3. Colora cada imagem automaticamente usando a IA multimodal Nano Banana 2 (`google/gemini-3.1-flash-image`)
-4. Exibe o resumo detalhado no terminal.
+2. Ignora automaticamente brasões, logos e ícones pequenos (padrão: `< 20KB`) para não desperdiçar IA.
+3. Extrai todas as imagens mantidas para uma pasta com nome higienizado (ex: `./imagens prova de geografia/`)
+4. Colora cada imagem automaticamente usando a IA multimodal Nano Banana 2 (`google/gemini-3.1-flash-image`)
+5. Exibe o resumo detalhado no terminal.
 
 ### Sintaxe
 ```bash
@@ -70,13 +71,18 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
+| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens coloridas serão salvas. |
 | `--model` | `-m` | string | `google/gemini-3.1-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
 
 ### Exemplo Prático
 ```bash
+# Processa o arquivo ignorando automaticamente brasões e logos menores que 20KB
 caramel process atividade_geografia.docx
+
+# Processa todas as imagens sem filtrar tamanho
+caramel process atividade.docx -s 0
 ```
 
 ---
@@ -94,6 +100,7 @@ caramel docx extract <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
+| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para extrair a imagem (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens extraídas serão salvas. |
 | `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
