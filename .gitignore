@@ -1,0 +1,29 @@
+# Binaries and build artifacts
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+caramel
+
+# Test binary built using `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
+# AI agent configuration files
+GEMINI.md
+# Synced GitHub issues
+issues/
