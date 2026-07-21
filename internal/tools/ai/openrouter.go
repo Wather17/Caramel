@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -17,6 +18,8 @@ const (
 	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 	DefaultModel     = "google/gemini-2.5-flash-image" // Google Nano Banana
 )
+
+var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
 
 // Client representa o cliente HTTP para a API do OpenRouter
 type Client struct {
@@ -159,9 +162,8 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
 	}
 
-	// Trata o conteúdo da resposta (pode ser string com base64 ou URL)
 	rawContent := fmt.Sprintf("%v", chatResp.Choices[0].Message.Content)
-	outBytes, outExt, err := extractImageBytesFromResponse(rawContent)
+	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
 		return nil, "", err
 	}
@@ -169,16 +171,13 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	return outBytes, outExt, nil
 }
 
-// extractImageBytesFromResponse extrai os bytes de imagem a partir do texto de resposta da IA (base64 ou data URL)
-func extractImageBytesFromResponse(content string) ([]byte, string, error) {
-	// Procura por formato data:image/png;base64,...
+// extractImageBytesFromResponse extrai os bytes de imagem (Data URL, URL remota ou Base64 puro)
+func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, error) {
+	// 1. Procura por formato Data URL (data:image/png;base64,...)
 	if idx := strings.Index(content, "data:image/"); idx != -1 {
 		dataPart := content[idx:]
-		if endIdx := strings.Index(dataPart, `"`); endIdx != -1 {
+		if endIdx := strings.IndexAny(dataPart, `"'\ `); endIdx != -1 {
 			dataPart = dataPart[:endIdx]
-		}
-		if spaceIdx := strings.Index(dataPart, " "); spaceIdx != -1 {
-			dataPart = dataPart[:spaceIdx]
 		}
 
 		commaIdx := strings.Index(dataPart, ",")
@@ -190,17 +189,72 @@ func extractImageBytesFromResponse(content string) ([]byte, string, error) {
 				ext = "jpg"
 			}
 			decBytes, err := base64.StdEncoding.DecodeString(b64Str)
-			if err == nil {
+			if err == nil && len(decBytes) > 50 {
 				return decBytes, ext, nil
 			}
 		}
 	}
 
-	// Fallback se a resposta for pura string base64 sem cabeçalho data:
-	decBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(content))
+	// 2. Procura por URLs de imagens HTTP/HTTPS retornadas pela IA
+	if match := urlRegex.FindString(content); match != "" {
+		imgBytes, ext, err := c.downloadImageFromURL(match)
+		if err == nil {
+			return imgBytes, ext, nil
+		}
+	}
+
+	// 3. Fallback: Se for qualquer URL http/https simples na resposta
+	if idx := strings.Index(content, "http://"); idx != -1 || strings.Index(content, "https://") != -1 {
+		startIdx := strings.Index(content, "http")
+		urlStr := content[startIdx:]
+		if endIdx := strings.IndexAny(urlStr, " \"')\n"); endIdx != -1 {
+			urlStr = urlStr[:endIdx]
+		}
+		imgBytes, ext, err := c.downloadImageFromURL(strings.TrimSpace(urlStr))
+		if err == nil {
+			return imgBytes, ext, nil
+		}
+	}
+
+	// 4. Fallback se for uma string base64 pura
+	trimmed := strings.TrimSpace(content)
+	decBytes, err := base64.StdEncoding.DecodeString(trimmed)
 	if err == nil && len(decBytes) > 100 {
 		return decBytes, "png", nil
 	}
 
-	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem colorida da resposta da IA")
+	// Se falhar tudo, exibe trecho do conteúdo para diagnóstico
+	snippet := content
+	if len(snippet) > 300 {
+		snippet = snippet[:300] + "..."
+	}
+	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem da resposta da IA. Resposta recebida: %q", snippet)
+}
+
+// downloadImageFromURL baixa os bytes de uma imagem via HTTP GET
+func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
+	resp, err := c.HTTPClient.Get(url)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("status HTTP %d ao baixar imagem da URL", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	ext := "png"
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
+		ext = "jpg"
+	} else if strings.Contains(contentType, "webp") {
+		ext = "webp"
+	}
+
+	return data, ext, nil
 }
