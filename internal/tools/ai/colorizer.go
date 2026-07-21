@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"caramel/internal/prompts"
-	"caramel/internal/tools/docx"
 )
 
 // ColorizeResult contém o relatório do processo de coloração
@@ -46,32 +45,4 @@ func ColorizeSingleImage(imagePath string, outputDir string, apiKey string, mode
 		OriginalPath:  imagePath,
 		ColorizedPath: outputPath,
 	}, nil
-}
-
-// ColorizeDocxImages extrai as imagens de um arquivo .docx e colorida cada uma delas via IA
-func ColorizeDocxImages(docxPath string, outputDir string, apiKey string, model string, verbose bool) ([]ColorizeResult, error) {
-	// 1. Extrai as imagens originais para uma pasta temporária de trabalho
-	tempExtractDir := filepath.Join(outputDir, ".temp_raw_images")
-	extractRes, err := docx.ExtractImages(docxPath, tempExtractDir)
-	if err != nil {
-		return nil, fmt.Errorf("erro na extração inicial de imagens do .docx: %w", err)
-	}
-	defer os.RemoveAll(tempExtractDir)
-
-	if extractRes.TotalExtracted == 0 {
-		return nil, nil
-	}
-
-	var results []ColorizeResult
-	for _, img := range extractRes.Images {
-		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ColorizeSingleImage(imgPath, outputDir, apiKey, model, verbose)
-		if err != nil {
-			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
-			continue
-		}
-		results = append(results, *res)
-	}
-
-	return results, nil
 }
