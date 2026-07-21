@@ -18,6 +18,7 @@ var (
 	listOnly    bool
 	colorize    bool
 	modelName   string
+	minSizeStr  string
 	docxVerbose bool
 )
 
@@ -65,6 +66,11 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 			return nil
 		}
 
+		minSizeBytes, err := docx.ParseSizeInBytes(minSizeStr)
+		if err != nil {
+			return err
+		}
+
 		// Se a flag -o / --output não foi passada explicitamente, gera o nome de pasta dinâmico e higienizado
 		targetDir := outputDir
 		if !cmd.Flags().Changed("output") {
@@ -83,13 +89,17 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 			}
 
 			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, docxVerbose)
+			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose)
 			if err != nil {
 				return err
 			}
 
+			if pipeRes.TotalSkipped > 0 {
+				fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, pipeRes.TotalSkipped)
+			}
+
 			if pipeRes.TotalColorized == 0 {
-				fmt.Printf("ℹ️  Nenhuma imagem foi extraída/colorida do arquivo '%s'.\n", docxPath)
+				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi extraída/colorida do arquivo '%s'.\n", minSizeStr, docxPath)
 				return nil
 			}
 
@@ -102,13 +112,21 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 
 		// Processo de extração padrão (sem coloração)
 		fmt.Printf("🍬 Extraindo imagens de '%s'...\n", filepath.Base(docxPath))
-		res, err := docx.ExtractImages(docxPath, targetDir)
+		res, err := docx.ExtractImagesFiltered(docxPath, targetDir, minSizeBytes)
 		if err != nil {
 			return err
 		}
 
+		if res.TotalSkipped > 0 {
+			fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, res.TotalSkipped)
+			for _, img := range res.SkippedImages {
+				sizeKB := float64(img.Size) / 1024.0
+				fmt.Printf(" │   └─ Ignorada: %s (%.1f KB)\n", img.OriginalName, sizeKB)
+			}
+		}
+
 		if res.TotalExtracted == 0 {
-			fmt.Printf("ℹ️  Nenhuma imagem foi encontrada no arquivo '%s'. Nenhuma imagem extraída.\n", docxPath)
+			fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada no arquivo '%s'. Nenhuma imagem extraída.\n", minSizeStr, docxPath)
 			return nil
 		}
 
@@ -127,6 +145,7 @@ func init() {
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
 	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image)")
+	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
 	// Registra subcomandos
