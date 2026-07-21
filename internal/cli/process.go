@@ -23,11 +23,13 @@ var (
 var processCmd = &cobra.Command{
 	Use:     "process <arquivo.docx>",
 	Aliases: []string{"pipeline", "run"},
-	Short:   "Pipeline automatizado: extrai e colore todas as imagens de um .docx via IA",
+	Short:   "Pipeline automatizado: extrai, colore e reconstrói o arquivo .docx com IA",
 	Long: `Executa o fluxo completo e automatizado para arquivos .docx:
-1. Inspeciona e extrai todas as imagens do documento .docx (ignorando brasões/logos pequenos por padrão)
+1. Inspeciona e extrai todas as imagens do documento .docx (ignorando brasões/logos pequenos)
 2. Cria uma pasta de saída com nome higienizado (ex: 'imagens <nome_do_arquivo>')
-3. Processa e colore cada imagem utilizando IA multimodal (OpenRouter / Nano Banana 2)`,
+3. Processa e colore cada imagem utilizando IA multimodal (OpenRouter / Nano Banana 2)
+4. Ajusta a proporção das imagens para o tamanho original
+5. Reconstrói um novo arquivo .docx (ex: '<nome> colorida.docx') com as novas imagens injetadas`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		docxPath := args[0]
@@ -75,19 +77,18 @@ var processCmd = &cobra.Command{
 		}
 
 		fmt.Printf("✅ Pipeline concluído com sucesso!\n")
-		fmt.Printf(" ├─ Total de imagens processadas: %d\n", res.TotalColorized)
-		fmt.Printf(" └─ Imagens salvas no diretório: %s\n", res.OutputDir)
-
-		for i, imgRes := range res.Results {
-			fmt.Printf("     %d. %s\n", i+1, imgRes.ColorizedPath)
+		fmt.Printf(" ├─ Total de imagens coloridas/substituídas: %d\n", res.TotalColorized)
+		if res.RebuiltDocxPath != "" {
+			fmt.Printf(" ├─ Novo arquivo reconstruído: %s\n", res.RebuiltDocxPath)
 		}
+		fmt.Printf(" └─ Imagens individuais salvas no diretório: %s\n", res.OutputDir)
 
 		return nil
 	},
 }
 
 func init() {
-	processCmd.Flags().StringVarP(&processOutputDir, "output", "o", "", "Diretório onde as imagens coloridas serão salvas (padrão: imagens <nome_do_arquivo>)")
+	processCmd.Flags().StringVarP(&processOutputDir, "output", "o", "", "Diretório onde os arquivos serão salvos (padrão: imagens <nome_do_arquivo>)")
 	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image)")
 	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
 	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")

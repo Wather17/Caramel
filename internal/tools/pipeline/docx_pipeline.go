@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
@@ -11,19 +12,22 @@ import (
 
 // PipelineResult guarda o resumo da execução do pipeline automatizado
 type PipelineResult struct {
-	DocxPath       string
-	OutputDir      string
-	TotalExtracted int
-	TotalSkipped   int
-	TotalColorized int
-	Results        []ai.ColorizeResult
-	SkippedImages  []docx.ExtractedImage
+	DocxPath         string
+	OutputDir        string
+	RebuiltDocxPath  string
+	TotalExtracted   int
+	TotalSkipped     int
+	TotalColorized   int
+	Results          []ai.ColorizeResult
+	SkippedImages    []docx.ExtractedImage
 }
 
 // RunDocxPipeline executa o fluxo completo:
 // 1. Extração automática de todas as imagens contidas no .docx (filtrando por tamanho mínimo)
 // 2. Sanitização automática do nome do diretório de destino
 // 3. Coloração de cada imagem via IA (OpenRouter / Nano Banana 2)
+// 4. Redimensionamento para o tamanho original das imagens
+// 5. Reconstrução de um novo arquivo .docx com as imagens substituídas
 func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model string, minSizeBytes int64, verbose bool) (*PipelineResult, error) {
 	targetDir := outputDir
 	if targetDir == "" {
@@ -47,8 +51,10 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		}, nil
 	}
 
-	// 2. Colora cada imagem mantida
+	// 2. Colora cada imagem mantida e redimensiona para a dimensão original
 	var colorizedResults []ai.ColorizeResult
+	replacements := make(map[string][]byte)
+
 	for _, img := range extractRes.Images {
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
 		res, err := ai.ColorizeSingleImage(imgPath, targetDir, apiKey, model, verbose)
@@ -56,16 +62,38 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
 			continue
 		}
+
+		// Redimensiona a imagem gerada para ter exatamente os mesmos pixels da original
+		resizedBytes, err := docx.ResizeToMatch(imgPath, res.ColorizedPath)
+		if err != nil {
+			fmt.Printf("⚠️ Aviso: Falha ao ajustar tamanho da imagem colorida '%s': %v\n", img.OriginalName, err)
+			continue
+		}
+
+		// Adiciona a imagem redimensionada ao mapa de substituição do zip
+		replacements[img.PathInZip] = resizedBytes
 		colorizedResults = append(colorizedResults, *res)
 	}
 
+	// 3. Reconstrói um novo arquivo .docx com as imagens substituídas
+	baseName := strings.TrimSuffix(filepath.Base(docxPath), filepath.Ext(docxPath))
+	rebuiltDocxName := fmt.Sprintf("%s colorida.docx", baseName)
+	rebuiltDocxPath := filepath.Join(targetDir, rebuiltDocxName)
+
+	if len(replacements) > 0 {
+		if err := docx.RebuildDocx(docxPath, rebuiltDocxPath, replacements); err != nil {
+			return nil, fmt.Errorf("erro ao reconstruir arquivo docx colorida: %w", err)
+		}
+	}
+
 	return &PipelineResult{
-		DocxPath:       docxPath,
-		OutputDir:      targetDir,
-		TotalExtracted: extractRes.TotalExtracted,
-		TotalSkipped:   extractRes.TotalSkipped,
-		TotalColorized: len(colorizedResults),
-		Results:        colorizedResults,
-		SkippedImages:  extractRes.SkippedImages,
+		DocxPath:         docxPath,
+		OutputDir:        targetDir,
+		RebuiltDocxPath:  rebuiltDocxPath,
+		TotalExtracted:   extractRes.TotalExtracted,
+		TotalSkipped:     extractRes.TotalSkipped,
+		TotalColorized:   len(colorizedResults),
+		Results:          colorizedResults,
+		SkippedImages:    extractRes.SkippedImages,
 	}, nil
 }
