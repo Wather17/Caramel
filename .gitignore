@@ -18,10 +18,11 @@ coverage.txt
 *.prof
 *.pprof
 
-# 📁 Pastas de Saída Temporárias / Testes da CLI
+# 📁 Pastas de Saída Temporárias e Imagens de Teste
 extracted_images/
 imagens*/
 imagens */
+teste_desenho*.png
 tmp/
 temp/
 *.tmp
