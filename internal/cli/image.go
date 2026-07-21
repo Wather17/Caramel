@@ -22,10 +22,11 @@ var imageCmd = &cobra.Command{
 }
 
 var imageColorizeCmd = &cobra.Command{
-	Use:   "colorize <imagem>",
-	Short: "Colora uma imagem em preto e branco usando IA (OpenRouter / Nano Banana 2)",
-	Long:  `Envia uma ilustração ou desenho em preto e branco para a IA e gera uma versão colorida em alta qualidade.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "colorize <imagem>",
+	Aliases: []string{"color", "colorir"},
+	Short:   "Colora uma imagem em preto e branco usando IA (OpenRouter / Nano Banana 2)",
+	Long:    `Envia uma ilustração ou desenho em preto e branco para a IA e gera uma versão colorida em alta qualidade.`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		imgPath := args[0]
 
@@ -56,8 +57,11 @@ var imageColorizeCmd = &cobra.Command{
 
 func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: mesma pasta da imagem original)")
-	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/nano-banana-2)")
+	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
+
+	// Atalho direto no Root Cmd para aceitar 'caramel colorize <imagem>'
+	RootCmd.AddCommand(imageColorizeCmd)
 }
