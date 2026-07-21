@@ -15,7 +15,7 @@ import (
 
 const (
 	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel     = "google/nano-banana-2"
+	DefaultModel     = "google/gemini-2.5-flash-image" // Google Nano Banana
 )
 
 // Client representa o cliente HTTP para a API do OpenRouter
