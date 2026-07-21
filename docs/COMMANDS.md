@@ -8,8 +8,9 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 
 - [`caramel version`](#1-caramel-version) - Exibe detalhes da versão e compilação.
 - [`caramel config`](#2-caramel-config) - Gerencia configurações e chaves de API (OpenRouter).
-- [`caramel docx extract`](#3-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
-- [`caramel image colorize`](#4-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
+- [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai e colore todas as imagens de um `.docx` de uma só vez.
+- [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
+- [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
 
 ---
 
@@ -49,9 +50,40 @@ caramel config show
 
 ---
 
-## 3. `caramel docx extract`
+## 3. 🚀 `caramel process` (Pipeline Automatizado)
 
-Extrai todas as imagens de um arquivo `.docx`. Opcionalmente, ativa a IA (`--colorize` / `-c`) para colorir desenhos e ilustrações em preto e branco usando o modelo `google/nano-banana-2` via OpenRouter.
+Executa o fluxo fim-a-fim automatizado para um arquivo `.docx`:
+1. Inspeciona o arquivo `.docx`
+2. Extrai todas as imagens para uma pasta com nome higienizado (ex: `./imagens prova de geografia/`)
+3. Colora cada imagem automaticamente usando a IA multimodal Nano Banana 2 (`google/gemini-3.1-flash-image`)
+4. Exibe o resumo detalhado no terminal.
+
+### Sintaxe
+```bash
+caramel process <caminho-do-arquivo.docx> [flags]
+```
+
+### Aliases (Atalhos)
+`caramel pipeline <arquivo.docx>`, `caramel run <arquivo.docx>`, `caramel docx process <arquivo.docx>`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens coloridas serão salvas. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
+
+### Exemplo Prático
+```bash
+caramel process atividade_geografia.docx
+```
+
+---
+
+## 4. `caramel docx extract`
+
+Extrai todas as imagens de um arquivo `.docx`. Opcionalmente, ativa a IA (`--colorize` / `-c`) para colorir desenhos e ilustrações em preto e branco.
 
 ### Sintaxe
 ```bash
@@ -65,18 +97,10 @@ caramel docx extract <caminho-do-arquivo.docx> [flags]
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens extraídas serão salvas. |
 | `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
-| `--model` | `-m` | string | `google/nano-banana-2` | Modelo de IA multimodal do OpenRouter a ser utilizado. |
-
-### Exemplos Práticos
-
-#### Extrair e colorir imagens automaticamente via IA
-```bash
-caramel docx extract atividade_geografia.docx --colorize
-```
 
 ---
 
-## 4. `caramel image colorize`
+## 5. `caramel image colorize`
 
 Colora uma ilustração isolada (PNG, JPEG, WEBP, SVG) em preto e branco usando a IA multimodal da OpenRouter.
 
@@ -85,14 +109,10 @@ Colora uma ilustração isolada (PNG, JPEG, WEBP, SVG) em preto e branco usando 
 caramel image colorize <imagem> [flags]
 ```
 
-### Flags Disponíveis
-
-| Flag | Atalho | Tipo | Padrão | Descrição |
-| :--- | :--- | :--- | :--- | :--- |
-| `--output` | `-o` | string | Pasta da imagem original | Diretório onde a imagem colorida será salva. |
-| `--model` | `-m` | string | `google/nano-banana-2` | Modelo de IA a ser utilizado no OpenRouter. |
+### Aliases (Atalhos)
+`caramel colorize <imagem>`, `caramel color <imagem>`
 
 ### Exemplo Prático
 ```bash
-caramel image colorize desenho_linha.png -o ./imagens_coloridas
+caramel colorize desenho_linha.png
 ```
