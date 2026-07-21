@@ -62,11 +62,16 @@ type ChatCompletionRequest struct {
 	Modalities []string      `json:"modalities,omitempty"`
 }
 
+type OpenRouterImageItem struct {
+	Type     string            `json:"type"`
+	ImageURL *ImageURLProperty `json:"image_url"`
+}
+
 type ChatCompletionResponse struct {
 	Choices []struct {
 		Message struct {
-			Content interface{}   `json:"content"`
-			Images  []interface{} `json:"images,omitempty"`
+			Content interface{}           `json:"content"`
+			Images  []OpenRouterImageItem `json:"images,omitempty"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -172,7 +177,19 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 
 	choice := chatResp.Choices[0]
 
-	// 1. Tenta extrair a partir de `choice.Message.Content` se for um array de objetos (ex: [{"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}])
+	// 1. Padrão oficial OpenRouter: `message.images[0].image_url.url`
+	if len(choice.Message.Images) > 0 {
+		for _, imgItem := range choice.Message.Images {
+			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
+				bytes, ext, err := c.extractImageBytesFromResponse(imgItem.ImageURL.URL)
+				if err == nil {
+					return bytes, ext, nil
+				}
+			}
+		}
+	}
+
+	// 2. Extrai se `choice.Message.Content` for um array de objetos multimodal
 	if contentArray, ok := choice.Message.Content.([]interface{}); ok {
 		for _, part := range contentArray {
 			if partMap, ok := part.(map[string]interface{}); ok {
@@ -188,26 +205,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		}
 	}
 
-	// 2. Tenta extrair se `choice.Message.Images` for um array de objetos ou strings
-	if len(choice.Message.Images) > 0 {
-		for _, imgObj := range choice.Message.Images {
-			if imgMap, ok := imgObj.(map[string]interface{}); ok {
-				if urlStr, ok := imgMap["url"].(string); ok {
-					bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
-					if err == nil {
-						return bytes, ext, nil
-					}
-				}
-			}
-			imgStr := fmt.Sprintf("%v", imgObj)
-			bytes, ext, err := c.extractImageBytesFromResponse(imgStr)
-			if err == nil {
-				return bytes, ext, nil
-			}
-		}
-	}
-
-	// 3. Fallback para string simples
+	// 3. Fallback para string simples ou Markdown
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
@@ -222,7 +220,7 @@ func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, 
 	// 1. Procura por formato Data URL (data:image/png;base64,...)
 	if idx := strings.Index(content, "data:image/"); idx != -1 {
 		dataPart := content[idx:]
-		if endIdx := strings.IndexAny(dataPart, `"'\ `); endIdx != -1 {
+		if endIdx := strings.IndexAny(dataPart, `"' `); endIdx != -1 {
 			dataPart = dataPart[:endIdx]
 		}
 
