@@ -150,7 +150,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	}
 
 	if c.Verbose {
-		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter:\n%s\n\n", string(bodyBytes))
+		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -159,7 +159,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta (Raw JSON: %s): %w", string(bodyBytes), err)
+		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta: %w", err)
 	}
 
 	if chatResp.Error != nil {
@@ -167,14 +167,38 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter. Raw: %s", string(bodyBytes))
+		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
 	}
 
 	choice := chatResp.Choices[0]
 
-	// 1. Checa se o OpenRouter retornou no campo `message.images`
+	// 1. Tenta extrair a partir de `choice.Message.Content` se for um array de objetos (ex: [{"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}])
+	if contentArray, ok := choice.Message.Content.([]interface{}); ok {
+		for _, part := range contentArray {
+			if partMap, ok := part.(map[string]interface{}); ok {
+				if imgURLObj, ok := partMap["image_url"].(map[string]interface{}); ok {
+					if urlStr, ok := imgURLObj["url"].(string); ok {
+						bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
+						if err == nil {
+							return bytes, ext, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Tenta extrair se `choice.Message.Images` for um array de objetos ou strings
 	if len(choice.Message.Images) > 0 {
 		for _, imgObj := range choice.Message.Images {
+			if imgMap, ok := imgObj.(map[string]interface{}); ok {
+				if urlStr, ok := imgMap["url"].(string); ok {
+					bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
+					if err == nil {
+						return bytes, ext, nil
+					}
+				}
+			}
 			imgStr := fmt.Sprintf("%v", imgObj)
 			bytes, ext, err := c.extractImageBytesFromResponse(imgStr)
 			if err == nil {
@@ -183,11 +207,11 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		}
 	}
 
-	// 2. Checa o conteúdo raw
+	// 3. Fallback para string simples
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
-		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta (Raw JSON: %s): %w", string(bodyBytes), err)
+		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err)
 	}
 
 	return outBytes, outExt, nil
