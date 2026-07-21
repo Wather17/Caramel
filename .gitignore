@@ -1,4 +1,8 @@
-# Binaries and build artifacts
+# ==========================================
+# 🍬 Caramel CLI - Git Ignore Rules
+# ==========================================
+
+# 📦 Binários e Artefatos de Build do Go
 dist/
 *.exe
 *.exe~
@@ -7,23 +11,40 @@ dist/
 *.dylib
 caramel
 
-# Test binary built using `go test -c`
+# 🧪 Testes, Cobertura e Profiling do Go
 *.test
-
-# Output of the go coverage tool
 *.out
+coverage.txt
+*.prof
+*.pprof
 
-# Dependency directories
-vendor/
+# 📁 Pastas de Saída Temporárias / Testes da CLI
+extracted_images/
+imagens*/
+imagens */
+tmp/
+temp/
+*.tmp
 
-# OS specific files
+# 🔑 Variáveis de Ambiente e Configurações Locais
+.env
+.env.local
+.env.*.local
+
+# 💻 Arquivos de Sistema Operacional
 .DS_Store
 Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
 
-# IDE specific files
+# 🛠️ Arquivos de IDEs e Editores
 .vscode/
 .idea/
-# AI agent configuration files
+*.swp
+*.swo
+*~
+.netrwhist
+
+# 🤖 Configurações de Agentes e Issues
 GEMINI.md
-# Synced GitHub issues
 issues/
