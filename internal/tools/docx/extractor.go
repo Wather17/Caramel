@@ -22,7 +22,9 @@ type ExtractionResult struct {
 	DocxPath       string
 	OutputDir      string
 	TotalExtracted int
+	TotalSkipped   int
 	Images         []ExtractedImage
+	SkippedImages  []ExtractedImage
 }
 
 // ListImages inspeciona um arquivo .docx e retorna a lista de imagens contidas nele sem extraí-las
@@ -36,7 +38,6 @@ func ListImages(docxPath string) ([]ExtractedImage, error) {
 	var images []ExtractedImage
 
 	for _, f := range r.File {
-		// As imagens de um arquivo .docx normalmente ficam na pasta word/media/
 		if strings.HasPrefix(f.Name, "word/media/") && !f.FileInfo().IsDir() {
 			filename := filepath.Base(f.Name)
 			ext := strings.TrimPrefix(filepath.Ext(filename), ".")
@@ -55,6 +56,11 @@ func ListImages(docxPath string) ([]ExtractedImage, error) {
 
 // ExtractImages extrai todas as imagens do arquivo .docx para o diretório de destino (outputDir)
 func ExtractImages(docxPath string, outputDir string) (*ExtractionResult, error) {
+	return ExtractImagesFiltered(docxPath, outputDir, 0)
+}
+
+// ExtractImagesFiltered extrai imagens do .docx ignorando arquivos menores que minSizeBytes
+func ExtractImagesFiltered(docxPath string, outputDir string, minSizeBytes int64) (*ExtractionResult, error) {
 	r, err := zip.OpenReader(docxPath)
 	if err != nil {
 		return nil, fmt.Errorf("falha ao abrir arquivo .docx: %w", err)
@@ -66,26 +72,35 @@ func ExtractImages(docxPath string, outputDir string) (*ExtractionResult, error)
 	}
 
 	result := &ExtractionResult{
-		DocxPath:  docxPath,
-		OutputDir: outputDir,
-		Images:    make([]ExtractedImage, 0),
+		DocxPath:      docxPath,
+		OutputDir:     outputDir,
+		Images:        make([]ExtractedImage, 0),
+		SkippedImages: make([]ExtractedImage, 0),
 	}
 
 	for _, f := range r.File {
 		if strings.HasPrefix(f.Name, "word/media/") && !f.FileInfo().IsDir() {
 			filename := filepath.Base(f.Name)
-			destPath := filepath.Join(outputDir, filename)
-
-			if err := extractZipFile(f, destPath); err != nil {
-				return nil, fmt.Errorf("erro ao extrair imagem '%s': %w", filename, err)
-			}
-
+			size := f.FileInfo().Size()
 			ext := strings.TrimPrefix(filepath.Ext(filename), ".")
+
 			imgInfo := ExtractedImage{
 				OriginalName: filename,
 				PathInZip:    f.Name,
-				Size:         f.FileInfo().Size(),
+				Size:         size,
 				Format:       strings.ToLower(ext),
+			}
+
+			// Se a imagem for menor que o tamanho mínimo estipulado, é ignorada
+			if minSizeBytes > 0 && size < minSizeBytes {
+				result.SkippedImages = append(result.SkippedImages, imgInfo)
+				result.TotalSkipped++
+				continue
+			}
+
+			destPath := filepath.Join(outputDir, filename)
+			if err := extractZipFile(f, destPath); err != nil {
+				return nil, fmt.Errorf("erro ao extrair imagem '%s': %w", filename, err)
 			}
 
 			result.Images = append(result.Images, imgInfo)
