@@ -7,7 +7,9 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 ## 📌 Sumário de Comandos
 
 - [`caramel version`](#1-caramel-version) - Exibe detalhes da versão e compilação.
-- [`caramel docx extract`](#2-caramel-docx-extract) - Inspeciona e extrai imagens de arquivos `.docx`.
+- [`caramel config`](#2-caramel-config) - Gerencia configurações e chaves de API (OpenRouter).
+- [`caramel docx extract`](#3-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
+- [`caramel image colorize`](#4-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
 
 ---
 
@@ -15,65 +17,82 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 
 Exibe a versão atual do executável, hash do commit e data de compilação.
 
-### Sintaxe
 ```bash
 caramel version
 ```
 
-### Exemplo de Saída
-```text
-🍬 Caramel CLI v0.1.0-dev
-   Commit: 1bbc196
-   Data de Build: 2026-07-21T11:13:56Z
+---
+
+## 2. `caramel config`
+
+Gerencia as configurações e a chave de API do OpenRouter salva em `~/.config/caramel/.env` (ou `%APPDATA%\caramel\.env` no Windows).
+
+### Subcomandos
+
+#### `caramel config setup`
+Inicia um assistente interativo no terminal para configurar a chave de API.
+```bash
+caramel config setup
+```
+
+#### `caramel config set <CHAVE> <VALOR>`
+Define manualmente o valor de uma chave.
+```bash
+caramel config set openrouter_key "sk-or-v1-sua-chave-aqui"
+```
+
+#### `caramel config show`
+Exibe a localização do arquivo de configuração e o status das chaves salvas.
+```bash
+caramel config show
 ```
 
 ---
 
-## 2. `caramel docx extract`
+## 3. `caramel docx extract`
 
-Extrai todas as imagens (diagramas, fotos, gráficos) contidas dentro de um arquivo de documento `.docx` de forma automática, salvando-as em uma pasta de destino no disco.
-
-Por padrão, o Caramel cria uma pasta com **nome dinâmico e higienizado usando espaços** baseado no nome do arquivo original (ex: `atividade_historia.docx` -> `./imagens atividade historia/`).
+Extrai todas as imagens de um arquivo `.docx`. Opcionalmente, ativa a IA (`--colorize` / `-c`) para colorir desenhos e ilustrações em preto e branco usando o modelo `google/nano-banana-2` via OpenRouter.
 
 ### Sintaxe
 ```bash
 caramel docx extract <caminho-do-arquivo.docx> [flags]
 ```
 
-### Argumentos
-- `<caminho-do-arquivo.docx>` (Obrigatório): Caminho para o arquivo `.docx` a ser analisado.
-
 ### Flags Disponíveis
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens extraídas serão salvas. |
-| `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las para o disco. |
-
----
-
-### 🛡️ Tratamento e Higienização de Nomes de Pastas
-Para evitar erros de sistema operacional com arquivos de nomes "sujos" ou muito extensos, o Caramel aplica as seguintes regras automáticas ao gerar o nome padrão da pasta:
-1. **Remoção de acentos e símbolos**: `PROVA DE HISTÓRIA 8º ANO (1º SEMESTRE) - CÓPIA (1).docx` -> `imagens prova de historia 8 ano 1 semestre copia 1`
-2. **Limite de tamanho de caracteres**: Corta o nome em no máximo 45 caracteres para evitar caminhos corrompidos no sistema operacional.
-3. **Uso de espaços legíveis**: Mantém os nomes limpos e legíveis com espaços simples entre as palavras.
-
----
+| `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las. |
+| `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
+| `--model` | `-m` | string | `google/nano-banana-2` | Modelo de IA multimodal do OpenRouter a ser utilizado. |
 
 ### Exemplos Práticos
 
-#### 1. Extrair imagens com nome de pasta dinâmico padrão
+#### Extrair e colorir imagens automaticamente via IA
 ```bash
-caramel docx extract "PROVA DE GEOGRAFIA DA AMÉRICA DO SUL.docx"
-# Criará automaticamente a pasta: ./imagens prova de geografia da america do sul/
+caramel docx extract atividade_geografia.docx --colorize
 ```
 
-#### 2. Extrair imagens para uma pasta personalizada
+---
+
+## 4. `caramel image colorize`
+
+Colora uma ilustração isolada (PNG, JPEG, WEBP, SVG) em preto e branco usando a IA multimodal da OpenRouter.
+
+### Sintaxe
 ```bash
-caramel docx extract prova.docx -o "./minhas imagens"
+caramel image colorize <imagem> [flags]
 ```
 
-#### 3. Apenas listar imagens contidas no documento (sem salvar no disco)
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--output` | `-o` | string | Pasta da imagem original | Diretório onde a imagem colorida será salva. |
+| `--model` | `-m` | string | `google/nano-banana-2` | Modelo de IA a ser utilizado no OpenRouter. |
+
+### Exemplo Prático
 ```bash
-caramel docx extract simulado.docx --list
+caramel image colorize desenho_linha.png -o ./imagens_coloridas
 ```

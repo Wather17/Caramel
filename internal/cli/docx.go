@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"caramel/internal/config"
+	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
 
 	"github.com/spf13/cobra"
@@ -13,6 +15,8 @@ import (
 var (
 	outputDir string
 	listOnly  bool
+	colorize  bool
+	modelName string
 )
 
 // docxCmd representa o grupo de comandos relacionados a arquivos .docx
@@ -25,9 +29,10 @@ var docxCmd = &cobra.Command{
 // docxExtractCmd representa o comando de extração de imagens
 var docxExtractCmd = &cobra.Command{
 	Use:   "extract <arquivo.docx>",
-	Short: "Extrai ou lista imagens contidas em um arquivo .docx",
+	Short: "Extrai, lista ou colore imagens contidas em um arquivo .docx",
 	Long: `Inspeciona a estrutura interna do arquivo .docx fornecido e extrai todas as imagens 
-(diagramas, fotos, gráficos) encontradas na pasta 'word/media/' para um diretório especificado.`,
+(diagramas, fotos, gráficos) encontradas na pasta 'word/media/' para um diretório especificado.
+Com a flag --colorize (-c), as imagens em preto e branco são coloridas automaticamente via IA (OpenRouter).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		docxPath := args[0]
@@ -64,7 +69,36 @@ var docxExtractCmd = &cobra.Command{
 			targetDir = docx.SanitizeFolderName(docxPath)
 		}
 
-		// Processo de extração
+		// Se a flag --colorize (-c) foi ativada
+		if colorize {
+			cfg, err := config.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			if cfg.OpenRouterAPIKey == "" {
+				return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>' para poder utilizar a IA de coloração")
+			}
+
+			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
+			results, err := ai.ColorizeDocxImages(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName)
+			if err != nil {
+				return err
+			}
+
+			if len(results) == 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem foi extraída/colorida do arquivo '%s'.\n", docxPath)
+				return nil
+			}
+
+			fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", len(results), targetDir)
+			for _, res := range results {
+				fmt.Printf("  └─ %s\n", res.ColorizedPath)
+			}
+			return nil
+		}
+
+		// Processo de extração padrão (sem coloração)
 		fmt.Printf("🍬 Extraindo imagens de '%s'...\n", filepath.Base(docxPath))
 		res, err := docx.ExtractImages(docxPath, targetDir)
 		if err != nil {
@@ -87,8 +121,10 @@ var docxExtractCmd = &cobra.Command{
 
 func init() {
 	// Flags do comando extract
-	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens extraídas serão salvas (padrão: imagens_<nome_do_arquivo>)")
+	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
+	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
+	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/nano-banana-2)")
 
 	// Registra subcomandos
 	docxCmd.AddCommand(docxExtractCmd)
