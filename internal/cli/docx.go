@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	outputDir string
-	listOnly  bool
-	colorize  bool
-	modelName string
+	outputDir   string
+	listOnly    bool
+	colorize    bool
+	modelName   string
 	docxVerbose bool
 )
 
@@ -125,7 +125,7 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
-	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
+	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
 	// Registra subcomandos

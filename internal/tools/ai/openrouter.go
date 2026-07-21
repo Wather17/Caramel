@@ -16,7 +16,7 @@ import (
 
 const (
 	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel     = "google/gemini-2.5-flash-image" // Google Nano Banana
+	DefaultModel     = "google/gemini-3.1-flash-image" // Google Nano Banana 2
 )
 
 var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
