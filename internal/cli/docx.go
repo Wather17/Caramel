@@ -8,6 +8,7 @@ import (
 	"caramel/internal/config"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
+	"caramel/internal/tools/pipeline"
 
 	"github.com/spf13/cobra"
 )
@@ -82,18 +83,18 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 			}
 
 			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-			results, err := ai.ColorizeDocxImages(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, docxVerbose)
+			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, docxVerbose)
 			if err != nil {
 				return err
 			}
 
-			if len(results) == 0 {
+			if pipeRes.TotalColorized == 0 {
 				fmt.Printf("ℹ️  Nenhuma imagem foi extraída/colorida do arquivo '%s'.\n", docxPath)
 				return nil
 			}
 
-			fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", len(results), targetDir)
-			for _, res := range results {
+			fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
+			for _, res := range pipeRes.Results {
 				fmt.Printf("  └─ %s\n", res.ColorizedPath)
 			}
 			return nil
