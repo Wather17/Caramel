@@ -9,7 +9,7 @@ dist/
 *.dll
 *.so
 *.dylib
-caramel
+/caramel
 
 # 🧪 Testes, Cobertura e Profiling do Go
 *.test
