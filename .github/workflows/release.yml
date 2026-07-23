@@ -1,0 +1,58 @@
+name: Release Caramel CLI
+
+on:
+  push:
+    tags:
+      - 'v*' # Dispara o build quando você criar uma tag como v0.2.0, v1.0.0, etc.
+
+permissions:
+  contents: write # Permissão necessária para criar a Release e fazer upload dos assets
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x' # Mantém alinhado com a versão do go.mod
+
+      - name: Compile Cross-Platform Binaries
+        run: |
+          # Define variáveis de build com base na tag do git
+          TAG_VERSION=${GITHUB_REF_NAME}
+          COMMIT=$(git rev-parse --short HEAD)
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          LDFLAGS="-X caramel/internal/cli.Version=${TAG_VERSION} -X caramel/internal/cli.Commit=${COMMIT} -X caramel/internal/cli.Date=${DATE} -s -w"
+          
+          mkdir -p dist
+          
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/caramel-linux-amd64 ./cmd/caramel
+          
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/caramel-linux-arm64 ./cmd/caramel
+          
+          # Windows AMD64
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/caramel-windows-amd64.exe ./cmd/caramel
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/caramel-linux-amd64
+            dist/caramel-linux-arm64
+            dist/caramel-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
