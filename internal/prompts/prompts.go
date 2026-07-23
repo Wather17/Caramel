@@ -36,3 +36,27 @@ func GetColorizationPrompt() string {
 
 	return strings.TrimSpace(string(data))
 }
+
+// GetRoutinePrompt retorna o prompt para o assistente de rotinas pedagógicas.
+// Se o usuário tiver um prompt customizado em ~/.config/caramel/prompts/routine.txt, ele será usado.
+// Caso contrário, retorna o prompt embarcado por padrão no binário.
+func GetRoutinePrompt() string {
+	configDir, err := config.GetConfigDir()
+	if err == nil {
+		customPromptPath := filepath.Join(configDir, "prompts", "routine.txt")
+		if data, err := os.ReadFile(customPromptPath); err == nil {
+			content := strings.TrimSpace(string(data))
+			if content != "" {
+				return content
+			}
+		}
+	}
+
+	data, err := templateFS.ReadFile("templates/routine.txt")
+	if err != nil {
+		return "Analyze the weekly pedagogical routine and summarize the experiences according to BNCC."
+	}
+
+	return strings.TrimSpace(string(data))
+}
+

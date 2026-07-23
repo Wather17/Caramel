@@ -17,6 +17,7 @@ import (
 const (
 	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 	DefaultModel     = "google/gemini-3.1-flash-image" // Google Nano Banana 2
+	DefaultTextModel = "google/gemini-2.5-flash"       // Default model for text processing
 )
 
 var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
@@ -297,3 +298,93 @@ func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
 
 	return data, ext, nil
 }
+
+// AnalyzeRoutine sends plain text routine content to OpenRouter and returns the structured JSON response
+func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOverride string) (string, error) {
+	model := DefaultTextModel
+	if modelOverride != "" {
+		model = modelOverride
+	}
+
+	reqPayload := ChatCompletionRequest{
+		Model: model,
+		Messages: []ChatMessage{
+			{
+				Role: "user",
+				Content: []ChatMessageContentPart{
+					{
+						Type: "text",
+						Text: promptText + "\n\nRaw Routine Text:\n" + routineText,
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(reqPayload)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
+	req.Header.Set("X-Title", "Caramel CLI")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to contact OpenRouter API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read API response: %w", err)
+	}
+
+	if c.Verbose {
+		fmt.Printf("🔍 [DEBUG] Raw OpenRouter response (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OpenRouter API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var chatResp ChatCompletionResponse
+	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to decode JSON response: %w", err)
+	}
+
+	if chatResp.Error != nil {
+		return "", fmt.Errorf("OpenRouter API error: %s", chatResp.Error.Message)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("empty response from OpenRouter API")
+	}
+
+	choice := chatResp.Choices[0]
+	rawContent := fmt.Sprintf("%v", choice.Message.Content)
+
+	// Clean codeblock markers if output is wrapped in ```json ... ```
+	cleaned := strings.TrimSpace(rawContent)
+	if strings.HasPrefix(cleaned, "```") {
+		lines := strings.Split(cleaned, "\n")
+		var contentLines []string
+		for _, line := range lines {
+			trimmedLine := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmedLine, "```") {
+				contentLines = append(contentLines, line)
+			}
+		}
+		cleaned = strings.Join(contentLines, "\n")
+	}
+
+	return strings.TrimSpace(cleaned), nil
+}
+

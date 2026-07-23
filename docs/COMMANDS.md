@@ -11,6 +11,7 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 - [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai, colore e reconstrói o `.docx` de uma só vez (com redimensionamento exato de imagens).
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
+- [`caramel routine process`](#6-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
 
 ---
 
@@ -121,3 +122,33 @@ caramel image colorize <imagem> [flags]
 ```bash
 caramel colorize desenho_linha.png
 ```
+
+---
+
+## 6. `caramel routine process`
+
+Lê rotinas pedagógicas semanais em formato `.docx`, extrai todo o texto localmente de forma otimizada, envia para a IA classificar as experiências baseadas na BNCC e reconstrói o relatório final no padrão de tabela Arial em orientação Paisagem.
+
+### Sintaxe
+```bash
+caramel routine process <caminho_da_pasta_ou_arquivo.docx> [flags]
+```
+
+### Aliases (Atalhos)
+`caramel routine run <pasta_ou_arquivo>`, `caramel routine pipeline <pasta_ou_arquivo>`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--output` | `-o` | string | Mesma pasta do arquivo | Diretório onde o arquivo final consolidado será salvo. |
+| `--model` | `-m` | string | `google/gemini-2.5-flash` | Modelo de IA para processamento de texto no OpenRouter. |
+| `--prompt` | `-p` | string | Nativamente embarcado | Caminho para arquivo com prompt de IA customizado. |
+| `--verbose`| `-v` | bool | `false` | Exibe logs raw da API de IA. |
+
+### Exemplo Prático
+```bash
+# Processa todas as rotinas semanais de uma pasta e gera um relatório mensal consolidado
+caramel routine process ./abril/
+```
+
