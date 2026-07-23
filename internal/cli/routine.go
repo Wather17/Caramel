@@ -177,7 +177,7 @@ e compila tudo cronologicamente em um único arquivo .docx formatado em Paisagem
 
 func init() {
 	routineProcessCmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino para salvar o arquivo consolidado")
-	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", "google/gemini-2.5-flash", "Modelo de IA do OpenRouter para a análise")
+	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise")
 	routineProcessCmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Caminho para arquivo contendo prompt customizado")
 	routineProcessCmd.Flags().BoolVarP(&routineVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
