@@ -12,6 +12,7 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
 - [`caramel routine process`](#6-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
+- [`caramel install`](#7-caramel-install) - Instala o Caramel CLI globalmente no sistema.
 
 ---
 
@@ -151,4 +152,25 @@ caramel routine process <caminho_da_pasta_ou_arquivo.docx> [flags]
 # Processa todas as rotinas semanais de uma pasta e gera um relatório mensal consolidado
 caramel routine process ./abril/
 ```
+
+---
+
+## 7. `caramel install`
+
+Copia o binário do Caramel em execução para um diretório local do usuário e adiciona esse diretório ao PATH do sistema operacional de forma totalmente automatizada.
+
+### Sintaxe
+```bash
+caramel install
+```
+
+### Aliases (Atalhos)
+`caramel self-install`
+
+### Exemplo Prático
+```bash
+# Executa o auto-instalador e configura o PATH global
+caramel install
+```
+
 
