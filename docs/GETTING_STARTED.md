@@ -55,5 +55,6 @@ chmod +x scripts/install.sh
 ### No Windows (PowerShell):
 Execute o script de instalação em PowerShell:
 ```powershell
-.\scripts\install.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
+*(Nota: O script compila o binário automaticamente com `go build` caso a pasta `dist/` ainda não tenha sido gerada.)*
