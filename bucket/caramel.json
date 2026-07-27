@@ -5,7 +5,8 @@
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/Wather17/Caramel/releases/download/v0.1.0/caramel-windows-amd64.exe"
+      "url": "https://github.com/Wather17/Caramel/releases/download/v0.1.0/caramel-windows-amd64.exe",
+      "hash": "da7d60fc984fcb445b84144f37caffa1c09b86508b645db6793e9c84af7803a3"
     }
   },
   "bin": [
