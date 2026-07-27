@@ -37,6 +37,7 @@ temp/
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
+*:Zone.Identifier
 
 # 🛠️ Arquivos de IDEs e Editores
 .vscode/
