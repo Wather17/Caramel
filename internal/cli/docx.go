@@ -9,17 +9,19 @@ import (
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
 	"caramel/internal/tools/pipeline"
+	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	outputDir   string
-	listOnly    bool
-	colorize    bool
-	modelName   string
-	minSizeStr  string
-	docxVerbose bool
+	outputDir       string
+	listOnly        bool
+	colorize        bool
+	modelName       string
+	minSizeStr      string
+	docxVerbose     bool
+	docxInteractive bool
 )
 
 // docxCmd representa o grupo de comandos relacionados a arquivos .docx
@@ -35,7 +37,8 @@ var docxExtractCmd = &cobra.Command{
 	Short: "Extrai, lista ou colore imagens contidas em um arquivo .docx",
 	Long: `Inspeciona a estrutura interna do arquivo .docx fornecido e extrai todas as imagens 
 (diagramas, fotos, gráficos) encontradas na pasta 'word/media/' para um diretório especificado.
-Com a flag --colorize (-c), as imagens em preto e branco são coloridas automaticamente via IA (OpenRouter).`,
+Com a flag --colorize (-c), as imagens em preto e branco são coloridas automaticamente via IA (OpenRouter).
+Com a flag --interactive (-i), exibe um menu interativo para escolher quais imagens extrair/colorir.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		docxPath := args[0]
@@ -75,6 +78,73 @@ Com a flag --colorize (-c), as imagens em preto e branco são coloridas automati
 		targetDir := outputDir
 		if !cmd.Flags().Changed("output") {
 			targetDir = docx.SanitizeFolderName(docxPath)
+		}
+
+		// Se a flag --interactive (-i) estiver ativada, exibe a TUI de seleção de imagens
+		if docxInteractive {
+			allImages, err := docx.ListImages(docxPath)
+			if err != nil {
+				return err
+			}
+
+			if len(allImages) == 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem foi encontrada no arquivo '%s'.\n", docxPath)
+				return nil
+			}
+
+			keptImages, skippedImages := docx.FilterImagesByMinSize(allImages, minSizeBytes)
+			if len(keptImages) == 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
+				return nil
+			}
+
+			selectedImages, err := ui.SelectImagesInteractive(keptImages)
+			if err != nil {
+				return err
+			}
+
+			if len(selectedImages) == 0 {
+				fmt.Println("ℹ️  Nenhuma imagem foi selecionada.")
+				return nil
+			}
+
+			if colorize {
+				cfg, err := config.LoadConfig()
+				if err != nil {
+					return err
+				}
+				if cfg.OpenRouterAPIKey == "" {
+					return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
+				}
+
+				fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
+				pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose)
+				if err != nil {
+					return err
+				}
+
+				fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
+				for _, res := range pipeRes.Results {
+					fmt.Printf("  └─ %s\n", res.ColorizedPath)
+				}
+				return nil
+			}
+
+			fmt.Printf("🍬 Extraindo %d imagem(ns) selecionada(s)...\n", len(selectedImages))
+			res, err := docx.ExtractImagesFromList(docxPath, targetDir, selectedImages)
+			if err != nil {
+				return err
+			}
+
+			if len(skippedImages) > 0 {
+				fmt.Printf(" ├─ Imagens ignoradas pelo filtro de tamanho (< %s): %d\n", minSizeStr, len(skippedImages))
+			}
+
+			fmt.Printf("✅ Sucesso! %d imagem(ns) extraída(s) para o diretório: %s\n", res.TotalExtracted, targetDir)
+			for _, img := range res.Images {
+				fmt.Printf("  └─ %s\n", filepath.Join(targetDir, img.OriginalName))
+			}
+			return nil
 		}
 
 		// Se a flag --colorize (-c) foi ativada
@@ -147,6 +217,7 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
 	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
+	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")
 
 	// Registra subcomandos
 	docxCmd.AddCommand(docxExtractCmd)

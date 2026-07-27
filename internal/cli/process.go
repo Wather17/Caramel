@@ -9,15 +9,17 @@ import (
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
 	"caramel/internal/tools/pipeline"
+	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	processOutputDir string
-	processModelName string
-	processMinSize   string
-	processVerbose   bool
+	processOutputDir   string
+	processModelName   string
+	processMinSize     string
+	processVerbose     bool
+	processInteractive bool
 )
 
 var processCmd = &cobra.Command{
@@ -50,6 +52,50 @@ var processCmd = &cobra.Command{
 		minSizeBytes, err := docx.ParseSizeInBytes(processMinSize)
 		if err != nil {
 			return err
+		}
+
+		// Modo Interativo (--interactive / -i)
+		if processInteractive {
+			allImages, err := docx.ListImages(docxPath)
+			if err != nil {
+				return err
+			}
+
+			if len(allImages) == 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem foi encontrada no arquivo '%s'.\n", docxPath)
+				return nil
+			}
+
+			keptImages, _ := docx.FilterImagesByMinSize(allImages, minSizeBytes)
+			if len(keptImages) == 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", processMinSize, docxPath)
+				return nil
+			}
+
+			selectedImages, err := ui.SelectImagesInteractive(keptImages)
+			if err != nil {
+				return err
+			}
+
+			if len(selectedImages) == 0 {
+				fmt.Println("ℹ️  Nenhuma imagem foi selecionada.")
+				return nil
+			}
+
+			fmt.Printf("🚀 Iniciando Pipeline Automatizado para %d imagem(ns) selecionada(s)...\n", len(selectedImages))
+			res, err := pipeline.RunDocxPipelineSelected(docxPath, processOutputDir, cfg.OpenRouterAPIKey, processModelName, selectedImages, processVerbose)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("✅ Pipeline concluído com sucesso!\n")
+			fmt.Printf(" ├─ Total de imagens coloridas/substituídas: %d\n", res.TotalColorized)
+			if res.RebuiltDocxPath != "" {
+				fmt.Printf(" ├─ Novo arquivo reconstruído: %s\n", res.RebuiltDocxPath)
+			}
+			fmt.Printf(" └─ Imagens individuais salvas no diretório: %s\n", res.OutputDir)
+
+			return nil
 		}
 
 		fmt.Printf("🚀 Iniciando Pipeline Automatizado para '%s'...\n", filepath.Base(docxPath))
@@ -92,6 +138,7 @@ func init() {
 	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
 	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
 	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
+	processCmd.Flags().BoolVarP(&processInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens processar no pipeline")
 
 	RootCmd.AddCommand(processCmd)
 	docxCmd.AddCommand(processCmd)

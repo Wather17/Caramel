@@ -128,3 +128,53 @@ func extractZipFile(f *zip.File, destPath string) error {
 	_, err = io.Copy(outFile, rc)
 	return err
 }
+
+// ExtractImagesFromList extrai no diretório de saída apenas a lista específica de imagens fornecida
+func ExtractImagesFromList(docxPath string, outputDir string, images []ExtractedImage) (*ExtractionResult, error) {
+	r, err := zip.OpenReader(docxPath)
+	if err != nil {
+		return nil, fmt.Errorf("falha ao abrir arquivo .docx: %w", err)
+	}
+	defer r.Close()
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("falha ao criar diretório de saída '%s': %w", outputDir, err)
+	}
+
+	result := &ExtractionResult{
+		DocxPath:      docxPath,
+		OutputDir:     outputDir,
+		Images:        make([]ExtractedImage, 0, len(images)),
+		SkippedImages: make([]ExtractedImage, 0),
+	}
+
+	selectedMap := make(map[string]bool, len(images))
+	for _, img := range images {
+		selectedMap[img.PathInZip] = true
+	}
+
+	for _, f := range r.File {
+		if selectedMap[f.Name] {
+			filename := filepath.Base(f.Name)
+			size := f.FileInfo().Size()
+			ext := strings.TrimPrefix(filepath.Ext(filename), ".")
+
+			imgInfo := ExtractedImage{
+				OriginalName: filename,
+				PathInZip:    f.Name,
+				Size:         size,
+				Format:       strings.ToLower(ext),
+			}
+
+			destPath := filepath.Join(outputDir, filename)
+			if err := extractZipFile(f, destPath); err != nil {
+				return nil, fmt.Errorf("erro ao extrair imagem '%s': %w", filename, err)
+			}
+
+			result.Images = append(result.Images, imgInfo)
+			result.TotalExtracted++
+		}
+	}
+
+	return result, nil
+}

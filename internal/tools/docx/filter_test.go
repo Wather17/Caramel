@@ -48,3 +48,22 @@ func TestFilterImagesByMinSize(t *testing.T) {
 		t.Errorf("Esperado ignorar apenas 'logo.png', ignorados: %v", skipped)
 	}
 }
+
+func TestFilterImagesByNames(t *testing.T) {
+	images := []docx.ExtractedImage{
+		{OriginalName: "image1.png", Size: 10 * 1024},
+		{OriginalName: "image2.png", Size: 50 * 1024},
+		{OriginalName: "image3.png", Size: 100 * 1024},
+	}
+
+	allowed := []string{"image1.png", "image3.png"}
+	filtered := docx.FilterImagesByNames(images, allowed)
+
+	if len(filtered) != 2 {
+		t.Fatalf("Esperado 2 imagens filtradas, obtido %d", len(filtered))
+	}
+
+	if filtered[0].OriginalName != "image1.png" || filtered[1].OriginalName != "image3.png" {
+		t.Errorf("Imagens filtradas incorretas: %v", filtered)
+	}
+}

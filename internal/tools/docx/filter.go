@@ -47,3 +47,19 @@ func FilterImagesByMinSize(images []ExtractedImage, minSizeBytes int64) (kept []
 	}
 	return kept, skipped
 }
+
+// FilterImagesByNames filtra uma lista de imagens mantendo apenas as cujos nomes originais estão na lista allowedNames
+func FilterImagesByNames(images []ExtractedImage, allowedNames []string) []ExtractedImage {
+	allowedMap := make(map[string]bool, len(allowedNames))
+	for _, name := range allowedNames {
+		allowedMap[name] = true
+	}
+
+	filtered := make([]ExtractedImage, 0, len(allowedNames))
+	for _, img := range images {
+		if allowedMap[img.OriginalName] {
+			filtered = append(filtered, img)
+		}
+	}
+	return filtered
+}
