@@ -53,8 +53,16 @@ chmod +x scripts/install.sh
 ```
 
 ### No Windows (PowerShell):
+#### Opção A: Via Script Local
 Execute o script de instalação em PowerShell:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 *(Nota: O script compila o binário automaticamente com `go build` caso a pasta `dist/` ainda não tenha sido gerada.)*
+
+#### Opção B: Via Scoop (Recomendado)
+Se você utiliza o **Scoop**, pode instalar o Caramel diretamente com o comando:
+```powershell
+scoop install https://raw.githubusercontent.com/Wather17/Caramel/main/bucket/caramel.json
+```
+

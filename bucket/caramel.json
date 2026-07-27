@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0",
+  "description": "Ferramenta CLI em Go para criação de atividades e utilitários pedagógicos.",
+  "homepage": "https://github.com/Wather17/Caramel",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Wather17/Caramel/releases/download/v0.1.0/caramel-windows-amd64.exe"
+    }
+  },
+  "bin": [
+    [
+      "caramel-windows-amd64.exe",
+      "caramel"
+    ]
+  ],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Wather17/Caramel/releases/download/v$version/caramel-windows-amd64.exe"
+      }
+    }
+  }
+}
