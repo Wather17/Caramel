@@ -21,7 +21,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x' # Mantém alinhado com a versão do go.mod
+          go-version: '1.25.x' # Mantém alinhado com a versão do go.mod
 
       - name: Compile Cross-Platform Binaries
         run: |
@@ -56,3 +56,29 @@ jobs:
             dist/caramel-windows-amd64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Scoop Manifest
+        run: |
+          RAW_VERSION=${GITHUB_REF_NAME#v}
+          WIN_HASH=$(sha256sum dist/caramel-windows-amd64.exe | awk '{print $1}')
+          
+          echo "Atualizando bucket/caramel.json com Versão=${RAW_VERSION} e Hash=${WIN_HASH}..."
+          
+          python3 -c "
+          import json
+          with open('bucket/caramel.json', 'r') as f:
+              data = json.load(f)
+          data['version'] = '${RAW_VERSION}'
+          data['architecture']['64bit']['url'] = 'https://github.com/Wather17/Caramel/releases/download/v${RAW_VERSION}/caramel-windows-amd64.exe'
+          data['architecture']['64bit']['hash'] = '${WIN_HASH}'
+          with open('bucket/caramel.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          "
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/caramel.json
+          git commit -m "chore(scoop): atualizar manifesto para v${RAW_VERSION}" || echo "Sem alterações no manifesto"
+          git push origin main
+
