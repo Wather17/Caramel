@@ -19,6 +19,7 @@
 Toda a documentação técnica e guias de uso/desenvolvimento estão disponíveis no diretório [`docs/`](docs/):
 
 - 📖 [**Referência de Comandos**](docs/COMMANDS.md): Lista completa de comandos, sintaxe, flags e exemplos práticos.
+- 🎨 [**Guia de Estilo & Cores (Design System)**](docs/DESIGN_SYSTEM.md): Paleta de cores, inspiração e boas práticas da TUI.
 - 🏛️ [**Arquitetura do Projeto**](docs/ARCHITECTURE.md): Estrutura de pastas, fluxo de dados e compilação.
 - 🚀 [**Guia de Início Rápido (Getting Started)**](docs/GETTING_STARTED.md): Como compilar, testar e instalar.
 - 🛠️ [**Como Criar Comandos e Ferramentas**](docs/CONTRIBUTING_COMMANDS.md): Guia passo a passo para adicionar novos recursos.
