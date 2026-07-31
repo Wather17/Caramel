@@ -11,6 +11,7 @@ var (
 	ColorHighlight = lipgloss.Color("#E8709C") // Vibrant Rose (Item Ativo/Selecionado)
 	ColorTag       = lipgloss.Color("#D96B27") // Warm Caramel (Badges/Formatos)
 	ColorMuted     = lipgloss.Color("#A19BA8") // Dimmed Gray (Secundário/Instruções)
+	ColorWarning   = lipgloss.Color("#E5C07B") // Warm Yellow (Avisos/Alertas)
 )
 
 // Estilos Reutilizáveis do Lipgloss

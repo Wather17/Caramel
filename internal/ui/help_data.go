@@ -30,11 +30,58 @@ type CommandHelpDoc struct {
 	Syntax             string          // Sintaxe de uso
 	Flags              []FlagDoc       // Lista de flags
 	Examples           []ExampleDoc    // Lista de exemplos práticos
+	Keywords           []string        // Palavras-chave pedagógicas para busca rápida (ex: "figma", "papel", "2up")
 }
 
 // GetAllCommandDocs retorna a central de documentação didática de todos os comandos do Caramel
 func GetAllCommandDocs() []CommandHelpDoc {
 	return []CommandHelpDoc{
+		{
+			Name:     "caramel 2up",
+			Short:    "Monta PDF A4 Paisagem com 2 atividades/páginas lado a lado (economiza papel)",
+			Category: CategoryDocx,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize este comando para preparar avaliações, atividades ou apostilas em formato 2 por folha (2-up),
+imprimindo duas páginas A5 lado a lado em uma única folha A4 em orientação Paisagem.
+
+O Caramel irá:
+ 1. Ler uma imagem isolada ou uma pasta inteira contendo imagens de atividades (PNG, JPG, WEBP);
+ 2. Ordenar os arquivos numericamente (ex: img1, img2, img10);
+ 3. Redimensionar e comprimir imagens pesadas do Figma (exportadas em 4x) em memória a 300 DPI (PDFs de ~500KB);
+ 4. Identificar imagens horizontais (landscape) e aplicar auto-rotação 90° inteligente se ganhar área útil;
+ 5. Inserir a linha tracejada central orientativa para corte.`,
+			Syntax: "caramel 2up <imagem_ou_pasta> [flags]",
+			Keywords: []string{
+				"2up", "print", "layout", "figma", "papel", "economizar", "duplicar",
+				"a5", "a4", "dpi", "otimizar", "comprimir", "rotacionar", "corte", "impressao",
+			},
+			Flags: []FlagDoc{
+				{Flag: "-r, --auto-rotate", Description: "Rotaciona automaticamente imagens landscape em 90° se a área útil aumentar (padrão: true)."},
+				{Flag: "-t, --rotate-threshold", Description: "Porcentagem mínima de ganho de área útil para disparar a rotação (padrão: 15.0%)."},
+				{Flag: "-f, --fit", Description: "Modo de encaixe no slot: 'contain' (sem cortes na atividade) ou 'cover' (preenchimento total)."},
+				{Flag: "-O, --optimize", Description: "Otimiza e comprime imagens pesadas (ex: Figma 4x) em memória a 300 DPI para gerar PDFs leve de ~500KB (padrão: true)."},
+				{Flag: "--max-dpi", Description: "Resolução máxima em DPI para renderização de imagens no PDF (padrão: 300)."},
+				{Flag: "-q, --quality", Description: "Qualidade de compressão JPEG de 1 a 100 (padrão: 85)."},
+				{Flag: "-l, --cut-line", Description: "Desenha a linha tracejada central de corte (padrão: true)."},
+				{Flag: "-d, --duplicate", Description: "Duplica imagens ímpares ou isoladas no segundo slot da folha (padrão: true)."},
+				{Flag: "-m, --margin", Description: "Margem externa da página em milímetros (padrão: 5mm)."},
+				{Flag: "-o, --output", Description: "Caminho do arquivo PDF ou pasta de destino personalizada."},
+			},
+			Examples: []ExampleDoc{
+				{
+					Description: "Gerar PDF 2-up economizando papel a partir de uma pasta de atividades exportadas do Figma:",
+					Command:     "caramel 2up ./atividades_figma",
+				},
+				{
+					Description: "Gerar 2-up de uma prova única em A5 duplicando ela no segundo slot para corte:",
+					Command:     "caramel 2up prova_historia.png",
+				},
+				{
+					Description: "Gerar 2-up forçando preenchimento total do slot (cover) sem margem em branco:",
+					Command:     "caramel 2up ./fichas_estudo -f cover",
+				},
+			},
+		},
 		{
 			Name:     "caramel process",
 			Short:    "Pipeline completo: extrai, colore imagens em P&B com IA e gera novo DOCX colorida",
@@ -49,6 +96,9 @@ O Caramel irá:
  3. Colorir cada ilustração utilizando Inteligência Artificial (OpenRouter);
  4. Reconstruir um novo arquivo .docx (ex: 'prova_colorida.docx') pronto para impressão ou uso digital.`,
 			Syntax: "caramel process <arquivo.docx> [flags]",
+			Keywords: []string{
+				"process", "pipeline", "colorir", "ia", "openrouter", "docx", "word", "prova", "apostila", "p&b",
+			},
 			Flags: []FlagDoc{
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo com checkboxes para você escolher visualmente quais imagens deseja colorir."},
 				{Flag: "-s, --min-size", Description: "Tamanho mínimo das imagens a serem processadas (ex: '20KB', '50KB'). Ignora logos/brasões."},
@@ -81,6 +131,9 @@ para reaproveitá-las em outro material (apresentações de slides, provas ou at
 
 Você também pode apenas listar as imagens para inspecionar o conteúdo sem extrair nada para o disco.`,
 			Syntax: "caramel docx extract <arquivo.docx> [flags]",
+			Keywords: []string{
+				"extract", "extrair", "figuras", "imagens", "docx", "word", "listar", "salvar",
+			},
 			Flags: []FlagDoc{
 				{Flag: "-l, --list", Description: "Apenas inspeciona e exibe a lista de imagens do arquivo sem salvá-las."},
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo para você selecionar apenas as figuras que deseja salvar."},
@@ -111,7 +164,10 @@ Você também pode apenas listar as imagens para inspecionar o conteúdo sem ext
 Utilize este assistente no primeiro uso do Caramel para cadastrar sua chave de API do OpenRouter.
 Ele guia você passo a passo e salva as credenciais com segurança no seu sistema.`,
 			Syntax: "caramel config setup",
-			Flags:  []FlagDoc{},
+			Keywords: []string{
+				"config", "setup", "chave", "api", "openrouter", "chave-api", "configurar",
+			},
+			Flags: []FlagDoc{},
 			Examples: []ExampleDoc{
 				{
 					Description: "Iniciar o assistente guiado de configuração:",
@@ -126,7 +182,10 @@ Ele guia você passo a passo e salva as credenciais com segurança no seu sistem
 			PedagogicalContext: `💡 QUANDO USAR:
 Utilize para verificar se sua chave do OpenRouter está ativa e onde o arquivo .env de configuração está salvo.`,
 			Syntax: "caramel config show",
-			Flags:  []FlagDoc{},
+			Keywords: []string{
+				"config", "show", "status", "env", "chave", "onde",
+			},
+			Flags: []FlagDoc{},
 			Examples: []ExampleDoc{
 				{
 					Description: "Verificar o status atual das configurações:",
@@ -141,7 +200,10 @@ Utilize para verificar se sua chave do OpenRouter está ativa e onde o arquivo .
 			PedagogicalContext: `💡 QUANDO USAR:
 Utilize para definir diretamente uma chave de configuração sem passar pelo assistente interativo.`,
 			Syntax: "caramel config set <CHAVE> <VALOR>",
-			Flags:  []FlagDoc{},
+			Keywords: []string{
+				"config", "set", "chave", "definir", "salvar",
+			},
+			Flags: []FlagDoc{},
 			Examples: []ExampleDoc{
 				{
 					Description: "Definir a chave de API do OpenRouter:",
@@ -155,8 +217,11 @@ Utilize para definir diretamente uma chave de configuração sem passar pelo ass
 			Category: CategorySystem,
 			PedagogicalContext: `💡 QUANDO USAR:
 Navegue pelo guia didático do Caramel CLI no terminal. Veja explicações detalhadas de cada comando,
-dicas de uso pedagógico e exemplos práticos copiáveis.`,
-			Syntax: "caramel guide [flags] ou caramel help -i",
+dicas de uso pedagógico, busca por palavra-chave e exemplos práticos copiáveis.`,
+			Syntax: "caramel guide [termo_de_busca] ou caramel help [termo_de_busca]",
+			Keywords: []string{
+				"guide", "help", "ajuda", "duvida", "comando", "exemplo", "como-usar", "tui",
+			},
 			Flags: []FlagDoc{
 				{Flag: "-i, --interactive", Description: "Abre a central de ajuda no modo TUI interativo com menu navegável."},
 			},
@@ -164,6 +229,10 @@ dicas de uso pedagógico e exemplos práticos copiáveis.`,
 				{
 					Description: "Abrir o guia de ajuda interativo:",
 					Command:     "caramel guide",
+				},
+				{
+					Description: "Pesquisar guia sobre imagens do Figma:",
+					Command:     "caramel guide figma",
 				},
 			},
 		},
@@ -174,7 +243,10 @@ dicas de uso pedagógico e exemplos práticos copiáveis.`,
 			PedagogicalContext: `💡 QUANDO USAR:
 Verifica a versão instalada do Caramel CLI, hash do commit de compilação e data da release.`,
 			Syntax: "caramel version",
-			Flags:  []FlagDoc{},
+			Keywords: []string{
+				"version", "versao", "atualizacao", "release",
+			},
+			Flags: []FlagDoc{},
 			Examples: []ExampleDoc{
 				{
 					Description: "Exibir informações de versão:",
