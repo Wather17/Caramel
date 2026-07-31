@@ -87,3 +87,76 @@ func TestGenerate2UpPDF(t *testing.T) {
 		t.Errorf("O arquivo PDF gerado está com 0 bytes")
 	}
 }
+
+func TestSortNatural(t *testing.T) {
+	paths := []string{"img10.png", "img1.png", "img2.png", "img1_2.png", "img1_1.png"}
+	SortNatural(paths)
+
+	expected := []string{"img1.png", "img1_1.png", "img1_2.png", "img2.png", "img10.png"}
+	for i, p := range paths {
+		if p != expected[i] {
+			t.Errorf("Na posição %d esperava '%s', obteve '%s'", i, expected[i], p)
+		}
+	}
+}
+
+func TestCalculateFitDimensions(t *testing.T) {
+	maxW := 138.5
+	maxH := 200.0
+
+	t.Run("Contain Landscape", func(t *testing.T) {
+		rw, rh := calculateFitDimensions(800, 450, maxW, maxH, "contain")
+		if rw > maxW || rh > maxH {
+			t.Errorf("Contain excedeu o slot: %fx%f (max: %fx%f)", rw, rh, maxW, maxH)
+		}
+	})
+
+	t.Run("Cover Landscape", func(t *testing.T) {
+		rw, rh := calculateFitDimensions(800, 450, maxW, maxH, "cover")
+		if rw < maxW && rh < maxH {
+			t.Errorf("Cover não preencheu o slot: %fx%f (max: %fx%f)", rw, rh, maxW, maxH)
+		}
+	})
+}
+
+func TestGenerate2UpPDF_SmartLayout(t *testing.T) {
+	tempDir := t.TempDir()
+	landscapeImgPath := filepath.Join(tempDir, "landscape_activity.png")
+	outPdfPath := filepath.Join(tempDir, "output_smart_2up.pdf")
+
+	// Cria uma imagem PNG horizontal (landscape 16:9)
+	img := image.NewRGBA(image.Rect(0, 0, 800, 450))
+	for x := 0; x < 800; x++ {
+		for y := 0; y < 450; y++ {
+			img.Set(x, y, color.Black)
+		}
+	}
+
+	f, err := os.Create(landscapeImgPath)
+	if err != nil {
+		t.Fatalf("Falha ao criar imagem landscape de teste: %v", err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("Falha ao codificar PNG: %v", err)
+	}
+	f.Close()
+
+	opts := DefaultOptions()
+	opts.AutoRotate = true
+	opts.RotateThreshold = 15.0
+	opts.FitMode = "cover"
+
+	err = Generate2UpPDF([]string{landscapeImgPath}, outPdfPath, opts)
+	if err != nil {
+		t.Fatalf("Generate2UpPDF com Smart Layout falhou: %v", err)
+	}
+
+	stat, err := os.Stat(outPdfPath)
+	if err != nil {
+		t.Fatalf("PDF gerado não encontrado: %v", err)
+	}
+	if stat.Size() == 0 {
+		t.Errorf("O arquivo PDF com Smart Layout gerado está com 0 bytes")
+	}
+}

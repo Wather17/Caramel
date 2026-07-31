@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"caramel/internal/tools/pdf"
@@ -17,6 +16,9 @@ var (
 	pdfDrawCutLine     bool
 	pdfMarginMM        float64
 	pdfDuplicateSingle bool
+	pdfAutoRotate      bool
+	pdfRotateThreshold float64
+	pdfFitMode         string
 )
 
 var pdfCmd = &cobra.Command{
@@ -64,7 +66,7 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 				return fmt.Errorf("nenhuma imagem (PNG, JPG, WEBP) encontrada na pasta '%s'", inputPath)
 			}
 
-			sort.Strings(imagePaths)
+			pdf.SortNatural(imagePaths)
 			folderName := filepath.Base(filepath.Clean(inputPath))
 			defaultPdfName = filepath.Join(inputPath, fmt.Sprintf("%s_2up.pdf", folderName))
 		} else {
@@ -95,6 +97,9 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 			DrawCutLine:     pdfDrawCutLine,
 			MarginMM:        pdfMarginMM,
 			DuplicateSingle: pdfDuplicateSingle,
+			AutoRotate:      pdfAutoRotate,
+			RotateThreshold: pdfRotateThreshold,
+			FitMode:         pdfFitMode,
 		}
 
 		fmt.Printf("🚀 Gerando PDF 2-up a partir de %d imagem(ns)...\n", len(imagePaths))
@@ -116,6 +121,9 @@ func init() {
 	pdf2UpCmd.Flags().BoolVarP(&pdfDrawCutLine, "cut-line", "l", true, "Desenha a linha tracejada central de corte")
 	pdf2UpCmd.Flags().Float64VarP(&pdfMarginMM, "margin", "m", 5.0, "Margem externa da página em milímetros (mm)")
 	pdf2UpCmd.Flags().BoolVarP(&pdfDuplicateSingle, "duplicate", "d", true, "Duplica imagens ímpares ou isoladas no segundo slot da folha")
+	pdf2UpCmd.Flags().BoolVarP(&pdfAutoRotate, "auto-rotate", "r", true, "Rotaciona imagens landscape automaticamente para maximizar área útil")
+	pdf2UpCmd.Flags().Float64VarP(&pdfRotateThreshold, "rotate-threshold", "t", 15.0, "Porcentagem mínima de ganho de área útil para autorizar a rotação")
+	pdf2UpCmd.Flags().StringVarP(&pdfFitMode, "fit", "f", "contain", "Modo de encaixe da imagem no slot: contain (sem cortes) ou cover (preenchimento total)")
 
 	pdfCmd.AddCommand(pdf2UpCmd)
 	RootCmd.AddCommand(pdfCmd)
