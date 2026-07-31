@@ -50,3 +50,6 @@ ehthumbs.db
 # 🤖 Configurações de Agentes e Issues
 GEMINI.md
 issues/
+
+.agent/
+openspec/
