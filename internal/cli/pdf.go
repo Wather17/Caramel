@@ -19,6 +19,9 @@ var (
 	pdfAutoRotate      bool
 	pdfRotateThreshold float64
 	pdfFitMode         string
+	pdfOptimize        bool
+	pdfMaxDPI          int
+	pdfQuality         int
 )
 
 var pdfCmd = &cobra.Command{
@@ -104,6 +107,9 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 			AutoRotate:      pdfAutoRotate,
 			RotateThreshold: pdfRotateThreshold,
 			FitMode:         pdfFitMode,
+			Optimize:        pdfOptimize,
+			MaxDPI:          pdfMaxDPI,
+			Quality:         pdfQuality,
 		}
 
 		fmt.Printf("🚀 Gerando PDF 2-up a partir de %d imagem(ns)...\n", len(imagePaths))
@@ -128,6 +134,9 @@ func init() {
 	pdf2UpCmd.Flags().BoolVarP(&pdfAutoRotate, "auto-rotate", "r", true, "Rotaciona imagens landscape automaticamente para maximizar área útil")
 	pdf2UpCmd.Flags().Float64VarP(&pdfRotateThreshold, "rotate-threshold", "t", 15.0, "Porcentagem mínima de ganho de área útil para autorizar a rotação")
 	pdf2UpCmd.Flags().StringVarP(&pdfFitMode, "fit", "f", "contain", "Modo de encaixe da imagem no slot: contain (sem cortes) ou cover (preenchimento total)")
+	pdf2UpCmd.Flags().BoolVarP(&pdfOptimize, "optimize", "O", true, "Redimensiona (300 DPI) e comprime imagens pesadas em memória para reduzir o tamanho do PDF")
+	pdf2UpCmd.Flags().IntVar(&pdfMaxDPI, "max-dpi", 300, "Resolução máxima em DPI para renderização de imagens no PDF")
+	pdf2UpCmd.Flags().IntVarP(&pdfQuality, "quality", "q", 85, "Qualidade de compressão JPEG de 1 a 100 (padrão: 85)")
 
 	pdfCmd.AddCommand(pdf2UpCmd)
 	RootCmd.AddCommand(pdfCmd)
