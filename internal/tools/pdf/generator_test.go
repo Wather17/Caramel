@@ -160,3 +160,42 @@ func TestGenerate2UpPDF_SmartLayout(t *testing.T) {
 		t.Errorf("O arquivo PDF com Smart Layout gerado está com 0 bytes")
 	}
 }
+
+func TestOptimizeImageInMemory(t *testing.T) {
+	tempDir := t.TempDir()
+	largeImgPath := filepath.Join(tempDir, "large_figma_export.png")
+
+	// Cria uma imagem PNG de altíssima resolução (ex: 5000x3000)
+	img := image.NewRGBA(image.Rect(0, 0, 5000, 3000))
+	for x := 0; x < 5000; x += 10 {
+		for y := 0; y < 3000; y += 10 {
+			img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+
+	f, err := os.Create(largeImgPath)
+	if err != nil {
+		t.Fatalf("Falha ao criar imagem grande de teste: %v", err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("Falha ao codificar PNG grande: %v", err)
+	}
+	f.Close()
+
+	opts := DefaultOptions()
+	opts.Optimize = true
+	opts.MaxDPI = 300
+	opts.Quality = 85
+
+	reader, format, err := optimizeImageInMemory(largeImgPath, 138.5, 200.0, opts)
+	if err != nil {
+		t.Fatalf("optimizeImageInMemory falhou: %v", err)
+	}
+	if format != "JPG" {
+		t.Errorf("Esperava formato JPG, obteve %s", format)
+	}
+	if reader == nil {
+		t.Errorf("Reader retornado é nil")
+	}
+}
