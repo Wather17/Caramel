@@ -35,12 +35,16 @@ var pdf2UpCmd = &cobra.Command{
 com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de corte central orientativa.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		inputPath := args[0]
+		inputArg := args[0]
 
-		stat, err := os.Stat(inputPath)
+		realPath, stat, err := pdf.ResolveFuzzyPath(inputArg)
 		if err != nil {
-			return fmt.Errorf("caminho de entrada inválido '%s': %w", inputPath, err)
+			return err
 		}
+		if realPath != inputArg {
+			fmt.Printf("ℹ️ Caminho ajustado automaticamente para: '%s'\n", realPath)
+		}
+		inputPath := realPath
 
 		var imagePaths []string
 		var defaultPdfName string
@@ -67,7 +71,7 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 			}
 
 			pdf.SortNatural(imagePaths)
-			folderName := filepath.Base(filepath.Clean(inputPath))
+			folderName := pdf.Clean2UpSuffix(filepath.Base(filepath.Clean(inputPath)))
 			defaultPdfName = filepath.Join(inputPath, fmt.Sprintf("%s_2up.pdf", folderName))
 		} else {
 			// Arquivo único
@@ -77,7 +81,7 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 			}
 
 			imagePaths = []string{inputPath}
-			baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
+			baseName := pdf.Clean2UpSuffix(strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath)))
 			dir := filepath.Dir(inputPath)
 			defaultPdfName = filepath.Join(dir, fmt.Sprintf("%s_2up.pdf", baseName))
 		}
