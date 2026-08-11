@@ -74,15 +74,19 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
+| `--interactive` | `-i` | bool | `false` | Exibe galeria de previews ANSI no terminal para selecionar quais imagens substituir no novo `.docx`. |
 | `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde os arquivos gerados serão salvos. |
-| `--model` | `-m` | string | `google/gemini-3.1-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
 
 ### Exemplo Prático
 ```bash
-# Processa o arquivo gerando "atividade colorida.docx" com imagens no mesmo layout
+# Fluxo 100% automatizado (colora tudo > 20KB e reconstrói o .docx)
 caramel process atividade.docx
+
+# Modo interativo com preview no terminal antes de gerar "atividade colorida.docx"
+caramel process atividade.docx -i
 ```
 
 ---
