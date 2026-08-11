@@ -1,10 +1,13 @@
 package pdf
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/jpeg"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,7 +16,7 @@ import (
 	"unicode"
 
 	"github.com/phpdave11/gofpdf"
-
+	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
@@ -25,6 +28,9 @@ type Options struct {
 	AutoRotate      bool    // Se true, calcula e rotaciona imagens landscape quando benéfico
 	RotateThreshold float64 // Porcentagem mínima de ganho de área para disparar a rotação (padrão: 15.0%)
 	FitMode         string  // Modo de encaixe: "contain" (padrão) ou "cover"
+	Optimize        bool    // Se true, faz downsampling e recompressão JPEG em memória das imagens pesadas
+	MaxDPI          int     // Limite máximo de resolução em DPI (padrão: 300)
+	Quality         int     // Qualidade de compressão JPEG de 1 a 100 (padrão: 85)
 }
 
 // DefaultOptions retorna as opções padrão do gerador
@@ -36,6 +42,9 @@ func DefaultOptions() Options {
 		AutoRotate:      true,
 		RotateThreshold: 15.0,
 		FitMode:         "contain",
+		Optimize:        true,
+		MaxDPI:          300,
+		Quality:         85,
 	}
 }
 
@@ -54,6 +63,12 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 	}
 	if opts.FitMode == "" {
 		opts.FitMode = "contain"
+	}
+	if opts.MaxDPI <= 0 {
+		opts.MaxDPI = 300
+	}
+	if opts.Quality <= 0 || opts.Quality > 100 {
+		opts.Quality = 85
 	}
 
 	// Cria o documento PDF em Orientação Paisagem (Landscape), unidade em milímetros (mm), tamanho A4
@@ -145,7 +160,7 @@ func prepareImagePairs(imagePaths []string, duplicateSingle bool) []imagePair {
 	return pairs
 }
 
-// renderImageInSlot calcula as dimensões, decide por rotação e posiciona a imagem no slot
+// renderImageInSlot calcula as dimensões, decide por rotação, otimiza se ativado e posiciona a imagem no slot
 func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, maxH float64, opts Options) error {
 	imgW, imgH, err := getImageDimensions(imgPath)
 	if err != nil {
@@ -175,16 +190,30 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 		}
 	}
 
-	// Detecta extensão/formato para a API do gofpdf
-	ext := strings.ToUpper(filepath.Ext(imgPath))
+	imageTarget := imgPath
 	var imageType string
-	switch ext {
-	case ".PNG":
-		imageType = "PNG"
-	case ".JPG", ".JPEG":
-		imageType = "JPG"
-	default:
-		imageType = ""
+
+	// Otimização em memória se habilitada
+	if opts.Optimize {
+		reader, optFormat, optErr := optimizeImageInMemory(imgPath, maxW, maxH, opts)
+		if optErr == nil && reader != nil {
+			imageKey := fmt.Sprintf("opt_%s", filepath.Base(imgPath))
+			imageType = optFormat
+			pdf.RegisterImageOptionsReader(imageKey, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, reader)
+			imageTarget = imageKey
+		}
+	}
+
+	if imageType == "" {
+		ext := strings.ToUpper(filepath.Ext(imgPath))
+		switch ext {
+		case ".PNG":
+			imageType = "PNG"
+		case ".JPG", ".JPEG":
+			imageType = "JPG"
+		default:
+			imageType = ""
+		}
 	}
 
 	centerX := slotX + maxW/2.0
@@ -196,15 +225,86 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 
 		pdf.TransformBegin()
 		pdf.TransformRotate(90, centerX, centerY)
-		pdf.ImageOptions(imgPath, imgDrawX, imgDrawY, renderWRot, renderHRot, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
+		pdf.ImageOptions(imageTarget, imgDrawX, imgDrawY, renderWRot, renderHRot, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
 		pdf.TransformEnd()
 	} else {
 		finalX := centerX - renderWNorm/2.0
 		finalY := centerY - renderHNorm/2.0
-		pdf.ImageOptions(imgPath, finalX, finalY, renderWNorm, renderHNorm, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
+		pdf.ImageOptions(imageTarget, finalX, finalY, renderWNorm, renderHNorm, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
 	}
 
 	return nil
+}
+
+func optimizeImageInMemory(imgPath string, maxWMM, maxHMM float64, opts Options) (io.Reader, string, error) {
+	file, err := os.Open(imgPath)
+	if err != nil {
+		return nil, "", err
+	}
+	defer file.Close()
+
+	srcImg, _, err := image.Decode(file)
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao decodificar imagem '%s': %w", imgPath, err)
+	}
+
+	bounds := srcImg.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+
+	if srcW <= 0 || srcH <= 0 {
+		return nil, "", fmt.Errorf("dimensões inválidas na imagem '%s'", imgPath)
+	}
+
+	maxDPI := opts.MaxDPI
+	if maxDPI <= 0 {
+		maxDPI = 300
+	}
+	quality := opts.Quality
+	if quality <= 0 || quality > 100 {
+		quality = 85
+	}
+
+	// Resolução limite em pixels para 300 DPI no slot A5
+	maxAllowedW := int((maxWMM / 25.4) * float64(maxDPI))
+	maxAllowedH := int((maxHMM / 25.4) * float64(maxDPI))
+
+	if maxAllowedW < maxAllowedH {
+		maxAllowedW, maxAllowedH = maxAllowedH, maxAllowedW
+	}
+
+	needsRescale := srcW > maxAllowedW || srcH > maxAllowedH
+	var finalImg image.Image = srcImg
+
+	if needsRescale {
+		scaleW := float64(maxAllowedW) / float64(srcW)
+		scaleH := float64(maxAllowedH) / float64(srcH)
+		scale := scaleW
+		if scaleH < scaleW {
+			scale = scaleH
+		}
+
+		newW := int(float64(srcW) * scale)
+		newH := int(float64(srcH) * scale)
+		if newW < 1 {
+			newW = 1
+		}
+		if newH < 1 {
+			newH = 1
+		}
+
+		dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+		draw.BiLinear.Scale(dst, dst.Bounds(), srcImg, srcImg.Bounds(), draw.Over, nil)
+		finalImg = dst
+	}
+
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, finalImg, &jpeg.Options{Quality: quality})
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao comprimir imagem em memória: %w", err)
+	}
+
+	return buf, "JPG", nil
 }
 
 func calculateFitDimensions(imgW, imgH, maxW, maxH float64, fitMode string) (float64, float64) {
