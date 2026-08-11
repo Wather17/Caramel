@@ -74,15 +74,19 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
+| `--interactive` | `-i` | bool | `false` | Exibe galeria de previews ANSI no terminal para selecionar quais imagens substituir no novo `.docx`. |
 | `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde os arquivos gerados serão salvos. |
-| `--model` | `-m` | string | `google/gemini-3.1-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
 
 ### Exemplo Prático
 ```bash
-# Processa o arquivo gerando "atividade colorida.docx" com imagens no mesmo layout
+# Fluxo 100% automatizado (colora tudo > 20KB e reconstrói o .docx)
 caramel process atividade.docx
+
+# Modo interativo com preview no terminal antes de gerar "atividade colorida.docx"
+caramel process atividade.docx -i
 ```
 
 ---
@@ -109,19 +113,36 @@ caramel docx extract <caminho-do-arquivo.docx> [flags]
 
 ## 5. `caramel image colorize`
 
-Colora uma ilustração isolada (PNG, JPEG, WEBP, SVG) em preto e branco usando a IA multimodal da OpenRouter.
+Colora ilustrações em preto e branco (PNG, JPEG, WEBP) usando a IA multimodal do OpenRouter. Suporta imagens individuais, pastas inteiras e **arquivos `.docx`**, apresentando uma galeria com preview ANSI em tempo real no terminal para seleção interativa.
 
 ### Sintaxe
 ```bash
-caramel image colorize <imagem> [flags]
+caramel colorize <imagem | pasta | arquivo.docx> [flags]
 ```
 
 ### Aliases (Atalhos)
-`caramel colorize <imagem>`, `caramel color <imagem>`
+`caramel colorize <alvo>`, `caramel color <alvo>`, `caramel image colorize <alvo>`
 
-### Exemplo Prático
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--interactive` | `-i` | bool | `false` | Habilita seleção interativa com miniaturas ANSI no terminal. |
+| `--output` | `-o` | string | Pasta original ou `<docx>_coloridas` | Diretório onde as imagens coloridas serão salvas. |
+| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
+
+### Exemplos Práticos
+
 ```bash
-caramel colorize desenho_linha.png
+# Colora uma única imagem diretamente
+caramel colorize desenho.png
+
+# Seleção interativa de imagens contidas em um arquivo .docx
+caramel colorize atividade.docx
+
+# Seleção interativa de todas as imagens em uma pasta
+caramel colorize ./imagens_pedagogicas/
 ```
 
 ---

@@ -136,3 +136,97 @@ func findDocForCommand(cmdPath string) *CommandHelpDoc {
 	}
 	return nil
 }
+
+// SearchCommandDocs realiza uma busca inteligente nos documentos de ajuda por palavra-chave ou termo
+func SearchCommandDocs(query string) []CommandHelpDoc {
+	cleanQuery := strings.ToLower(strings.TrimSpace(query))
+	if cleanQuery == "" {
+		return GetAllCommandDocs()
+	}
+
+	var results []CommandHelpDoc
+	for _, doc := range GetAllCommandDocs() {
+		matched := false
+
+		// 1. Verifica no nome ou resumo
+		if strings.Contains(strings.ToLower(doc.Name), cleanQuery) || strings.Contains(strings.ToLower(doc.Short), cleanQuery) {
+			matched = true
+		}
+
+		// 2. Verifica no contexto pedagógico
+		if !matched && strings.Contains(strings.ToLower(doc.PedagogicalContext), cleanQuery) {
+			matched = true
+		}
+
+		// 3. Verifica em keywords
+		if !matched {
+			for _, kw := range doc.Keywords {
+				if strings.Contains(strings.ToLower(kw), cleanQuery) {
+					matched = true
+					break
+				}
+			}
+		}
+
+		// 4. Verifica em exemplos
+		if !matched {
+			for _, ex := range doc.Examples {
+				if strings.Contains(strings.ToLower(ex.Description), cleanQuery) || strings.Contains(strings.ToLower(ex.Command), cleanQuery) {
+					matched = true
+					break
+				}
+			}
+		}
+
+		if matched {
+			results = append(results, doc)
+		}
+	}
+	return results
+}
+
+// RenderSearchHelp renderiza o resultado da busca por palavras-chave pedagógicas no terminal
+func RenderSearchHelp(query string) string {
+	var sb strings.Builder
+	results := SearchCommandDocs(query)
+
+	sb.WriteString(HelpHeaderStyle.Render(fmt.Sprintf("🔍 Guia Didático de Ajuda — Busca por: '%s'", query)))
+	sb.WriteString("\n\n")
+
+	if len(results) == 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(ColorWarning).Render(
+			fmt.Sprintf("Nenhum comando ou caso de uso encontrado para o termo '%s'.\n", query),
+		))
+		sb.WriteString(HintStyle.Render("\n💡 DICA: Digite 'caramel guide' para abrir o menu interativo com todas as opções."))
+		sb.WriteString("\n")
+		return sb.String()
+	}
+
+	sb.WriteString(fmt.Sprintf("Encontrado(s) %d resultado(s) relevante(s):\n\n", len(results)))
+
+	for _, doc := range results {
+		boxContent := fmt.Sprintf("%s %s\n%s\n\n%s\n\n%s %s",
+			HelpSectionTitleStyle.Render("📌 COMANDO:"),
+			HelpCommandNameStyle.Render(doc.Name),
+			doc.Short,
+			doc.PedagogicalContext,
+			HelpSectionTitleStyle.Render("🚀 SINTAXE:"),
+			HelpSyntaxStyle.Render(doc.Syntax),
+		)
+
+		if len(doc.Examples) > 0 {
+			boxContent += fmt.Sprintf("\n\n%s\n", HelpSectionTitleStyle.Render("💡 EXEMPLOS PRÁTICOS:"))
+			for _, ex := range doc.Examples {
+				boxContent += fmt.Sprintf("  • %s\n    %s\n", ex.Description, HelpSyntaxStyle.Render(ex.Command))
+			}
+		}
+
+		sb.WriteString(HelpBoxStyle.Render(boxContent))
+		sb.WriteString("\n\n")
+	}
+
+	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide' para navegar no menu TUI completo."))
+	sb.WriteString("\n")
+
+	return sb.String()
+}

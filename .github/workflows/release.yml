@@ -3,10 +3,14 @@ name: Release Caramel CLI
 on:
   push:
     tags:
-      - 'v*' # Dispara o build quando você criar uma tag como v0.2.0, v1.0.0, etc.
+      - 'v*' # Dispara o build quando criar uma tag como v0.2.0, v1.0.0, etc.
 
 permissions:
   contents: write # Permissão necessária para criar a Release e fazer upload dos assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
@@ -21,11 +25,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x' # Mantém alinhado com a versão do go.mod
+          go-version: '1.25.x'
+          cache: true
 
       - name: Compile Cross-Platform Binaries
         run: |
-          # Define variáveis de build com base na tag do git
           TAG_VERSION=${GITHUB_REF_NAME}
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -58,13 +62,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Scoop Manifest
+        continue-on-error: true
         run: |
           RAW_VERSION=${GITHUB_REF_NAME#v}
           WIN_HASH=$(sha256sum dist/caramel-windows-amd64.exe | awk '{print $1}')
           
-          echo "Atualizando bucket/caramel.json com Versão=${RAW_VERSION} e Hash=${WIN_HASH}..."
+          echo "Atualizando bucket/caramel.json (Versão=${RAW_VERSION}, Hash=${WIN_HASH})..."
           
-          python3 -c "
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Tenta atualizar com retentativa em caso de concorrência na branch main
+          SUCCESS=0
+          for attempt in 1 2 3; do
+            echo "Tentativa $attempt de atualizar o manifesto Scoop..."
+            git fetch origin main
+            git checkout -B temp-scoop-branch origin/main
+            
+            python3 -c "
           import json
           with open('bucket/caramel.json', 'r') as f:
               data = json.load(f)
@@ -75,11 +90,25 @@ jobs:
               json.dump(data, f, indent=2)
               f.write('\n')
           "
+            
+            git add bucket/caramel.json
+            if git diff --quiet && git diff --staged --quiet; then
+              echo "Manifesto Scoop já estava atualizado."
+              SUCCESS=1
+              break
+            fi
+            
+            git commit -m "chore(scoop): atualizar manifesto para v${RAW_VERSION}"
+            if git push origin temp-scoop-branch:main; then
+              echo "Manifesto Scoop publicado com sucesso na main."
+              SUCCESS=1
+              break
+            fi
+            
+            sleep 2
+          done
           
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bucket/caramel.json
-          git commit -m "chore(scoop): atualizar manifesto para v${RAW_VERSION}" || echo "Sem alterações no manifesto"
-          git pull origin main --rebase
-          git push origin HEAD:main
-
+          if [ $SUCCESS -ne 1 ]; then
+            echo "Aviso: Não foi possível atualizar o manifesto Scoop automaticamente."
+            exit 1
+          fi
