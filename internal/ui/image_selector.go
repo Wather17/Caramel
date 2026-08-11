@@ -96,7 +96,7 @@ func SelectImageFilesWithPreviewInteractive(imagePaths []string) ([]string, erro
 		}
 
 		label := fmt.Sprintf("%-24s  (%.1f KB)", baseName, sizeKB)
-		options = append(options, huh.NewOption(label, path).Selected(true))
+		options = append(options, huh.NewOption(label, path).Selected(false))
 	}
 
 	var selectedPaths []string

@@ -9,6 +9,7 @@ import (
 	"caramel/internal/config"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
+	"caramel/internal/tools/pdf"
 	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ var (
 	imgModelName    string
 	verboseFlag     bool
 	interactiveFlag bool
+	allFlag         bool
 )
 
 var imageCmd = &cobra.Command{
@@ -71,11 +73,11 @@ var imageColorizeCmd = &cobra.Command{
 		} else if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
 			isDocx = true
 			fmt.Printf("📄 Extraindo imagens do arquivo DOCX '%s'...\n", filepath.Base(inputPath))
-			
+
 			// Pasta temporária para extração do DOCX
 			docxBase := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
 			tempExtractDir := filepath.Join(os.TempDir(), "caramel_docx_"+docxBase)
-			
+
 			res, err := docx.ExtractImages(inputPath, tempExtractDir)
 			if err != nil {
 				return fmt.Errorf("falha ao extrair imagens do .docx: %w", err)
@@ -99,9 +101,14 @@ var imageColorizeCmd = &cobra.Command{
 			}
 		}
 
-		// Se for DOCX, pasta ou houver a flag --interactive
+		// Ordena a lista de imagens de forma numérica natural (ex: image1, image2, ..., image10)
+		pdf.SortNatural(candidateImages)
+
+		// Se a flag --all (-a) for passada, seleciona todas sem abrir formulário interativo
 		var selectedImages []string
-		if interactiveFlag || isDocx || len(candidateImages) > 1 {
+		if allFlag {
+			selectedImages = candidateImages
+		} else if interactiveFlag || isDocx || len(candidateImages) > 1 {
 			selected, err := ui.SelectImageFilesWithPreviewInteractive(candidateImages)
 			if err != nil {
 				return err
@@ -154,6 +161,7 @@ func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
+	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Colora todas as imagens encontradas sem abrir formulário de seleção")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
