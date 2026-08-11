@@ -89,8 +89,8 @@ func SelectImageFilesWithPreviewInteractive(imagePaths []string) ([]string, erro
 			sizeKB = float64(info.Size()) / 1024.0
 		}
 
-		// Renderiza miniatura ANSI (ex: 22 colunas por 6 linhas)
-		ansiPreview, err := RenderImageFileToANSI(path, 22, 6)
+		// Renderiza miniatura ANSI com alta resolução e contraste (38 colunas por 10 linhas)
+		ansiPreview, err := RenderImageFileToANSI(path, 38, 10)
 		if err == nil && ansiPreview != "" {
 			fmt.Printf("\n--- [%d] %s (%.1f KB) ---\n%s", i+1, baseName, sizeKB, ansiPreview)
 		}

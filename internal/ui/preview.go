@@ -75,9 +75,9 @@ func RenderImageToANSI(img image.Image, maxCols, maxRows int) string {
 		scaledHeight++
 	}
 
-	// Redimensiona a imagem usando interpolação bilinear rápida
+	// Redimensiona a imagem usando o filtro cubic CatmullRom para máxima nitidez e preservação de detalhes
 	dst := image.NewRGBA(image.Rect(0, 0, scaledWidth, scaledHeight))
-	draw.BiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
 
 	var sb strings.Builder
 	charRows := scaledHeight / 2
