@@ -79,6 +79,9 @@ func RenderImageToANSI(img image.Image, maxCols, maxRows int) string {
 	dst := image.NewRGBA(image.Rect(0, 0, scaledWidth, scaledHeight))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
 
+	// Aplica filtro de nitidez (unsharp mask) para realçar contornos em ilustrações P&B
+	dst = sharpenImage(dst)
+
 	var sb strings.Builder
 	charRows := scaledHeight / 2
 
@@ -123,4 +126,43 @@ func RenderImageToANSI(img image.Image, maxCols, maxRows int) string {
 func colorToRGBA(c color.Color) (r, g, b, a uint8) {
 	cr, cg, cb, ca := c.RGBA()
 	return uint8(cr >> 8), uint8(cg >> 8), uint8(cb >> 8), uint8(ca >> 8)
+}
+
+// sharpenImage aplica um filtro Unsharp Mask de nitidez para realçar bordas e contornos
+func sharpenImage(src *image.RGBA) *image.RGBA {
+	bounds := src.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	dst := image.NewRGBA(bounds)
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if x == 0 || x == w-1 || y == 0 || y == h-1 {
+				dst.Set(x, y, src.At(x, y))
+				continue
+			}
+
+			centerR, centerG, centerB, centerA := colorToRGBA(src.At(x, y))
+			upR, upG, upB, _ := colorToRGBA(src.At(x, y-1))
+			downR, downG, downB, _ := colorToRGBA(src.At(x, y+1))
+			leftR, leftG, leftB, _ := colorToRGBA(src.At(x-1, y))
+			rightR, rightG, rightB, _ := colorToRGBA(src.At(x+1, y))
+
+			calcR := clamp(int(centerR)*5 - int(upR) - int(downR) - int(leftR) - int(rightR))
+			calcG := clamp(int(centerG)*5 - int(upG) - int(downG) - int(leftG) - int(rightG))
+			calcB := clamp(int(centerB)*5 - int(upB) - int(downB) - int(leftB) - int(rightB))
+
+			dst.SetRGBA(x, y, color.RGBA{R: calcR, G: calcG, B: calcB, A: centerA})
+		}
+	}
+	return dst
+}
+
+func clamp(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
 }
