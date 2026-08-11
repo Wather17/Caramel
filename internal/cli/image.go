@@ -8,6 +8,7 @@ import (
 
 	"caramel/internal/config"
 	"caramel/internal/tools/ai"
+	"caramel/internal/tools/docx"
 	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -27,10 +28,10 @@ var imageCmd = &cobra.Command{
 }
 
 var imageColorizeCmd = &cobra.Command{
-	Use:     "colorize <imagem-ou-diretorio>",
+	Use:     "colorize <imagem|diretorio|arquivo.docx>",
 	Aliases: []string{"color", "colorir"},
 	Short:   "Colora imagem(ns) em preto e branco usando IA (OpenRouter)",
-	Long:    `Envia ilustrações em preto e branco para a IA e gera versões coloridas. Aceita um arquivo individual ou um diretório com seleção interativa TUI e preview ANSI no terminal.`,
+	Long:    `Envia ilustrações em preto e branco para a IA e gera versões coloridas. Aceita um arquivo individual, um diretório ou um arquivo .docx com seleção interativa TUI e preview ANSI no terminal.`,
 	Args:    cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputPath := args[0]
@@ -44,8 +45,9 @@ var imageColorizeCmd = &cobra.Command{
 			return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 		}
 
-		// Coleta lista de imagens a processar
 		var candidateImages []string
+		var isDocx bool
+
 		info, err := os.Stat(inputPath)
 		if err != nil {
 			return fmt.Errorf("falha ao acessar '%s': %w", inputPath, err)
@@ -66,8 +68,27 @@ var imageColorizeCmd = &cobra.Command{
 			if len(candidateImages) == 0 {
 				return fmt.Errorf("nenhuma imagem (PNG, JPG, WEBP) encontrada no diretório '%s'", inputPath)
 			}
+		} else if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
+			isDocx = true
+			fmt.Printf("📄 Extraindo imagens do arquivo DOCX '%s'...\n", filepath.Base(inputPath))
+			
+			// Pasta temporária para extração do DOCX
+			docxBase := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
+			tempExtractDir := filepath.Join(os.TempDir(), "caramel_docx_"+docxBase)
+			
+			res, err := docx.ExtractImages(inputPath, tempExtractDir)
+			if err != nil {
+				return fmt.Errorf("falha ao extrair imagens do .docx: %w", err)
+			}
+
+			if len(res.Images) == 0 {
+				return fmt.Errorf("nenhuma imagem encontrada no arquivo .docx '%s'", inputPath)
+			}
+
+			for _, img := range res.Images {
+				candidateImages = append(candidateImages, filepath.Join(tempExtractDir, img.OriginalName))
+			}
 		} else {
-			// Se múltiplos argumentos forem passados
 			for _, arg := range args {
 				if isImageFile(arg) {
 					candidateImages = append(candidateImages, arg)
@@ -78,9 +99,9 @@ var imageColorizeCmd = &cobra.Command{
 			}
 		}
 
-		// Se houver mais de uma imagem ou a flag --interactive estiver ativa
+		// Se for DOCX, pasta ou houver a flag --interactive
 		var selectedImages []string
-		if interactiveFlag || len(candidateImages) > 1 {
+		if interactiveFlag || isDocx || len(candidateImages) > 1 {
 			selected, err := ui.SelectImageFilesWithPreviewInteractive(candidateImages)
 			if err != nil {
 				return err
@@ -94,13 +115,19 @@ var imageColorizeCmd = &cobra.Command{
 			selectedImages = candidateImages
 		}
 
-		// Processa cada imagem selecionada
+		// Determina diretório final de saída para imagens coloridas
+		defaultOutputDir := filepath.Dir(inputPath)
+		if isDocx {
+			docxBase := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
+			defaultOutputDir = filepath.Join(filepath.Dir(inputPath), docxBase+"_coloridas")
+		}
+
 		fmt.Printf("🎨 Processando %d imagem(ns) com o modelo '%s'...\n", len(selectedImages), imgModelName)
 
 		for i, imgPath := range selectedImages {
 			targetDir := imgOutputDir
 			if !cmd.Flags().Changed("output") || targetDir == "" {
-				targetDir = filepath.Dir(imgPath)
+				targetDir = defaultOutputDir
 			}
 
 			fmt.Printf("  [%d/%d] Colorindo '%s'...\n", i+1, len(selectedImages), filepath.Base(imgPath))
@@ -123,7 +150,7 @@ func isImageFile(path string) bool {
 }
 
 func init() {
-	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: mesma pasta da imagem original)")
+	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou <docx>_coloridas)")
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
@@ -131,6 +158,6 @@ func init() {
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
 
-	// Atalho direto no Root Cmd para aceitar 'caramel colorize <imagem>'
+	// Atalho direto no Root Cmd para aceitar 'caramel colorize <imagem|docx>'
 	RootCmd.AddCommand(imageColorizeCmd)
 }
