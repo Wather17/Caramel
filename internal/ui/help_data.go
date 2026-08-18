@@ -83,6 +83,49 @@ O Caramel irá:
 			},
 		},
 		{
+			Name:     "caramel generate",
+			Short:    "Gera ilustrações e coleções de objetos pedagógicos em lote com IA",
+			Category: CategoryDocx,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize este comando para criar coleções visuais inteiras de imagens e ilustrações (ex: 5, 10, 30+ itens)
+a partir de palavras simples (frutas, animais, legumes, profissões, ações) ou de um tema descritivo.
+
+O Caramel irá:
+ 1. Usar IA para sintetizar e padronizar prompts em inglês com fundo branco e estilo unificado;
+ 2. Gerar as imagens com concorrência adaptativa (worker pool inteligente sem bloqueios de rate limit);
+ 3. Exibir miniaturas ANSI em tempo real no terminal;
+ 4. Opcionalmente compilar tudo em um PDF 2-up pronto para impressão (--2up).`,
+			Syntax: "caramel generate [itens...] ou caramel image generate [flags]",
+			Keywords: []string{
+				"generate", "gerar", "harness", "lote", "batch", "imagens", "ilustracoes", "clipart", "3d", "vector", "ia", "flash-image",
+			},
+			Flags: []FlagDoc{
+				{Flag: "-i, --items", Description: "Lista de itens separados por vírgula (ex: 'maçã, banana, melancia')."},
+				{Flag: "-f, --file", Description: "Arquivo .txt contendo os itens (um por linha)."},
+				{Flag: "-t, --theme", Description: "Tema descritivo para a IA escolher os itens automaticamente (ex: 'animais da fazenda')."},
+				{Flag: "-n, --count", Description: "Quantidade de itens ao usar com --theme (padrão: 10)."},
+				{Flag: "-s, --style", Description: "Estilo visual: clipart, vector, 3d-cute, coloring, realistic (padrão: clipart)."},
+				{Flag: "--2up", Description: "Compila automaticamente todas as imagens geradas em um PDF 2-up A4."},
+				{Flag: "--preview", Description: "Exibe preview ANSI no terminal durante a geração (padrão: true)."},
+				{Flag: "-o, --output", Description: "Diretório onde as imagens serão salvas."},
+				{Flag: "-w, --workers", Description: "Número de workers concorrentes (padrão: adaptativo)."},
+			},
+			Examples: []ExampleDoc{
+				{
+					Description: "Gerar imagens de frutas tropicais em estilo 3D fofo:",
+					Command:     "caramel generate --items \"abacaxi, manga, maracujá, caju\" -s 3d-cute",
+				},
+				{
+					Description: "Gerar 10 animais da fazenda e compilar em PDF 2-up:",
+					Command:     "caramel generate --theme \"animais da fazenda\" -n 10 --2up",
+				},
+				{
+					Description: "Gerar desenhos para colorir a partir de um arquivo:",
+					Command:     "caramel generate -f ./itens.txt -s coloring",
+				},
+			},
+		},
+		{
 			Name:     "caramel colorize",
 			Short:    "Colora ilustrações/fotos ou processa e reconstrói documentos .docx com IA",
 			Category: CategoryDocx,

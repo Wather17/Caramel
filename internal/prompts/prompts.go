@@ -60,3 +60,30 @@ func GetRoutinePrompt() string {
 	return strings.TrimSpace(string(data))
 }
 
+// GetPromptSynthesizerPrompt retorna o template do prompt para sintetizar listas em prompts de imagens
+func GetPromptSynthesizerPrompt(style string) string {
+	if style == "" {
+		style = "clipart"
+	}
+
+	configDir, err := config.GetConfigDir()
+	if err == nil {
+		customPromptPath := filepath.Join(configDir, "prompts", "prompt_synthesizer.txt")
+		if data, err := os.ReadFile(customPromptPath); err == nil {
+			content := strings.TrimSpace(string(data))
+			if content != "" {
+				return strings.ReplaceAll(content, "{{.Style}}", style)
+			}
+		}
+	}
+
+	data, err := templateFS.ReadFile("templates/prompt_synthesizer.txt")
+	if err != nil {
+		return "Generate text-to-image prompts in JSON format for the following items in " + style + " style."
+	}
+
+	templateStr := strings.TrimSpace(string(data))
+	return strings.ReplaceAll(templateStr, "{{.Style}}", style)
+}
+
+
