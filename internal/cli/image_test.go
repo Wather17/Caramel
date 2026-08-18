@@ -52,3 +52,36 @@ func TestImageColorizeCmd_NoKeyConfigured(t *testing.T) {
 		t.Errorf("esperava erro por ausência de chave de API do OpenRouter")
 	}
 }
+
+func TestImageColorizeCmd_Docx_NoKeyConfigured(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("OPENROUTER_API_KEY", "")
+
+	docxPath := filepath.Join(tmpDir, "atividade.docx")
+	if err := os.WriteFile(docxPath, []byte("fake docx"), 0644); err != nil {
+		t.Fatalf("falha ao criar docx temporário: %v", err)
+	}
+
+	err := imageColorizeCmd.RunE(imageColorizeCmd, []string{docxPath})
+	if err == nil {
+		t.Errorf("esperava erro por ausência de chave OpenRouter ao processar docx")
+	}
+}
+
+func TestImageColorizeCmd_InvalidDocxExtension(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("OPENROUTER_API_KEY", "test-key")
+
+	txtPath := filepath.Join(tmpDir, "arquivo.txt")
+	if err := os.WriteFile(txtPath, []byte("texto simples"), 0644); err != nil {
+		t.Fatalf("falha ao criar arquivo txt: %v", err)
+	}
+
+	err := imageColorizeCmd.RunE(imageColorizeCmd, []string{txtPath})
+	if err == nil {
+		t.Errorf("esperava erro ao tentar colorir arquivo txt não-imagem")
+	}
+}
+
