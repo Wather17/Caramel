@@ -16,8 +16,8 @@ import (
 
 const (
 	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel     = "google/gemini-2.5-flash-image" // Google Nano Banana
-	DefaultTextModel = "deepseek/deepseek-v4-flash"    // DeepSeek V4 Flash
+	DefaultModel     = "google/gemini-3.1-flash-image-preview" // Google Nano Banana 2 (Gemini 3.1 Flash Image)
+	DefaultTextModel = "deepseek/deepseek-v4-flash"            // DeepSeek V4 Flash
 )
 
 var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
@@ -211,6 +211,116 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err)
+	}
+
+	return outBytes, outExt, nil
+}
+
+// GenerateImage envia um prompt de texto diretamente para a API do OpenRouter e retorna os bytes da imagem gerada e sua extensão
+func (c *Client) GenerateImage(promptText string, modelOverride string) ([]byte, string, error) {
+	model := DefaultModel
+	if modelOverride != "" {
+		model = modelOverride
+	}
+
+	reqPayload := ChatCompletionRequest{
+		Model:      model,
+		Modalities: []string{"image", "text"},
+		Messages: []ChatMessage{
+			{
+				Role: "user",
+				Content: []ChatMessageContentPart{
+					{
+						Type: "text",
+						Text: promptText + "\n\nCRITICAL: Generate and return the visual image asset in your response payload.",
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(reqPayload)
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao serializar requisição JSON: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao criar requisição HTTP: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
+	req.Header.Set("X-Title", "Caramel CLI")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
+	}
+
+	if c.Verbose {
+		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("API OpenRouter retornou status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var chatResp ChatCompletionResponse
+	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta: %w", err)
+	}
+
+	if chatResp.Error != nil {
+		return nil, "", fmt.Errorf("erro na API OpenRouter: %s", chatResp.Error.Message)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
+	}
+
+	choice := chatResp.Choices[0]
+
+	// 1. Padrão oficial OpenRouter: `message.images[0].image_url.url`
+	if len(choice.Message.Images) > 0 {
+		for _, imgItem := range choice.Message.Images {
+			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
+				bytes, ext, err := c.extractImageBytesFromResponse(imgItem.ImageURL.URL)
+				if err == nil {
+					return bytes, ext, nil
+				}
+			}
+		}
+	}
+
+	// 2. Extrai se `choice.Message.Content` for um array de objetos multimodal
+	if contentArray, ok := choice.Message.Content.([]interface{}); ok {
+		for _, part := range contentArray {
+			if partMap, ok := part.(map[string]interface{}); ok {
+				if imgURLObj, ok := partMap["image_url"].(map[string]interface{}); ok {
+					if urlStr, ok := imgURLObj["url"].(string); ok {
+						bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
+						if err == nil {
+							return bytes, ext, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Fallback para string simples ou Markdown
+	rawContent := fmt.Sprintf("%v", choice.Message.Content)
+	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
+	if err != nil {
+		return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err)
 	}
 
 	return outBytes, outExt, nil

@@ -198,7 +198,7 @@ Use a flag '-i' ou '--interactive' para visualizar as miniaturas ANSI das imagen
 
 func init() {
 	processCmd.Flags().StringVarP(&processOutputDir, "output", "o", "", "Diretório onde os arquivos serão salvos (padrão: imagens <nome_do_arquivo>)")
-	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
+	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
 	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
 	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	processCmd.Flags().BoolVarP(&processInteractive, "interactive", "i", false, "Exibe formulário interativo com preview ANSI para selecionar quais imagens colorir e substituir no novo .docx")

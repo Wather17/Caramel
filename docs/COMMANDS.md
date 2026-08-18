@@ -11,8 +11,10 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 - [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai, colore e reconstrói o `.docx` de uma só vez (com redimensionamento exato de imagens).
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
-- [`caramel routine process`](#6-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
-- [`caramel install`](#7-caramel-install) - Instala o Caramel CLI globalmente no sistema.
+- [`caramel image generate`](#6-caramel-image-generate-harness-em-lote) - **[Harness em Lote]** Gera ilustrações e coleções de objetos pedagógicos com concorrência adaptativa.
+- [`caramel cards`](#7-caramel-cards-layout-a4-de-fichas--flashcards) - **[Layout A4 / Flashcards]** Diagrama fichas pedagógicas com legendas para impressão e corte.
+- [`caramel routine process`](#8-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
+- [`caramel install`](#9-caramel-install) - Instala o Caramel CLI globalmente no sistema.
 
 ---
 
@@ -74,18 +76,18 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--interactive` | `-i` | bool | `false` | Exibe galeria de previews ANSI no terminal para selecionar quais imagens substituir no novo `.docx`. |
 | `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
-| `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde os arquivos gerados serão salvos. |
-| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
-| `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
+| `--interactive` | `-i` | bool | `false` | Habilita modo interativo com preview ANSI TrueColor no terminal. |
+| `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório de destino do novo `.docx` e das imagens. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
 
-### Exemplo Prático
+### Exemplos Prático
 ```bash
-# Fluxo 100% automatizado (colora tudo > 20KB e reconstrói o .docx)
+# Processa de forma totalmente automatizada
 caramel process atividade.docx
 
-# Modo interativo com preview no terminal antes de gerar "atividade colorida.docx"
+# Modo interativo selecionando imagens individualmente com preview ANSI
 caramel process atividade.docx -i
 ```
 
@@ -97,17 +99,21 @@ Extrai todas as imagens de um arquivo `.docx`. Opcionalmente, ativa a IA (`--col
 
 ### Sintaxe
 ```bash
-caramel docx extract <caminho-do-arquivo.docx> [flags]
+caramel docx extract <arquivo.docx> [flags]
 ```
+
+### Aliases (Atalhos)
+`caramel extract <arquivo.docx>`
 
 ### Flags Disponíveis
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para extrair a imagem (ex: `20KB`, `50KB`, `0` para todas). |
-| `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens extraídas serão salvas. |
-| `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las. |
+| `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório onde as imagens serão salvas. |
+| `--list` | `-l` | bool | `false` | Apenas lista as imagens no terminal sem salvar. |
+| `--interactive` | `-i` | bool | `false` | Abre formulário interativo de seleção de imagens. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 
 ---
 
@@ -154,7 +160,86 @@ caramel colorize ./imagens_pedagogicas/
 
 ---
 
-## 6. `caramel routine process`
+## 6. `caramel image generate` (Harness em Lote)
+
+Gera coleções visuais de ilustrações e objetos pedagógicos a partir de listas de palavras ou temas.
+A IA sintetiza e padroniza os prompts visuais e um motor com concorrência adaptativa gera as imagens em alta velocidade sem bloqueios de rate limit.
+
+### Sintaxe
+```bash
+caramel generate <itens | flags>
+caramel image generate [flags]
+```
+
+### Aliases (Atalhos)
+`caramel generate`, `caramel gen`, `caramel img gen`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--items` | `-i` | string | `""` | Lista de palavras ou termos separados por vírgula. |
+| `--file` | `-f` | string | `""` | Caminho para arquivo de texto contendo itens linha por linha. |
+| `--theme` | `-t` | string | `""` | Tema para a IA escolher os itens automaticamente (ex: "animais da fazenda"). |
+| `--count` | `-n` | int | `10` | Quantidade de itens a gerar quando utilizado com `--theme`. |
+| `--style` | `-s` | string | `clipart` | Estilo: `clipart`, `vector`, `3d-cute`, `coloring`, `realistic`. |
+| `--2up` | | bool | `false` | Compila automaticamente todas as imagens geradas em um PDF 2-up A4. |
+| `--preview` | | bool | `true` | Exibe miniaturas ANSI TrueColor no terminal durante a geração. |
+| `--output` | `-o` | string | `./imagens_<tema>` | Diretório onde as imagens serão salvas. |
+| `--workers`| `-w` | int | `0` (adaptativo) | Quantidade de workers concorrentes manuais. |
+
+### Exemplos Práticos
+
+```bash
+# Gerar ilustrações a partir de uma lista
+caramel generate --items "maçã, banana, melancia, uva" -s clipart
+
+# Gerar 10 animais de um tema e compilar diretamente em PDF 2-up para impressão
+caramel generate --theme "animais da savana" -n 10 -s 3d-cute --2up
+
+# Gerar desenhos para colorir a partir de um arquivo de texto
+caramel generate -f ./frutas.txt -s coloring
+```
+
+---
+
+## 7. `caramel cards` (Layout A4 de Fichas / Flashcards)
+
+Diagrama coleções de imagens em folhas de papel A4 prontas para impressão e recorte, com legendas em caixa alta e linhas tracejadas de tesoura ✂️.
+
+### Sintaxe
+```bash
+caramel cards <pasta_ou_imagem> [flags]
+```
+
+### Aliases (Atalhos)
+`caramel flashcards`, `caramel print cards`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (ex: 2, 3 ou 4). |
+| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (ex: 2, 3 ou 4). |
+| `--title` | `-t` | string | `""` | Título no cabeçalho de cada folha. |
+| `--cut-lines`| `-l` | bool | `true` | Exibe linhas tracejadas de corte com tesoura. |
+| `--uppercase`| `-u` | bool | `true` | Exibe os nomes das fichas em caixa alta (ótimo para alfabetização). |
+| `--embed` | `-e` | bool | `true` | Embute as imagens em Base64 (arquivo 100% autossuficiente). |
+| `--output` | `-o` | string | `<pasta>_fichas_a4.html` | Caminho do arquivo HTML de saída. |
+
+### Exemplos Práticos
+
+```bash
+# Gerar fichas A4 de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
+caramel cards ./imagens_frutas/
+
+# Gerar grade 3x3 (9 fichas por folha) com título
+caramel cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
+```
+
+---
+
+## 8. `caramel routine process`
 
 Lê rotinas pedagógicas semanais em formato `.docx`, extrai todo o texto localmente de forma otimizada, envia para a IA classificar as experiências baseadas na BNCC e reconstrói o relatório final no padrão de tabela Arial em orientação Paisagem.
 
@@ -183,7 +268,7 @@ caramel routine process ./abril/
 
 ---
 
-## 7. `caramel install`
+## 9. `caramel install`
 
 Copia o binário do Caramel em execução para um diretório local do usuário e adiciona esse diretório ao PATH do sistema operacional de forma totalmente automatizada.
 
