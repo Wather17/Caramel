@@ -12,8 +12,9 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
 - [`caramel image generate`](#6-caramel-image-generate-harness-em-lote) - **[Harness em Lote]** Gera ilustrações e coleções de objetos pedagógicos com concorrência adaptativa.
-- [`caramel routine process`](#7-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
-- [`caramel install`](#8-caramel-install) - Instala o Caramel CLI globalmente no sistema.
+- [`caramel cards`](#7-caramel-cards-layout-a4-de-fichas--flashcards) - **[Layout A4 / Flashcards]** Diagrama fichas pedagógicas com legendas para impressão e corte.
+- [`caramel routine process`](#8-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
+- [`caramel install`](#9-caramel-install) - Instala o Caramel CLI globalmente no sistema.
 
 ---
 
@@ -202,7 +203,43 @@ caramel generate -f ./frutas.txt -s coloring
 
 ---
 
-## 7. `caramel routine process`
+## 7. `caramel cards` (Layout A4 de Fichas / Flashcards)
+
+Diagrama coleções de imagens em folhas de papel A4 prontas para impressão e recorte, com legendas em caixa alta e linhas tracejadas de tesoura ✂️.
+
+### Sintaxe
+```bash
+caramel cards <pasta_ou_imagem> [flags]
+```
+
+### Aliases (Atalhos)
+`caramel flashcards`, `caramel print cards`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (ex: 2, 3 ou 4). |
+| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (ex: 2, 3 ou 4). |
+| `--title` | `-t` | string | `""` | Título no cabeçalho de cada folha. |
+| `--cut-lines`| `-l` | bool | `true` | Exibe linhas tracejadas de corte com tesoura. |
+| `--uppercase`| `-u` | bool | `true` | Exibe os nomes das fichas em caixa alta (ótimo para alfabetização). |
+| `--embed` | `-e` | bool | `true` | Embute as imagens em Base64 (arquivo 100% autossuficiente). |
+| `--output` | `-o` | string | `<pasta>_fichas_a4.html` | Caminho do arquivo HTML de saída. |
+
+### Exemplos Práticos
+
+```bash
+# Gerar fichas A4 de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
+caramel cards ./imagens_frutas/
+
+# Gerar grade 3x3 (9 fichas por folha) com título
+caramel cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
+```
+
+---
+
+## 8. `caramel routine process`
 
 Lê rotinas pedagógicas semanais em formato `.docx`, extrai todo o texto localmente de forma otimizada, envia para a IA classificar as experiências baseadas na BNCC e reconstrói o relatório final no padrão de tabela Arial em orientação Paisagem.
 
@@ -231,7 +268,7 @@ caramel routine process ./abril/
 
 ---
 
-## 8. `caramel install`
+## 9. `caramel install`
 
 Copia o binário do Caramel em execução para um diretório local do usuário e adiciona esse diretório ao PATH do sistema operacional de forma totalmente automatizada.
 
