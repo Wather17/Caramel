@@ -8,7 +8,6 @@ import (
 
 	"caramel/internal/config"
 	"caramel/internal/tools/ai"
-	"caramel/internal/tools/docx"
 	"caramel/internal/tools/pdf"
 	"caramel/internal/ui"
 
@@ -18,6 +17,7 @@ import (
 var (
 	imgOutputDir    string
 	imgModelName    string
+	imgMinSize      string
 	verboseFlag     bool
 	interactiveFlag bool
 	allFlag         bool
@@ -32,11 +32,38 @@ var imageCmd = &cobra.Command{
 var imageColorizeCmd = &cobra.Command{
 	Use:     "colorize <imagem|diretorio|arquivo.docx>",
 	Aliases: []string{"color", "colorir"},
-	Short:   "Colora imagem(ns) em preto e branco usando IA (OpenRouter)",
-	Long:    `Envia ilustrações em preto e branco para a IA e gera versões coloridas. Aceita um arquivo individual, um diretório ou um arquivo .docx com seleção interativa TUI e preview ANSI no terminal.`,
-	Args:    cobra.MinimumNArgs(1),
+	Short:   "Colora imagem(ns) ou documentos .docx em preto e branco usando IA (OpenRouter)",
+	Long: `Envia ilustrações em preto e branco para a IA e gera versões coloridas.
+Aceita arquivos de imagem individuais (PNG, JPG, WEBP), pastas inteiras ou arquivos .docx.
+
+Ao receber um arquivo .docx:
+- Executa o pipeline automatizado: extrai as imagens, colore via IA, ajusta proporções e gera um novo arquivo .docx reconstruído ('<nome> colorida.docx') além de salvar as imagens coloridas.
+- Suporta a flag '-i' / '--interactive' para seleção interativa com preview ANSI no terminal.`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputPath := args[0]
+
+		// Se o alvo for um arquivo .docx, executa o pipeline unificado de DOCX
+		if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
+			effectiveMinSize := imgMinSize
+			if allFlag && !cmd.Flags().Changed("min-size") {
+				effectiveMinSize = "0"
+			}
+
+			isInteractive := interactiveFlag
+			if allFlag {
+				isInteractive = false
+			}
+
+			return RunProcessDocx(ProcessDocxOptions{
+				DocxPath:    inputPath,
+				OutputDir:   imgOutputDir,
+				ModelName:   imgModelName,
+				MinSize:     effectiveMinSize,
+				Interactive: isInteractive,
+				Verbose:     verboseFlag,
+			})
+		}
 
 		cfg, err := config.LoadConfig()
 		if err != nil {
@@ -48,7 +75,6 @@ var imageColorizeCmd = &cobra.Command{
 		}
 
 		var candidateImages []string
-		var isDocx bool
 
 		info, err := os.Stat(inputPath)
 		if err != nil {
@@ -70,26 +96,6 @@ var imageColorizeCmd = &cobra.Command{
 			if len(candidateImages) == 0 {
 				return fmt.Errorf("nenhuma imagem (PNG, JPG, WEBP) encontrada no diretório '%s'", inputPath)
 			}
-		} else if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
-			isDocx = true
-			fmt.Printf("📄 Extraindo imagens do arquivo DOCX '%s'...\n", filepath.Base(inputPath))
-
-			// Pasta temporária para extração do DOCX
-			docxBase := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-			tempExtractDir := filepath.Join(os.TempDir(), "caramel_docx_"+docxBase)
-
-			res, err := docx.ExtractImages(inputPath, tempExtractDir)
-			if err != nil {
-				return fmt.Errorf("falha ao extrair imagens do .docx: %w", err)
-			}
-
-			if len(res.Images) == 0 {
-				return fmt.Errorf("nenhuma imagem encontrada no arquivo .docx '%s'", inputPath)
-			}
-
-			for _, img := range res.Images {
-				candidateImages = append(candidateImages, filepath.Join(tempExtractDir, img.OriginalName))
-			}
 		} else {
 			for _, arg := range args {
 				if isImageFile(arg) {
@@ -98,6 +104,9 @@ var imageColorizeCmd = &cobra.Command{
 			}
 			if len(candidateImages) == 0 && isImageFile(inputPath) {
 				candidateImages = []string{inputPath}
+			}
+			if len(candidateImages) == 0 {
+				return fmt.Errorf("o arquivo '%s' não é uma imagem válida (PNG, JPG, WEBP) ou documento .docx", inputPath)
 			}
 		}
 
@@ -108,7 +117,7 @@ var imageColorizeCmd = &cobra.Command{
 		var selectedImages []string
 		if allFlag {
 			selectedImages = candidateImages
-		} else if interactiveFlag || isDocx || len(candidateImages) > 1 {
+		} else if interactiveFlag || len(candidateImages) > 1 {
 			selected, err := ui.SelectImageFilesWithPreviewInteractive(candidateImages)
 			if err != nil {
 				return err
@@ -124,10 +133,6 @@ var imageColorizeCmd = &cobra.Command{
 
 		// Determina diretório final de saída para imagens coloridas
 		defaultOutputDir := filepath.Dir(inputPath)
-		if isDocx {
-			docxBase := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-			defaultOutputDir = filepath.Join(filepath.Dir(inputPath), docxBase+"_coloridas")
-		}
 
 		fmt.Printf("🎨 Processando %d imagem(ns) com o modelo '%s'...\n", len(selectedImages), imgModelName)
 
@@ -157,8 +162,9 @@ func isImageFile(path string) bool {
 }
 
 func init() {
-	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou <docx>_coloridas)")
+	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou pasta do docx)")
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração")
+	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Colora todas as imagens encontradas sem abrir formulário de seleção")

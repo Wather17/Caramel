@@ -83,6 +83,45 @@ O Caramel irá:
 			},
 		},
 		{
+			Name:     "caramel colorize",
+			Short:    "Colora ilustrações/fotos ou processa e reconstrói documentos .docx com IA",
+			Category: CategoryDocx,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize este comando para colorir imagens individuais (PNG, JPG, WEBP), pastas de ilustrações
+ou processar documentos .docx diretamente com a IA do OpenRouter.
+
+Ao receber um arquivo .docx:
+ 1. Executa o pipeline automatizado de extração, coloração e redimensionamento;
+ 2. Reconstrói um novo arquivo Word colorido ('<nome> colorida.docx');
+ 3. Suporta a flag -i para seleção interativa com preview ANSI no terminal.`,
+			Syntax: "caramel colorize <imagem | pasta | arquivo.docx> [flags]",
+			Keywords: []string{
+				"colorize", "color", "colorir", "ia", "openrouter", "docx", "imagem", "png", "jpg", "foto", "desenho",
+			},
+			Flags: []FlagDoc{
+				{Flag: "-i, --interactive", Description: "Habilita seleção interativa com preview ANSI TrueColor no terminal."},
+				{Flag: "-a, --all", Description: "Colora todas as imagens encontradas sem abrir formulário de seleção."},
+				{Flag: "-s, --min-size", Description: "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0')."},
+				{Flag: "-m, --model", Description: "Modelo de IA multimodal do OpenRouter (padrão: google/gemini-2.5-flash-image)."},
+				{Flag: "-o, --output", Description: "Diretório de destino para salvar imagens/documento coloridos."},
+				{Flag: "-v, --verbose", Description: "Exibe detalhes de depuração e resposta da API."},
+			},
+			Examples: []ExampleDoc{
+				{
+					Description: "Colorir uma ilustração isolada:",
+					Command:     "caramel colorize desenho.png",
+				},
+				{
+					Description: "Processar e reconstruir uma prova .docx com imagens coloridas:",
+					Command:     "caramel colorize avaliacao.docx",
+				},
+				{
+					Description: "Colorir imagens de um .docx com seleção interativa no terminal:",
+					Command:     "caramel colorize atividade.docx -i",
+				},
+			},
+		},
+		{
 			Name:     "caramel process",
 			Short:    "Pipeline completo: extrai, colore imagens em P&B com IA e gera novo DOCX colorida",
 			Category: CategoryDocx,

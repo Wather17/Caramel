@@ -115,6 +115,8 @@ caramel docx extract <caminho-do-arquivo.docx> [flags]
 
 Colora ilustrações em preto e branco (PNG, JPEG, WEBP) usando a IA multimodal do OpenRouter. Suporta imagens individuais, pastas inteiras e **arquivos `.docx`**, apresentando uma galeria com preview ANSI em tempo real no terminal para seleção interativa.
 
+Quando executado sobre um arquivo `.docx`, executa o pipeline unificado: extrai, colore via IA, redimensiona para preservar proporções e reconstrói o arquivo `<nome> colorida.docx` além de salvar as imagens coloridas.
+
 ### Sintaxe
 ```bash
 caramel colorize <imagem | pasta | arquivo.docx> [flags]
@@ -128,7 +130,9 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
 | `--interactive` | `-i` | bool | `false` | Habilita seleção interativa com miniaturas ANSI no terminal. |
-| `--output` | `-o` | string | Pasta original ou `<docx>_coloridas` | Diretório onde as imagens coloridas serão salvas. |
+| `--all` | `-a` | bool | `false` | Colora todas as imagens sem abrir formulário de seleção. |
+| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
+| `--output` | `-o` | string | Pasta original ou pasta de imagens do docx | Diretório onde os arquivos/imagens serão salvos. |
 | `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
 
@@ -138,8 +142,11 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 # Colora uma única imagem diretamente
 caramel colorize desenho.png
 
-# Seleção interativa de imagens contidas em um arquivo .docx
+# Processa e reconstrói o arquivo .docx com imagens coloridas
 caramel colorize atividade.docx
+
+# Seleção interativa com preview ANSI das imagens contidas no .docx
+caramel colorize atividade.docx -i
 
 # Seleção interativa de todas as imagens em uma pasta
 caramel colorize ./imagens_pedagogicas/
