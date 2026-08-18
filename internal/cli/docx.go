@@ -214,7 +214,7 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
-	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)")
+	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
 	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")

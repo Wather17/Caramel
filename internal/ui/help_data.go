@@ -145,7 +145,7 @@ Ao receber um arquivo .docx:
 				{Flag: "-i, --interactive", Description: "Habilita seleção interativa com preview ANSI TrueColor no terminal."},
 				{Flag: "-a, --all", Description: "Colora todas as imagens encontradas sem abrir formulário de seleção."},
 				{Flag: "-s, --min-size", Description: "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0')."},
-				{Flag: "-m, --model", Description: "Modelo de IA multimodal do OpenRouter (padrão: google/gemini-2.5-flash-image)."},
+				{Flag: "-m, --model", Description: "Modelo de IA multimodal do OpenRouter (padrão: google/gemini-3.1-flash-image-preview)."},
 				{Flag: "-o, --output", Description: "Diretório de destino para salvar imagens/documento coloridos."},
 				{Flag: "-v, --verbose", Description: "Exibe detalhes de depuração e resposta da API."},
 			},
@@ -184,7 +184,7 @@ O Caramel irá:
 			Flags: []FlagDoc{
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo com checkboxes para você escolher visualmente quais imagens deseja colorir."},
 				{Flag: "-s, --min-size", Description: "Tamanho mínimo das imagens a serem processadas (ex: '20KB', '50KB'). Ignora logos/brasões."},
-				{Flag: "-m, --model", Description: "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-2.5-flash-image)."},
+				{Flag: "-m, --model", Description: "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)."},
 				{Flag: "-o, --output", Description: "Diretório personalizado onde as imagens intermediárias serão salvas."},
 				{Flag: "-v, --verbose", Description: "Exibe detalhes técnicos de execução e depuração no terminal."},
 			},
