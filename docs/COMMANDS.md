@@ -11,8 +11,9 @@ Este documento contém a referência completa de todos os comandos e subcomandos
 - [`caramel process`](#3-caramel-process) - **[Pipeline Automatizado]** Extrai, colore e reconstrói o `.docx` de uma só vez (com redimensionamento exato de imagens).
 - [`caramel docx extract`](#4-caramel-docx-extract) - Inspeciona, extrai e colore imagens de arquivos `.docx`.
 - [`caramel image colorize`](#5-caramel-image-colorize) - Colora ilustrações em preto e branco via IA.
-- [`caramel routine process`](#6-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
-- [`caramel install`](#7-caramel-install) - Instala o Caramel CLI globalmente no sistema.
+- [`caramel image generate`](#6-caramel-image-generate-harness-em-lote) - **[Harness em Lote]** Gera ilustrações e coleções de objetos pedagógicos com concorrência adaptativa.
+- [`caramel routine process`](#7-caramel-routine-process) - Processa rotinas semanais e compila relatório de Campos de Experiência da BNCC.
+- [`caramel install`](#8-caramel-install) - Instala o Caramel CLI globalmente no sistema.
 
 ---
 
@@ -154,7 +155,50 @@ caramel colorize ./imagens_pedagogicas/
 
 ---
 
-## 6. `caramel routine process`
+## 6. `caramel image generate` (Harness em Lote)
+
+Gera coleções visuais de ilustrações e objetos pedagógicos a partir de listas de palavras ou temas.
+A IA sintetiza e padroniza os prompts visuais e um motor com concorrência adaptativa gera as imagens em alta velocidade sem bloqueios de rate limit.
+
+### Sintaxe
+```bash
+caramel generate <itens | flags>
+caramel image generate [flags]
+```
+
+### Aliases (Atalhos)
+`caramel generate`, `caramel gen`, `caramel img gen`
+
+### Flags Disponíveis
+
+| Flag | Atalho | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `--items` | `-i` | string | `""` | Lista de palavras ou termos separados por vírgula. |
+| `--file` | `-f` | string | `""` | Caminho para arquivo de texto contendo itens linha por linha. |
+| `--theme` | `-t` | string | `""` | Tema para a IA escolher os itens automaticamente (ex: "animais da fazenda"). |
+| `--count` | `-n` | int | `10` | Quantidade de itens a gerar quando utilizado com `--theme`. |
+| `--style` | `-s` | string | `clipart` | Estilo: `clipart`, `vector`, `3d-cute`, `coloring`, `realistic`. |
+| `--2up` | | bool | `false` | Compila automaticamente todas as imagens geradas em um PDF 2-up A4. |
+| `--preview` | | bool | `true` | Exibe miniaturas ANSI TrueColor no terminal durante a geração. |
+| `--output` | `-o` | string | `./imagens_<tema>` | Diretório onde as imagens serão salvas. |
+| `--workers`| `-w` | int | `0` (adaptativo) | Quantidade de workers concorrentes manuais. |
+
+### Exemplos Práticos
+
+```bash
+# Gerar ilustrações a partir de uma lista
+caramel generate --items "maçã, banana, melancia, uva" -s clipart
+
+# Gerar 10 animais de um tema e compilar diretamente em PDF 2-up para impressão
+caramel generate --theme "animais da savana" -n 10 -s 3d-cute --2up
+
+# Gerar desenhos para colorir a partir de um arquivo de texto
+caramel generate -f ./frutas.txt -s coloring
+```
+
+---
+
+## 7. `caramel routine process`
 
 Lê rotinas pedagógicas semanais em formato `.docx`, extrai todo o texto localmente de forma otimizada, envia para a IA classificar as experiências baseadas na BNCC e reconstrói o relatório final no padrão de tabela Arial em orientação Paisagem.
 
@@ -183,7 +227,7 @@ caramel routine process ./abril/
 
 ---
 
-## 7. `caramel install`
+## 8. `caramel install`
 
 Copia o binário do Caramel em execução para um diretório local do usuário e adiciona esse diretório ao PATH do sistema operacional de forma totalmente automatizada.
 

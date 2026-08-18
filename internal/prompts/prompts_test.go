@@ -17,13 +17,14 @@ func TestGetColorizationPrompt(t *testing.T) {
 	}
 }
 
-func TestGetRoutinePrompt(t *testing.T) {
-	prompt := prompts.GetRoutinePrompt()
+func TestGetPromptSynthesizerPrompt(t *testing.T) {
+	prompt := prompts.GetPromptSynthesizerPrompt("3d-cute")
 	if prompt == "" {
-		t.Error("Esperado prompt de rotinas não vazio")
+		t.Error("Esperado prompt sintetizador não vazio")
 	}
-	if !strings.Contains(prompt, "pedagogical") && !strings.Contains(prompt, "BNCC") {
-		t.Errorf("Prompt de rotinas não contém as palavras-chave esperadas: %s", prompt)
+	if !strings.Contains(prompt, "3d-cute") {
+		t.Errorf("Esperado estilo '3d-cute' injetado no prompt, obtido: %s", prompt)
 	}
 }
+
 
