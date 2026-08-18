@@ -83,6 +83,43 @@ O Caramel irá:
 			},
 		},
 		{
+			Name:     "caramel cards",
+			Short:    "Gera layout HTML A4 de fichas pedagógicas/flashcards pronto para impressão e corte",
+			Category: CategoryDocx,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize este comando para diagramar coleções de imagens (PNG, JPG, WEBP) em folhas A4
+com proporção 1:1, legendas com o nome do objeto centralizado embaixo e linhas tracejadas de tesoura ✂️.
+
+O Caramel irá:
+ 1. Ler todas as imagens de uma pasta e extrair os nomes higienizados;
+ 2. Distribuir os cartões em grade proporcional (ex: 2x3 = 6 fichas por folha A4);
+ 3. Gerar um arquivo HTML independente com Tailwind CSS embutido;
+ 4. Permitir impressão direta (Ctrl+P) ou salvamento em PDF em qualquer navegador.`,
+			Syntax: "caramel cards <pasta_ou_imagem> [flags]",
+			Keywords: []string{
+				"cards", "flashcards", "fichas", "impressao", "a4", "recorte", "tesoura", "alfabetizacao", "vocabulario", "jogo da memoria",
+			},
+			Flags: []FlagDoc{
+				{Flag: "-c, --cols", Description: "Número de colunas por folha A4 (padrão: 2)."},
+				{Flag: "-r, --rows", Description: "Número de linhas por folha A4 (padrão: 3)."},
+				{Flag: "-t, --title", Description: "Título exibido no topo de cada folha."},
+				{Flag: "-l, --cut-lines", Description: "Exibe linhas tracejadas para corte de tesoura (padrão: true)."},
+				{Flag: "-u, --uppercase", Description: "Exibe o nome das fichas em caixa alta para alfabetização (padrão: true)."},
+				{Flag: "-o, --output", Description: "Caminho do arquivo HTML de saída."},
+				{Flag: "-e, --embed", Description: "Embute as imagens em Base64 (arquivo 100% autossuficiente)."},
+			},
+			Examples: []ExampleDoc{
+				{
+					Description: "Gerar fichas A4 de uma pasta de imagens:",
+					Command:     "caramel cards ./minhas_figuras/",
+				},
+				{
+					Description: "Gerar grade 3x3 (9 cartões por folha) com título customizado:",
+					Command:     "caramel cards ./animais/ -c 3 -r 3 -t \"Animais da Savana\"",
+				},
+			},
+		},
+		{
 			Name:     "caramel generate",
 			Short:    "Gera ilustrações e coleções de objetos pedagógicos em lote com IA",
 			Category: CategoryDocx,

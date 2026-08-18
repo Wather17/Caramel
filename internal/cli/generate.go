@@ -9,6 +9,7 @@ import (
 
 	"caramel/internal/config"
 	"caramel/internal/tools/ai"
+	"caramel/internal/tools/cards"
 	"caramel/internal/tools/pdf"
 	"caramel/internal/ui"
 
@@ -25,6 +26,7 @@ var (
 	genOutputDir   string
 	genWorkers     int
 	genPreview     bool
+	genCards       bool
 	gen2UpPDF      bool
 	genVerbose     bool
 	genModelName   string
@@ -198,7 +200,36 @@ A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com conco
 		}
 		fmt.Printf(" └─ Diretório: %s\n", targetDir)
 
-		// Estágio 3 Opcional: Montagem em PDF 2-up
+		// Estágio 3: Geração automática de Fichas Pedagógicas A4 (HTML/Tailwind)
+		if genCards && len(results) > 0 {
+			var cardItems []cards.CardItem
+			for _, res := range results {
+				if res.Status == "done" && res.ImagePath != "" {
+					cardItems = append(cardItems, cards.CardItem{
+						Name:      res.Name,
+						ImagePath: res.ImagePath,
+					})
+				}
+			}
+
+			if len(cardItems) > 0 {
+				htmlOutPath := filepath.Join(targetDir, "fichas_a4.html")
+				title := "Coleção Pedagógica"
+				if genTheme != "" {
+					title = strings.Title(genTheme)
+				}
+				cardOpts := cards.DefaultOptions()
+				cardOpts.Title = title
+
+				if err := cards.GenerateCardsHTML(cardItems, htmlOutPath, cardOpts); err != nil {
+					fmt.Printf("⚠️ Aviso: Falha ao gerar fichas A4: %v\n", err)
+				} else {
+					fmt.Printf("🖨️ Layout de Fichas A4 gerado para impressão:\n   👉 %s\n", htmlOutPath)
+				}
+			}
+		}
+
+		// Estágio 4 Opcional: Montagem em PDF 2-up
 		if gen2UpPDF && len(successfulPaths) > 0 {
 			pdf.SortNatural(successfulPaths)
 			pdfOutPath := filepath.Join(targetDir, "atividades_2up.pdf")
@@ -237,6 +268,7 @@ func init() {
 	imageGenerateCmd.Flags().StringVarP(&genOutputDir, "output", "o", "", "Diretório onde as imagens geradas serão salvas")
 	imageGenerateCmd.Flags().IntVarP(&genWorkers, "workers", "w", 0, "Número de workers simultâneos (padrão: 0 para adaptativo)")
 	imageGenerateCmd.Flags().BoolVar(&genPreview, "preview", true, "Renderiza miniaturas ANSI TrueColor no terminal conforme cada imagem é gerada")
+	imageGenerateCmd.Flags().BoolVar(&genCards, "cards", true, "Gera layout HTML A4 de fichas com legendas pronto para impressão")
 	imageGenerateCmd.Flags().BoolVar(&gen2UpPDF, "2up", false, "Compila automaticamente todas as imagens geradas em um PDF 2-up A4")
 	imageGenerateCmd.Flags().BoolVarP(&genVerbose, "verbose", "v", false, "Exibe logs detalhados de depuração da API")
 	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens")
