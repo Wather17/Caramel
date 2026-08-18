@@ -75,18 +75,18 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--interactive` | `-i` | bool | `false` | Exibe galeria de previews ANSI no terminal para selecionar quais imagens substituir no novo `.docx`. |
 | `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
-| `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde os arquivos gerados serão salvos. |
-| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
-| `--verbose`| `-v` | bool | `false` | Exibe o log raw de depuração da API. |
+| `--interactive` | `-i` | bool | `false` | Habilita modo interativo com preview ANSI TrueColor no terminal. |
+| `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório de destino do novo `.docx` e das imagens. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
 
-### Exemplo Prático
+### Exemplos Prático
 ```bash
-# Fluxo 100% automatizado (colora tudo > 20KB e reconstrói o .docx)
+# Processa de forma totalmente automatizada
 caramel process atividade.docx
 
-# Modo interativo com preview no terminal antes de gerar "atividade colorida.docx"
+# Modo interativo selecionando imagens individualmente com preview ANSI
 caramel process atividade.docx -i
 ```
 
@@ -98,17 +98,21 @@ Extrai todas as imagens de um arquivo `.docx`. Opcionalmente, ativa a IA (`--col
 
 ### Sintaxe
 ```bash
-caramel docx extract <caminho-do-arquivo.docx> [flags]
+caramel docx extract <arquivo.docx> [flags]
 ```
+
+### Aliases (Atalhos)
+`caramel extract <arquivo.docx>`
 
 ### Flags Disponíveis
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para extrair a imagem (ex: `20KB`, `50KB`, `0` para todas). |
-| `--output` | `-o` | string | Dinâmico (`imagens <nome>`) | Diretório onde as imagens extraídas serão salvas. |
-| `--list` | `-l` | bool | `false` | Apenas lista as imagens contidas no arquivo sem extraí-las. |
+| `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório onde as imagens serão salvas. |
+| `--list` | `-l` | bool | `false` | Apenas lista as imagens no terminal sem salvar. |
+| `--interactive` | `-i` | bool | `false` | Abre formulário interativo de seleção de imagens. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 
 ---
 
