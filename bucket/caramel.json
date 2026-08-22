@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/Wather17/Caramel/releases/download/v0.9.3/caramel-windows-amd64.exe",
-      "hash": "9e60057da7207236bd7f2c9266d5ab6d5d9ae6da0edf2b5761b19925aa7bdf03"
+      "hash": "42b23b232a8bd4236bbabc943d4d550f17ce166b3372f172250c29819b9e01eb"
     }
   },
   "bin": [
