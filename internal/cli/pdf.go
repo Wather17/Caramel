@@ -35,7 +35,21 @@ var pdf2UpCmd = &cobra.Command{
 	Aliases: []string{"print", "layout"},
 	Short:   "Gera um PDF A4 Paisagem com 2 atividades lado a lado na mesma folha (economiza papel)",
 	Long: `Lê uma imagem isolada ou uma pasta de imagens (PNG, JPG, WEBP) e monta um PDF em orientação Paisagem 
-com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de corte central orientativa.`,
+com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de corte central orientativa.
+
+📚 QUANDO USAR:
+Use para preparar avaliações, atividades ou apostilas em formato 2 por folha, imprimindo duas
+atividades lado a lado em uma única folha A4 — economiza papel e tinta. Imagens horizontais
+(landscape) são rotacionadas automaticamente para aproveitar a área útil, e imagens pesadas do
+Figma são comprimidas em memória para gerar PDFs leves (~500KB).`,
+	Example: `# Gerar PDF 2-up de uma pasta de atividades exportadas do Figma
+caramel 2up ./atividades_figma
+
+# Gerar 2-up de uma prova única, duplicando-a no segundo slot
+caramel 2up prova_historia.png
+
+# Forçar preenchimento total do slot (cover) sem margem em branco
+caramel 2up ./fichas_estudo -f cover`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputArg := args[0]

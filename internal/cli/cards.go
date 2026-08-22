@@ -39,7 +39,22 @@ var cardsCmd = &cobra.Command{
 	Short:   "Gera fichas pedagógicas A4 em PDF (padrão) ou HTML, prontas para impressão",
 	Long: `Lê imagens de uma pasta (ou imagem avulsa), extrai os nomes e gera um arquivo PDF A4
 diagramado em grade com proporção 1:1, legenda do objeto abaixo da imagem (caixa alta por padrão).
-Use --html para gerar o layout HTML/Tailwind (abrível no navegador para edição).`,
+Use --html para gerar o layout HTML/Tailwind (abrível no navegador para edição).
+
+📚 QUANDO USAR:
+Use para diagramar coleções de imagens (PNG, JPG, WEBP) em folhas A4 com a legenda do objeto
+centralizada abaixo da imagem — ideal para alfabetização, vocabulário, jogos de memória e
+flashcards. O PDF é gerado pronto para impressão direta, sem precisar de navegador.
+Combine com 'caramel generate' (que salva imagens com nomes limpos, ex: '01_maçã.png') para
+fichas com legendas corretas automaticamente.`,
+	Example: `# Gerar fichas A4 em PDF de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
+caramel cards ./imagens_frutas/
+
+# Gerar grade 3x3 (9 fichas por folha) com título
+caramel cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
+
+# Gerar o layout HTML para editar no navegador antes de imprimir
+caramel cards ./imagens_frutas/ --html`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputArg := args[0]

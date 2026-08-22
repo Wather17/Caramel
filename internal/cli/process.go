@@ -205,12 +205,27 @@ var processCmd = &cobra.Command{
 	Aliases: []string{"pipeline", "run"},
 	Short:   "Pipeline automatizado: extrai, colore e reconstrói o arquivo .docx com IA",
 	Long: `Executa o fluxo completo e automatizado para arquivos .docx:
-1. Inspeciona e extrai todas as imagens do documento .docx (ignorando brasões/logos pequenos por padrão)
-2. Processa e colore cada imagem utilizando IA multimodal (OpenRouter)
-3. Ajusta a proporção das imagens para o tamanho original
-4. Reconstrói um novo arquivo .docx (ex: '<nome> colorida.docx') com as novas imagens substituídas no mesmo layout.
+1. Inspeciona e extrai todas as imagens do documento .docx;
+2. Tria cada imagem com a triagem de economia (análise local de saturação + LLM de baixo custo):
+   brasões, logos, imagens já coloridas, textos, tabelas e jogos são pulados automaticamente;
+3. Colore cada ilustração aprovada utilizando IA multimodal (OpenRouter);
+4. Ajusta a proporção das imagens para o tamanho original;
+5. Reconstrói um novo arquivo .docx (ex: '<nome> colorida.docx') com as novas imagens.
 
-Use a flag '-i' ou '--interactive' para visualizar as miniaturas ANSI das imagens do .docx no terminal e escolher quais deseja colorir.`,
+📚 QUANDO USAR:
+Use para transformar avaliações, apostilas ou atividades em preto e branco (P&B) em documentos
+totalmente coloridos e atrativos para os alunos. A triagem de economia evita gastos desnecessários
+de API — apenas ilustrações P&B reais são enviadas para a coloração.
+Use a flag '-i'/'--interactive' para visualizar as miniaturas ANSI das imagens do .docx e escolher
+quais deseja colorir. Use '--no-triage' para colorir tudo diretamente.`,
+	Example: `# Processar um arquivo .docx de forma 100% automatizada
+caramel process avaliacao_historia.docx
+
+# Escolher interativamente quais imagens colorir antes de recriar o arquivo
+caramel process apostila_ciencias.docx -i
+
+# Processar ignorando apenas imagens menores que 50KB
+caramel process livro_exercicios.docx -s 50KB`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RunProcessDocx(ProcessDocxOptions{

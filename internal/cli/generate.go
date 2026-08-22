@@ -55,7 +55,24 @@ var imageGenerateCmd = &cobra.Command{
 	Short:   "Gera ilustrações e objetos pedagógicos em lote com prompts sintetizados por IA",
 	Long: `Harness de geração em lote de imagens pedagógicas.
 Permite informar uma lista de palavras (ex: frutas, legumes, animais, ações), um arquivo de texto ou um tema descritivo.
-A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com concorrência adaptativa gera as imagens rapidamente.`,
+A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com concorrência adaptativa gera as imagens rapidamente.
+
+📚 QUANDO USAR:
+Use para criar coleções visuais inteiras (5, 10, 30+ itens) com fundo branco e estilo unificado
+(clipart, vector, 3d-cute, coloring ou realistic) para fichas, jogos de memória e atividades.
+As imagens são geradas em formato 1:1 por padrão — use --aspect para outras proporções
+(ex: 16:9 para slides). Compile tudo em um PDF 2-up com --2up, ou diagrame fichas A4 com 'caramel cards'.`,
+	Example: `# Gerar imagens de frutas tropicais em estilo 3D fofo
+caramel generate --items "abacaxi, manga, maracujá, caju" -s 3d-cute
+
+# Gerar 10 animais da fazenda e compilar em PDF 2-up
+caramel generate --theme "animais da fazenda" -n 10 --2up
+
+# Gerar desenhos para colorir a partir de um arquivo de texto
+caramel generate -f ./itens.txt -s coloring
+
+# Gerar imagens em formato widescreen 16:9 (slides/apresentações)
+caramel generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var rawItems []string
 

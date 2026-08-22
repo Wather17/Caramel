@@ -39,8 +39,24 @@ var imageColorizeCmd = &cobra.Command{
 Aceita arquivos de imagem individuais (PNG, JPG, WEBP), pastas inteiras ou arquivos .docx.
 
 Ao receber um arquivo .docx:
-- Executa o pipeline automatizado: extrai as imagens, colore via IA, ajusta proporções e gera um novo arquivo .docx reconstruído ('<nome> colorida.docx') além de salvar as imagens coloridas.
-- Suporta a flag '-i' / '--interactive' para seleção interativa com preview ANSI no terminal.`,
+- Executa o pipeline automatizado: extrai as imagens, colore via IA, ajusta proporções e gera um novo arquivo .docx reconstruído ('<nome> colorida.docx') além de salvar as imagens coloridas;
+- Suporta a flag '-i'/'--interactive' para seleção interativa com preview ANSI no terminal.
+
+📚 QUANDO USAR:
+Use para colorir ilustrações, fotos ou materiais P&B para tornar as atividades mais atrativas.
+Antes de colorir, uma triagem de economia analisa cada imagem em duas camadas: análise local
+de saturação (custo zero) e um modelo de visão de baixo custo (Qwen 3.7 Flash). Imagens já
+coloridas, textos, tabelas, caça-palavras e atividades de 'colorir' são puladas automaticamente —
+mas fichas de exercício com ilustrações coloríveis ao redor são aprovadas.
+Use '--no-triage' para desativar a triagem.`,
+	Example: `# Colorir uma ilustração isolada
+caramel colorize desenho.png
+
+# Processar e reconstruir uma prova .docx com imagens coloridas
+caramel colorize avaliacao.docx
+
+# Colorir imagens de um .docx com seleção interativa no terminal
+caramel colorize atividade.docx -i`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputPath := args[0]

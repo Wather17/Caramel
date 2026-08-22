@@ -41,15 +41,15 @@ var (
 			MarginBottom(1)
 )
 
-// RenderStyledHelp customiza a saída de ajuda de um comando Cobra utilizando Lipgloss
+// RenderStyledHelp customiza a saída de ajuda de um comando Cobra utilizando Lipgloss.
+// Todo o conteúdo (descrição, contexto pedagógico no Long, sintaxe, exemplos e flags)
+// vem diretamente do próprio comando Cobra — sem listas manuais.
 func RenderStyledHelp(cmd *cobra.Command) string {
 	var sb strings.Builder
 
-	// 🍬 Cabeçalho Principal
 	sb.WriteString(HelpHeaderStyle.Render("🍬 Caramel CLI — " + cmd.Name()))
 	sb.WriteString("\n")
 
-	// Descrição Longa ou Curta
 	desc := cmd.Long
 	if desc == "" {
 		desc = cmd.Short
@@ -59,18 +59,6 @@ func RenderStyledHelp(cmd *cobra.Command) string {
 		sb.WriteString("\n\n")
 	}
 
-	// 💡 Busca na central de documentação se houver dados didáticos para este comando
-	doc := findDocForCommand(cmd.CommandPath())
-	if doc != nil && doc.PedagogicalContext != "" {
-		boxContent := fmt.Sprintf("%s\n\n%s",
-			HelpSectionTitleStyle.Render("📚 DICA PEDAGÓGICA & USO"),
-			doc.PedagogicalContext,
-		)
-		sb.WriteString(HelpBoxStyle.Render(boxContent))
-		sb.WriteString("\n\n")
-	}
-
-	// 🚀 Sintaxe de Uso
 	if cmd.Runnable() {
 		sb.WriteString(HelpSectionTitleStyle.Render("🚀 SINTAXE DE USO:"))
 		sb.WriteString("\n  ")
@@ -78,7 +66,6 @@ func RenderStyledHelp(cmd *cobra.Command) string {
 		sb.WriteString("\n\n")
 	}
 
-	// 📋 Subcomandos Disponíveis (se houver)
 	if cmd.HasAvailableSubCommands() {
 		sb.WriteString(HelpSectionTitleStyle.Render("📂 SUBCOMANDOS DISPONÍVEIS:"))
 		sb.WriteString("\n")
@@ -93,23 +80,13 @@ func RenderStyledHelp(cmd *cobra.Command) string {
 		sb.WriteString("\n")
 	}
 
-	// 💡 Exemplos Práticos
-	if doc != nil && len(doc.Examples) > 0 {
+	if cmd.Example != "" {
 		sb.WriteString(HelpSectionTitleStyle.Render("💡 EXEMPLOS PRÁTICOS:"))
 		sb.WriteString("\n")
-		for _, ex := range doc.Examples {
-			sb.WriteString(fmt.Sprintf("  • %s\n", ex.Description))
-			sb.WriteString(fmt.Sprintf("    %s\n", HelpSyntaxStyle.Render(ex.Command)))
-		}
-		sb.WriteString("\n")
-	} else if cmd.Example != "" {
-		sb.WriteString(HelpSectionTitleStyle.Render("💡 EXEMPLOS PRÁTICOS:"))
-		sb.WriteString("\n  ")
 		sb.WriteString(cmd.Example)
 		sb.WriteString("\n\n")
 	}
 
-	// 🚩 Flags / Opções
 	if cmd.HasAvailableLocalFlags() {
 		sb.WriteString(HelpSectionTitleStyle.Render("🚩 OPÇÕES & FLAGS:"))
 		sb.WriteString("\n")
@@ -117,78 +94,33 @@ func RenderStyledHelp(cmd *cobra.Command) string {
 		sb.WriteString("\n")
 	}
 
-	// Dica do modo interativo
-	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide' ou 'caramel help -i' para abrir a central de ajuda interativa TUI."))
+	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide' para listar os comandos ou 'caramel guide <termo>' para buscar."))
 	sb.WriteString("\n")
 
 	return sb.String()
 }
 
-// findDocForCommand busca o CommandHelpDoc pelo caminho do comando ou pelo nome base
-func findDocForCommand(cmdPath string) *CommandHelpDoc {
-	docs := GetAllCommandDocs()
-	for _, d := range docs {
-		cleanDName := strings.TrimPrefix(d.Name, "caramel ")
-		cleanCmdPath := strings.TrimPrefix(cmdPath, "caramel ")
-		if d.Name == cmdPath || strings.HasSuffix(cleanCmdPath, cleanDName) || strings.HasSuffix(cleanDName, cleanCmdPath) {
-			return &d
-		}
-	}
-	return nil
-}
-
-// SearchCommandDocs realiza uma busca inteligente nos documentos de ajuda por palavra-chave ou termo
+// SearchCommandDocs realiza uma busca em texto livre (full-text) nos documentos ao vivo:
+// nome, resumo, contexto pedagógico (Long), sintaxe, aliases, flags e exemplos
 func SearchCommandDocs(query string) []CommandHelpDoc {
 	cleanQuery := strings.ToLower(strings.TrimSpace(query))
 	if cleanQuery == "" {
-		return GetAllCommandDocs()
+		return nil
 	}
 
 	var results []CommandHelpDoc
 	for _, doc := range GetAllCommandDocs() {
-		matched := false
+		haystack := strings.ToLower(doc.Name + " " + doc.Short + " " + doc.PedagogicalContext +
+			" " + doc.Syntax + " " + doc.Aliases)
 
-		// 1. Verifica no nome ou resumo
-		if strings.Contains(strings.ToLower(doc.Name), cleanQuery) || strings.Contains(strings.ToLower(doc.Short), cleanQuery) {
-			matched = true
+		for _, f := range doc.Flags {
+			haystack += " " + f.Flag + " " + f.Description
+		}
+		for _, ex := range doc.Examples {
+			haystack += " " + ex.Description + " " + ex.Command
 		}
 
-		// 2. Verifica no contexto pedagógico
-		if !matched && strings.Contains(strings.ToLower(doc.PedagogicalContext), cleanQuery) {
-			matched = true
-		}
-
-		// 3. Verifica em keywords
-		if !matched {
-			for _, kw := range doc.Keywords {
-				if strings.Contains(strings.ToLower(kw), cleanQuery) {
-					matched = true
-					break
-				}
-			}
-		}
-
-		// 4. Verifica nas flags (nome e descrição)
-		if !matched {
-			for _, f := range doc.Flags {
-				if strings.Contains(strings.ToLower(f.Flag), cleanQuery) || strings.Contains(strings.ToLower(f.Description), cleanQuery) {
-					matched = true
-					break
-				}
-			}
-		}
-
-		// 5. Verifica em exemplos
-		if !matched {
-			for _, ex := range doc.Examples {
-				if strings.Contains(strings.ToLower(ex.Description), cleanQuery) || strings.Contains(strings.ToLower(ex.Command), cleanQuery) {
-					matched = true
-					break
-				}
-			}
-		}
-
-		if matched {
+		if strings.Contains(haystack, cleanQuery) {
 			results = append(results, doc)
 		}
 	}
@@ -207,7 +139,7 @@ func RenderSearchHelp(query string) string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(ColorWarning).Render(
 			fmt.Sprintf("Nenhum comando ou caso de uso encontrado para o termo '%s'.\n", query),
 		))
-		sb.WriteString(HintStyle.Render("\n💡 DICA: Digite 'caramel guide' para abrir o menu interativo com todas as opções."))
+		sb.WriteString(HintStyle.Render("\n💡 DICA: Digite 'caramel guide' para listar todos os comandos."))
 		sb.WriteString("\n")
 		return sb.String()
 	}
@@ -235,7 +167,60 @@ func RenderSearchHelp(query string) string {
 		sb.WriteString("\n\n")
 	}
 
-	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide' para navegar no menu TUI completo."))
+	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide <termo>' para refinar a busca, ou 'caramel <comando> --help' para detalhes."))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+// RenderGuideOverview exibe a lista completa de comandos agrupados por categoria,
+// derivada ao vivo da árvore Cobra — o guia é focado em busca e navegação simples.
+func RenderGuideOverview() string {
+	var sb strings.Builder
+
+	sb.WriteString(HelpHeaderStyle.Render("🍬 Guia Didático — Caramel CLI"))
+	sb.WriteString("\n")
+	sb.WriteString("Lista de todos os comandos disponíveis, agrupados por categoria.\n")
+	sb.WriteString(HintStyle.Render("💡 DICA: Use 'caramel guide <termo>' para buscar (ex: 'caramel guide caça-palavras')."))
+	sb.WriteString("\n\n")
+
+	categories := []struct {
+		label string
+		docs  []CommandHelpDoc
+	}{
+		{string(CategoryMedia), nil},
+		{string(CategoryConfig), nil},
+		{string(CategorySystem), nil},
+	}
+
+	for _, doc := range GetAllCommandDocs() {
+		for i := range categories {
+			if categories[i].label == string(doc.Category) {
+				categories[i].docs = append(categories[i].docs, doc)
+			}
+		}
+	}
+
+	for _, cat := range categories {
+		if len(cat.docs) == 0 {
+			continue
+		}
+		sb.WriteString(HelpSectionTitleStyle.Render(cat.label))
+		sb.WriteString("\n")
+		for _, doc := range cat.docs {
+			line := fmt.Sprintf("  %s %s\n",
+				HelpCommandNameStyle.Render(fmt.Sprintf("%-24s", doc.Name)),
+				doc.Short,
+			)
+			if doc.Aliases != "" {
+				line += fmt.Sprintf("     └─ aliases: %s\n", doc.Aliases)
+			}
+			sb.WriteString(line)
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(HintStyle.Render("💡 DICA: 'caramel <comando> --help' mostra detalhes completos de qualquer comando."))
 	sb.WriteString("\n")
 
 	return sb.String()
