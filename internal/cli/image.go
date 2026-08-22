@@ -18,6 +18,8 @@ var (
 	imgOutputDir    string
 	imgModelName    string
 	imgMinSize      string
+	imgTriageModel  string
+	imgNoTriage     bool
 	verboseFlag     bool
 	interactiveFlag bool
 	allFlag         bool
@@ -62,6 +64,8 @@ Ao receber um arquivo .docx:
 				MinSize:     effectiveMinSize,
 				Interactive: isInteractive,
 				Verbose:     verboseFlag,
+				TriageModel: imgTriageModel,
+				NoTriage:    imgNoTriage,
 			})
 		}
 
@@ -143,9 +147,21 @@ Ao receber um arquivo .docx:
 			}
 
 			fmt.Printf("  [%d/%d] Colorindo '%s'...\n", i+1, len(selectedImages), filepath.Base(imgPath))
-			res, err := ai.ColorizeSingleImage(imgPath, targetDir, cfg.OpenRouterAPIKey, imgModelName, verboseFlag)
+			res, err := ai.ColorizeSingleImage(imgPath, ai.ColorizeOptions{
+				OutputDir:     targetDir,
+				APIKey:        cfg.OpenRouterAPIKey,
+				Model:         imgModelName,
+				TriageModel:   imgTriageModel,
+				DisableTriage: imgNoTriage,
+				Verbose:       verboseFlag,
+			})
 			if err != nil {
 				fmt.Printf("❌ Falha ao colorir '%s': %v\n", filepath.Base(imgPath), err)
+				continue
+			}
+
+			if res.Skipped {
+				fmt.Printf("  ⏭️  Pulada pela triagem: %s\n", res.SkipReason)
 				continue
 			}
 
@@ -168,6 +184,8 @@ func init() {
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Colora todas as imagens encontradas sem abrir formulário de seleção")
+	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
+	imageColorizeCmd.Flags().BoolVar(&imgNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens selecionadas diretamente")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
