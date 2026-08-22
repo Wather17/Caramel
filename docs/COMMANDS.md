@@ -202,6 +202,7 @@ caramel image generate [flags]
 | `--style` | `-s` | string | `clipart` | Estilo: `clipart`, `vector`, `3d-cute`, `coloring`, `realistic`. |
 | `--2up` | | bool | `false` | Compila automaticamente todas as imagens geradas em um PDF 2-up A4. |
 | `--preview` | | bool | `true` | Exibe miniaturas ANSI TrueColor no terminal durante a geração. |
+| `--aspect` | | string | `1:1` | Proporção das imagens geradas: `1:1`, `4:3`, `3:4`, `16:9`, `9:16`, `3:2`, `2:3`, `4:5`, `5:4`, `21:9` ou `auto`. |
 | `--output` | `-o` | string | `./imagens_<tema>` | Diretório onde as imagens serão salvas. |
 | `--workers`| `-w` | int | `0` (adaptativo) | Quantidade de workers concorrentes manuais. |
 
@@ -216,6 +217,9 @@ caramel generate --theme "animais da savana" -n 10 -s 3d-cute --2up
 
 # Gerar desenhos para colorir a partir de um arquivo de texto
 caramel generate -f ./frutas.txt -s coloring
+
+# Gerar imagens em formato widescreen 16:9 (slides/apresentações)
+caramel generate --items "sol, nuvem, arco-íris" --aspect 16:9
 ```
 
 ---

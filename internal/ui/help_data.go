@@ -144,6 +144,7 @@ O Caramel irá:
 				{Flag: "-s, --style", Description: "Estilo visual: clipart, vector, 3d-cute, coloring, realistic (padrão: clipart)."},
 				{Flag: "--2up", Description: "Compila automaticamente todas as imagens geradas em um PDF 2-up A4."},
 				{Flag: "--preview", Description: "Exibe preview ANSI no terminal durante a geração (padrão: true)."},
+				{Flag: "--aspect", Description: "Proporção das imagens: 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 4:5, 5:4, 21:9 ou auto (padrão: 1:1)."},
 				{Flag: "-o, --output", Description: "Diretório onde as imagens serão salvas."},
 				{Flag: "-w, --workers", Description: "Número de workers concorrentes (padrão: adaptativo)."},
 			},

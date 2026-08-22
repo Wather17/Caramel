@@ -37,6 +37,7 @@ type HarnessConfig struct {
 	MaxWorkers  int
 	TextModel   string
 	ImageModel  string
+	Aspect      string // Proporção das imagens geradas (ex: "1:1", "16:9"; vazio = 1:1)
 	Verbose     bool
 }
 
@@ -205,7 +206,7 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 				var genErr error
 
 				for attempt := 1; attempt <= maxRetries; attempt++ {
-					imgBytes, ext, genErr = client.GenerateImage(item.Prompt, cfg.ImageModel)
+					imgBytes, ext, genErr = client.GenerateImage(item.Prompt, cfg.ImageModel, cfg.Aspect)
 					if genErr == nil {
 						break
 					}
