@@ -40,7 +40,21 @@ var docxExtractCmd = &cobra.Command{
 	Long: `Inspeciona a estrutura interna do arquivo .docx fornecido e extrai todas as imagens 
 (diagramas, fotos, gráficos) encontradas na pasta 'word/media/' para um diretório especificado.
 Com a flag --colorize (-c), as imagens em preto e branco são coloridas automaticamente via IA (OpenRouter).
-Com a flag --interactive (-i), exibe um menu interativo para escolher quais imagens extrair/colorir.`,
+Com a flag --interactive (-i), exibe um menu interativo para escolher quais imagens extrair/colorir.
+
+📚 QUANDO USAR:
+Use quando precisar apenas extrair as figuras de um documento Word para reaproveitá-las em outro
+material (apresentações, provas ou atividades no Google Classroom). Use --list para inspecionar
+o conteúdo sem extrair nada para o disco. Ao colorir, a triagem de economia pula automaticamente
+imagens já coloridas, textos, tabelas e logos.`,
+	Example: `# Apenas listar as imagens contidas na prova de Geografia
+caramel docx extract prova_geografia.docx --list
+
+# Extrair todas as imagens para uma pasta específica
+caramel docx extract atividade.docx -o ./imagens_atividade
+
+# Extrair e colorir as figuras via IA
+caramel docx extract mapa_biologia.docx -c`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		docxPath := args[0]

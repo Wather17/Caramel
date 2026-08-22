@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "caramel/internal/cli" // registra a árvore de comandos real no guia
 	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -76,6 +77,13 @@ func TestSearchCommandDocs(t *testing.T) {
 			t.Errorf("Esperava encontrar 'caramel generate' na busca por 'custom-style'")
 		}
 	})
+
+	t.Run("Busca por contexto pedagógico", func(t *testing.T) {
+		results := ui.SearchCommandDocs("caça-palavras")
+		if len(results) == 0 {
+			t.Errorf("Esperava encontrar resultados para termo do contexto pedagógico 'caça-palavras'")
+		}
+	})
 }
 
 func TestRenderSearchHelp(t *testing.T) {
@@ -87,5 +95,22 @@ func TestRenderSearchHelp(t *testing.T) {
 	outEmpty := ui.RenderSearchHelp("termoinvalidoxyz123")
 	if !strings.Contains(outEmpty, "Nenhum comando ou caso de uso encontrado") {
 		t.Errorf("RenderSearchHelp para termo inexistente deveria indicar 'Nenhum comando encontrado'")
+	}
+}
+
+func TestRenderGuideOverview(t *testing.T) {
+	out := ui.RenderGuideOverview()
+
+	if !strings.Contains(out, "Guia Didático") {
+		t.Errorf("Overview deveria conter o cabeçalho 'Guia Didático'")
+	}
+	if !strings.Contains(out, "caramel cards") {
+		t.Errorf("Overview deveria listar 'caramel cards'")
+	}
+	if !strings.Contains(out, "caramel generate") {
+		t.Errorf("Overview deveria listar 'caramel generate'")
+	}
+	if !strings.Contains(out, "Configurações") {
+		t.Errorf("Overview deveria conter a categoria de Configurações")
 	}
 }

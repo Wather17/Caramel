@@ -17,7 +17,13 @@ var selfInstallCmd = &cobra.Command{
 	Aliases: []string{"self-install"},
 	Short:   "Instala o Caramel CLI globalmente no sistema",
 	Long: `Copia o binário do Caramel em execução para um diretório local do usuário
-e adiciona esse diretório ao PATH do sistema operacional (automaticamente no Windows e orientações no Linux).`,
+e adiciona esse diretório ao PATH do sistema operacional (automaticamente no Windows e orientações no Linux).
+
+📚 QUANDO USAR:
+Use após baixar o binário para instalá-lo globalmente: o comando copia o executável para um
+diretório local do usuário e configura o PATH automaticamente, permitindo usar 'caramel' de qualquer pasta.`,
+	Example: `# Executar o auto-instalador e configurar o PATH global
+caramel install`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Obtém o caminho do executável atual
 		exePath, err := os.Executable()

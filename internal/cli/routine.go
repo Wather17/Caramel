@@ -36,7 +36,17 @@ var routineProcessCmd = &cobra.Command{
 	Short:   "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
 	Long: `Inspeciona arquivos .docx com as rotinas semanais de aula, extrai as informações de texto,
 envia ao OpenRouter para resumir e classificar os Campos de Experiência da BNCC,
-e compila tudo cronologicamente em um único arquivo .docx formatado em Paisagem.`,
+e compila tudo cronologicamente em um único arquivo .docx formatado em Paisagem.
+
+📚 QUANDO USAR:
+Use para transformar rotinas pedagógicas semanais (uma pasta ou um arquivo .docx) em um relatório
+consolidado com as experiências classificadas de acordo com os Campos de Experiência da BNCC,
+pronto para o planejamento do professor.`,
+	Example: `# Processar todas as rotinas semanais de uma pasta e gerar o relatório consolidado
+caramel routine process ./abril/
+
+# Processar uma rotina única de uma semana específica
+caramel routine process rotina_semana_1.docx`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetPath := args[0]
