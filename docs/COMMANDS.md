@@ -154,7 +154,7 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 | `--all` | `-a` | bool | `false` | Colora todas as imagens sem abrir formulário de seleção. |
 | `--min-size` | `-s` | string | `0` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Pasta original ou pasta de imagens do docx | Diretório onde os arquivos/imagens serão salvos. |
-| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--triage-model` | | string | `qwen/qwen3.7-flash` | Modelo de visão da triagem de economia ($0.03/M input). |
 | `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens selecionadas diretamente. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
@@ -202,6 +202,7 @@ caramel image generate [flags]
 | `--style` | `-s` | string | `clipart` | Estilo: `clipart`, `vector`, `3d-cute`, `coloring`, `realistic`. |
 | `--2up` | | bool | `false` | Compila automaticamente todas as imagens geradas em um PDF 2-up A4. |
 | `--preview` | | bool | `true` | Exibe miniaturas ANSI TrueColor no terminal durante a geração. |
+| `--aspect` | | string | `1:1` | Proporção das imagens geradas: `1:1`, `4:3`, `3:4`, `16:9`, `9:16`, `3:2`, `2:3`, `4:5`, `5:4`, `21:9` ou `auto`. |
 | `--output` | `-o` | string | `./imagens_<tema>` | Diretório onde as imagens serão salvas. |
 | `--workers`| `-w` | int | `0` (adaptativo) | Quantidade de workers concorrentes manuais. |
 
@@ -216,13 +217,16 @@ caramel generate --theme "animais da savana" -n 10 -s 3d-cute --2up
 
 # Gerar desenhos para colorir a partir de um arquivo de texto
 caramel generate -f ./frutas.txt -s coloring
+
+# Gerar imagens em formato widescreen 16:9 (slides/apresentações)
+caramel generate --items "sol, nuvem, arco-íris" --aspect 16:9
 ```
 
 ---
 
 ## 7. `caramel cards` (Layout A4 de Fichas / Flashcards)
 
-Diagrama coleções de imagens em folhas de papel A4 prontas para impressão e recorte, com legendas em caixa alta e linhas tracejadas de tesoura ✂️.
+Diagrama coleções de imagens em folhas de papel A4 e gera um **PDF pronto para impressão** (padrão), com a legenda do objeto abaixo de cada imagem em caixa alta. Use `--html` para obter o layout HTML/Tailwind (abrível no navegador para edição).
 
 ### Sintaxe
 ```bash
@@ -236,22 +240,24 @@ caramel cards <pasta_ou_imagem> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (ex: 2, 3 ou 4). |
-| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (ex: 2, 3 ou 4). |
+| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (1 a 6). |
+| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (1 a 6). |
 | `--title` | `-t` | string | `""` | Título no cabeçalho de cada folha. |
-| `--cut-lines`| `-l` | bool | `true` | Exibe linhas tracejadas de corte com tesoura. |
 | `--uppercase`| `-u` | bool | `true` | Exibe os nomes das fichas em caixa alta (ótimo para alfabetização). |
-| `--embed` | `-e` | bool | `true` | Embute as imagens em Base64 (arquivo 100% autossuficiente). |
-| `--output` | `-o` | string | `<pasta>_fichas_a4.html` | Caminho do arquivo HTML de saída. |
+| `--html` | | bool | `false` | Gera o layout HTML/Tailwind (para o navegador) em vez do PDF. |
+| `--output` | `-o` | string | `<pasta>_fichas_a4.pdf` | Caminho do arquivo de saída ou diretório de destino. |
 
 ### Exemplos Práticos
 
 ```bash
-# Gerar fichas A4 de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
+# Gerar fichas A4 em PDF de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
 caramel cards ./imagens_frutas/
 
 # Gerar grade 3x3 (9 fichas por folha) com título
 caramel cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
+
+# Gerar o layout HTML para editar no navegador antes de imprimir
+caramel cards ./imagens_frutas/ --html
 ```
 
 ---

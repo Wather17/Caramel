@@ -14,13 +14,12 @@ import (
 )
 
 var (
-	cardsCols       int
-	cardsRows       int
-	cardsTitle      string
-	cardsOutputDir  string
-	cardsCutLines   bool
-	cardsUppercase  bool
-	cardsEmbedB64   bool
+	cardsCols      int
+	cardsRows      int
+	cardsTitle     string
+	cardsOutputDir string
+	cardsUppercase bool
+	cardsHTMLMode  bool
 )
 
 var numberPrefixRegex = regexp.MustCompile(`^\d+[_\s-]+`)
@@ -37,12 +36,18 @@ func CleanCardName(fileName string) string {
 var cardsCmd = &cobra.Command{
 	Use:     "cards <pasta_ou_imagem>",
 	Aliases: []string{"flashcards", "print cards"},
-	Short:   "Gera fichas pedagógicas A4 em HTML/Tailwind prontas para impressão e corte",
-	Long: `Lê imagens de uma pasta (ou imagem avulsa), extrai os nomes e gera um arquivo HTML 
-diagramado em folha A4 com proporção 1:1, legendas em caixa alta e linhas tracejadas de corte.`,
+	Short:   "Gera fichas pedagógicas A4 em PDF (padrão) ou HTML, prontas para impressão",
+	Long: `Lê imagens de uma pasta (ou imagem avulsa), extrai os nomes e gera um arquivo PDF A4
+diagramado em grade com proporção 1:1, legenda do objeto abaixo da imagem (caixa alta por padrão).
+Use --html para gerar o layout HTML/Tailwind (abrível no navegador para edição).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputArg := args[0]
+
+		// Validação da grade de fichas (1 a 6 colunas/linhas)
+		if err := validateCardGrid(cardsCols, cardsRows); err != nil {
+			return err
+		}
 
 		realPath, stat, err := pdf.ResolveFuzzyPath(inputArg)
 		if err != nil {
@@ -84,7 +89,7 @@ diagramado em folha A4 com proporção 1:1, legendas em caixa alta e linhas trac
 			}
 
 			folderName := filepath.Base(filepath.Clean(inputPath))
-			defaultOutPath = filepath.Join(inputPath, fmt.Sprintf("%s_fichas_a4.html", folderName))
+			defaultOutPath = filepath.Join(inputPath, fmt.Sprintf("%s_fichas_a4.%s", folderName, outputExt()))
 			if cardsTitle == "" {
 				cardsTitle = strings.Title(strings.ReplaceAll(folderName, "_", " "))
 			}
@@ -100,7 +105,7 @@ diagramado em folha A4 com proporção 1:1, legendas em caixa alta e linhas trac
 			})
 			dir := filepath.Dir(inputPath)
 			baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-			defaultOutPath = filepath.Join(dir, fmt.Sprintf("%s_fichas_a4.html", baseName))
+			defaultOutPath = filepath.Join(dir, fmt.Sprintf("%s_fichas_a4.%s", baseName, outputExt()))
 		}
 
 		outPath := defaultOutPath
@@ -113,35 +118,60 @@ diagramado em folha A4 com proporção 1:1, legendas em caixa alta e linhas trac
 		}
 
 		opts := cards.SheetOptions{
-			Columns:     cardsCols,
-			Rows:        cardsRows,
-			Title:       cardsTitle,
-			CutLines:    cardsCutLines,
-			Uppercase:   cardsUppercase,
-			EmbedBase64: cardsEmbedB64,
+			Columns:   cardsCols,
+			Rows:      cardsRows,
+			Title:     cardsTitle,
+			Uppercase: cardsUppercase,
 		}
 
 		fmt.Printf("🖨️ Gerando layout A4 de fichas para %d imagem(ns)...\n", len(cardItems))
 		fmt.Printf(" ├─ Grade: %d colunas x %d linhas (%d fichas por folha)\n", opts.Columns, opts.Rows, opts.Columns*opts.Rows)
 
-		if err := cards.GenerateCardsHTML(cardItems, outPath, opts); err != nil {
-			return fmt.Errorf("falha ao gerar fichas HTML: %w", err)
+		if cardsHTMLMode {
+			if err := cards.GenerateCardsHTML(cardItems, outPath, opts); err != nil {
+				return fmt.Errorf("falha ao gerar fichas HTML: %w", err)
+			}
+			fmt.Printf("✅ Sucesso! Fichas A4 geradas em:\n   👉 %s\n", outPath)
+			fmt.Println("💡 Dica: Abra o arquivo no navegador e pressione Ctrl+P para imprimir ou salvar como PDF.")
+			return nil
+		}
+
+		if err := cards.GenerateCardsPDF(cardItems, outPath, opts); err != nil {
+			return fmt.Errorf("falha ao gerar fichas PDF: %w", err)
 		}
 
 		fmt.Printf("✅ Sucesso! Fichas A4 geradas em:\n   👉 %s\n", outPath)
-		fmt.Println("💡 Dica: Abra o arquivo no navegador e pressione Ctrl+P para imprimir ou salvar como PDF.")
+		fmt.Println("💡 Dica: O PDF já está pronto para impressão direta (Ctrl+P no leitor ou envie para a impressora).")
 		return nil
 	},
 }
 
+// outputExt retorna a extensão do arquivo de saída conforme o modo escolhido
+func outputExt() string {
+	if cardsHTMLMode {
+		return "html"
+	}
+	return "pdf"
+}
+
+// validateCardGrid valida a faixa de colunas/linhas da grade de fichas
+func validateCardGrid(cols, rows int) error {
+	if cols < 1 || cols > 6 {
+		return fmt.Errorf("número de colunas inválido (%d): use um valor entre 1 e 6", cols)
+	}
+	if rows < 1 || rows > 6 {
+		return fmt.Errorf("número de linhas inválido (%d): use um valor entre 1 e 6", rows)
+	}
+	return nil
+}
+
 func init() {
-	cardsCmd.Flags().IntVarP(&cardsCols, "cols", "c", 2, "Número de colunas na folha A4 (ex: 2, 3 ou 4)")
-	cardsCmd.Flags().IntVarP(&cardsRows, "rows", "r", 3, "Número de linhas na folha A4 (ex: 2, 3 ou 4)")
+	cardsCmd.Flags().IntVarP(&cardsCols, "cols", "c", 2, "Número de colunas na folha A4 (1 a 6)")
+	cardsCmd.Flags().IntVarP(&cardsRows, "rows", "r", 3, "Número de linhas na folha A4 (1 a 6)")
 	cardsCmd.Flags().StringVarP(&cardsTitle, "title", "t", "", "Título exibido no cabeçalho de cada folha")
-	cardsCmd.Flags().StringVarP(&cardsOutputDir, "output", "o", "", "Caminho do arquivo HTML ou diretório de saída")
-	cardsCmd.Flags().BoolVarP(&cardsCutLines, "cut-lines", "l", true, "Exibe linhas tracejadas de corte")
+	cardsCmd.Flags().StringVarP(&cardsOutputDir, "output", "o", "", "Caminho do arquivo de saída ou diretório de destino")
 	cardsCmd.Flags().BoolVarP(&cardsUppercase, "uppercase", "u", true, "Exibe nomes das fichas em caixa alta (ex: MAÇÃ)")
-	cardsCmd.Flags().BoolVarP(&cardsEmbedB64, "embed", "e", true, "Embute imagens em Base64 para gerar um arquivo HTML 100% autossuficiente")
+	cardsCmd.Flags().BoolVar(&cardsHTMLMode, "html", false, "Gera o layout HTML/Tailwind (para abrir no navegador) em vez do PDF")
 
 	RootCmd.AddCommand(cardsCmd)
 }

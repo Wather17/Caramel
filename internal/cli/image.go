@@ -47,17 +47,12 @@ Ao receber um arquivo .docx:
 
 		// Se o alvo for um arquivo .docx, executa o pipeline unificado de DOCX
 		if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
-			isInteractive := interactiveFlag
-			if allFlag {
-				isInteractive = false
-			}
-
 			return RunProcessDocx(ProcessDocxOptions{
 				DocxPath:    inputPath,
 				OutputDir:   imgOutputDir,
 				ModelName:   imgModelName,
 				MinSize:     imgMinSize,
-				Interactive: isInteractive,
+				Interactive: interactiveFlag,
 				Verbose:     verboseFlag,
 				TriageModel: imgTriageModel,
 				NoTriage:    imgNoTriage,

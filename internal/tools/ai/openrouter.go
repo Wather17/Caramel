@@ -62,9 +62,17 @@ type ChatMessage struct {
 }
 
 type ChatCompletionRequest struct {
-	Model      string        `json:"model"`
-	Messages   []ChatMessage `json:"messages"`
-	Modalities []string      `json:"modalities,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Modalities  []string      `json:"modalities,omitempty"`
+	ImageConfig *ImageConfig  `json:"image_config,omitempty"`
+}
+
+// ImageConfig controla as dimensões da imagem gerada diretamente na requisição
+// (parâmetro estruturado suportado pelo OpenRouter, mais confiável que instrução no prompt)
+type ImageConfig struct {
+	AspectRatio string `json:"aspect_ratio,omitempty"`
+	ImageSize   string `json:"image_size,omitempty"`
 }
 
 type OpenRouterImageItem struct {
@@ -207,15 +215,24 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 }
 
 // GenerateImage envia um prompt de texto diretamente para a API do OpenRouter e retorna os bytes da imagem gerada e sua extensão
-func (c *Client) GenerateImage(promptText string, modelOverride string) ([]byte, string, error) {
+// aspect define a proporção da imagem gerada via image_config (ex: "1:1", "16:9", "auto").
+// Se vazio, assume "1:1" — o formato padrão do Caramel.
+func (c *Client) GenerateImage(promptText string, modelOverride string, aspect string) ([]byte, string, error) {
 	model := DefaultModel
 	if modelOverride != "" {
 		model = modelOverride
 	}
 
+	if aspect == "" {
+		aspect = "1:1"
+	}
+
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
 		Modalities: []string{"image", "text"},
+		ImageConfig: &ImageConfig{
+			AspectRatio: aspect,
+		},
 		Messages: []ChatMessage{
 			{
 				Role: "user",

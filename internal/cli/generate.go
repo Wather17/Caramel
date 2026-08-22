@@ -31,7 +31,23 @@ var (
 	genVerbose     bool
 	genModelName   string
 	genTextModel   string
+	genAspect      string
 )
+
+// validAspects lista as proporções aceitas pela flag --aspect (valores normalizados do OpenRouter)
+var validAspects = []string{
+	"1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "4:5", "5:4", "21:9", "auto",
+}
+
+// validateAspect retorna erro se a proporção informada não for suportada
+func validateAspect(aspect string) error {
+	for _, v := range validAspects {
+		if aspect == v {
+			return nil
+		}
+	}
+	return fmt.Errorf("proporção '%s' inválida. Valores aceitos: %s", aspect, strings.Join(validAspects, ", "))
+}
 
 var imageGenerateCmd = &cobra.Command{
 	Use:     "generate",
@@ -98,6 +114,11 @@ A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com conco
 			return fmt.Errorf("nenhum item ou tema informado. Use --items, --file, --theme ou passe as palavras como argumentos (ex: caramel generate maçã, banana)")
 		}
 
+		// Validação da proporção das imagens
+		if err := validateAspect(genAspect); err != nil {
+			return err
+		}
+
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			return err
@@ -123,6 +144,7 @@ A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com conco
 			MaxWorkers:  genWorkers,
 			TextModel:   genTextModel,
 			ImageModel:  genModelName,
+			Aspect:      genAspect,
 			Verbose:     genVerbose,
 		}
 
@@ -265,6 +287,7 @@ func init() {
 	imageGenerateCmd.Flags().IntVarP(&genCount, "count", "n", 10, "Quantidade de itens a gerar quando utilizado com --theme")
 	imageGenerateCmd.Flags().StringVarP(&genStyle, "style", "s", "clipart", "Estilo visual: clipart, vector, 3d-cute, coloring, realistic")
 	imageGenerateCmd.Flags().StringVar(&genCustomStyle, "custom-style", "", "Instrução personalizada de estilo visual")
+	imageGenerateCmd.Flags().StringVar(&genAspect, "aspect", "1:1", "Proporção das imagens geradas: 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 4:5, 5:4, 21:9 ou auto")
 	imageGenerateCmd.Flags().StringVarP(&genOutputDir, "output", "o", "", "Diretório onde as imagens geradas serão salvas")
 	imageGenerateCmd.Flags().IntVarP(&genWorkers, "workers", "w", 0, "Número de workers simultâneos (padrão: 0 para adaptativo)")
 	imageGenerateCmd.Flags().BoolVar(&genPreview, "preview", true, "Renderiza miniaturas ANSI TrueColor no terminal conforme cada imagem é gerada")

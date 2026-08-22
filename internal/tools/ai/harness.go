@@ -37,6 +37,7 @@ type HarnessConfig struct {
 	MaxWorkers  int
 	TextModel   string
 	ImageModel  string
+	Aspect      string // Proporção das imagens geradas (ex: "1:1", "16:9"; vazio = 1:1)
 	Verbose     bool
 }
 
@@ -53,7 +54,9 @@ type HarnessProgressEvent struct {
 // HarnessProgressFunc é o callback para atualização da interface CLI / TUI
 type HarnessProgressFunc func(event HarnessProgressEvent)
 
-var slugRegex = regexp.MustCompile(`[^a-z0-9_]`)
+// slugRegex remove tudo que não seja letra (Unicode, preservando acentos como ç/ã/é),
+// número ou underscore — essencial para as legendas das fichas manterem a grafia correta
+var slugRegex = regexp.MustCompile(`[^\p{L}\p{N}_]`)
 
 // SanitizeSlug transforma um nome em slug seguro para arquivo
 func SanitizeSlug(index int, name string) string {
@@ -205,7 +208,7 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 				var genErr error
 
 				for attempt := 1; attempt <= maxRetries; attempt++ {
-					imgBytes, ext, genErr = client.GenerateImage(item.Prompt, cfg.ImageModel)
+					imgBytes, ext, genErr = client.GenerateImage(item.Prompt, cfg.ImageModel, cfg.Aspect)
 					if genErr == nil {
 						break
 					}
