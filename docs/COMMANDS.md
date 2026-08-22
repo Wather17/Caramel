@@ -226,7 +226,7 @@ caramel generate --items "sol, nuvem, arco-íris" --aspect 16:9
 
 ## 7. `caramel cards` (Layout A4 de Fichas / Flashcards)
 
-Diagrama coleções de imagens em folhas de papel A4 prontas para impressão e recorte, com legendas em caixa alta e linhas tracejadas de tesoura ✂️.
+Diagrama coleções de imagens em folhas de papel A4 e gera um **PDF pronto para impressão** (padrão), com a legenda do objeto abaixo de cada imagem em caixa alta. Use `--html` para obter o layout HTML/Tailwind (abrível no navegador para edição).
 
 ### Sintaxe
 ```bash
@@ -240,22 +240,24 @@ caramel cards <pasta_ou_imagem> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (ex: 2, 3 ou 4). |
-| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (ex: 2, 3 ou 4). |
+| `--cols` | `-c` | int | `2` | Número de colunas por folha A4 (1 a 6). |
+| `--rows` | `-r` | int | `3` | Número de linhas por folha A4 (1 a 6). |
 | `--title` | `-t` | string | `""` | Título no cabeçalho de cada folha. |
-| `--cut-lines`| `-l` | bool | `true` | Exibe linhas tracejadas de corte com tesoura. |
 | `--uppercase`| `-u` | bool | `true` | Exibe os nomes das fichas em caixa alta (ótimo para alfabetização). |
-| `--embed` | `-e` | bool | `true` | Embute as imagens em Base64 (arquivo 100% autossuficiente). |
-| `--output` | `-o` | string | `<pasta>_fichas_a4.html` | Caminho do arquivo HTML de saída. |
+| `--html` | | bool | `false` | Gera o layout HTML/Tailwind (para o navegador) em vez do PDF. |
+| `--output` | `-o` | string | `<pasta>_fichas_a4.pdf` | Caminho do arquivo de saída ou diretório de destino. |
 
 ### Exemplos Práticos
 
 ```bash
-# Gerar fichas A4 de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
+# Gerar fichas A4 em PDF de uma pasta de imagens (padrão 2x3 = 6 fichas por folha)
 caramel cards ./imagens_frutas/
 
 # Gerar grade 3x3 (9 fichas por folha) com título
 caramel cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
+
+# Gerar o layout HTML para editar no navegador antes de imprimir
+caramel cards ./imagens_frutas/ --html
 ```
 
 ---

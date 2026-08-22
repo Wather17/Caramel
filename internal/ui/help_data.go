@@ -84,29 +84,28 @@ O Caramel irá:
 		},
 		{
 			Name:     "caramel cards",
-			Short:    "Gera layout HTML A4 de fichas pedagógicas/flashcards pronto para impressão e corte",
+			Short:    "Gera fichas pedagógicas A4 em PDF (padrão) ou HTML, prontas para impressão",
 			Category: CategoryDocx,
 			PedagogicalContext: `💡 QUANDO USAR:
 Utilize este comando para diagramar coleções de imagens (PNG, JPG, WEBP) em folhas A4
-com proporção 1:1, legendas com o nome do objeto centralizado embaixo e linhas tracejadas de tesoura ✂️.
+com proporção 1:1 e a legenda do objeto centralizada abaixo da imagem (caixa alta por padrão).
 
 O Caramel irá:
  1. Ler todas as imagens de uma pasta e extrair os nomes higienizados;
  2. Distribuir os cartões em grade proporcional (ex: 2x3 = 6 fichas por folha A4);
- 3. Gerar um arquivo HTML independente com Tailwind CSS embutido;
- 4. Permitir impressão direta (Ctrl+P) ou salvamento em PDF em qualquer navegador.`,
+ 3. Gerar um arquivo PDF pronto para impressão direta (padrão);
+ 4. Com --html, gerar o layout HTML/Tailwind para edição no navegador.`,
 			Syntax: "caramel cards <pasta_ou_imagem> [flags]",
 			Keywords: []string{
-				"cards", "flashcards", "fichas", "impressao", "a4", "recorte", "tesoura", "alfabetizacao", "vocabulario", "jogo da memoria",
+				"cards", "flashcards", "fichas", "impressao", "a4", "alfabetizacao", "vocabulario", "jogo da memoria", "pdf",
 			},
 			Flags: []FlagDoc{
-				{Flag: "-c, --cols", Description: "Número de colunas por folha A4 (padrão: 2)."},
-				{Flag: "-r, --rows", Description: "Número de linhas por folha A4 (padrão: 3)."},
+				{Flag: "-c, --cols", Description: "Número de colunas por folha A4, de 1 a 6 (padrão: 2)."},
+				{Flag: "-r, --rows", Description: "Número de linhas por folha A4, de 1 a 6 (padrão: 3)."},
 				{Flag: "-t, --title", Description: "Título exibido no topo de cada folha."},
-				{Flag: "-l, --cut-lines", Description: "Exibe linhas tracejadas para corte de tesoura (padrão: true)."},
 				{Flag: "-u, --uppercase", Description: "Exibe o nome das fichas em caixa alta para alfabetização (padrão: true)."},
-				{Flag: "-o, --output", Description: "Caminho do arquivo HTML de saída."},
-				{Flag: "-e, --embed", Description: "Embute as imagens em Base64 (arquivo 100% autossuficiente)."},
+				{Flag: "--html", Description: "Gera o layout HTML/Tailwind para o navegador em vez do PDF."},
+				{Flag: "-o, --output", Description: "Caminho do arquivo de saída ou diretório de destino."},
 			},
 			Examples: []ExampleDoc{
 				{
