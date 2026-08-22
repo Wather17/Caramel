@@ -17,7 +17,7 @@ import (
 const (
 	DefaultModel       = "google/gemini-3.1-flash-image-preview" // Google Nano Banana 2 (Gemini 3.1 Flash Image)
 	DefaultTextModel   = "deepseek/deepseek-v4-flash"            // DeepSeek V4 Flash
-	DefaultTriageModel = "google/gemma-4-26b-a4b-it:free"        // Gemma 4 26B A4B (visão, free tier)
+	DefaultTriageModel = "qwen/qwen3.7-flash"                    // Qwen 3.7 Flash (visão, $0.03/M input)
 )
 
 // OpenRouterAPIURL é o endpoint de chat completions do OpenRouter.
