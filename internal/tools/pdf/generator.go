@@ -160,6 +160,60 @@ func prepareImagePairs(imagePaths []string, duplicateSingle bool) []imagePair {
 	return pairs
 }
 
+// renderLayout descreve o posicionamento final de uma imagem dentro de um slot,
+// já considerando a decisão de rotação e a correção das dimensões do retângulo.
+type renderLayout struct {
+	DrawX float64 // coordenada X do canto superior esquerdo do retângulo a desenhar
+	DrawY float64 // coordenada Y do canto superior esquerdo do retângulo a desenhar
+	DrawW float64 // largura do retângulo a desenhar (no frame rotacionado, quando Rotated=true)
+	DrawH float64 // altura do retângulo a desenhar (no frame rotacionado, quando Rotated=true)
+	RW    float64 // largura visual real da imagem na página (mm)
+	RH    float64 // altura visual real da imagem na página (mm)
+	Rot   bool    // true quando a imagem deve ser desenhada rotacionada 90°
+}
+
+// computeRenderLayout calcula o encaixe da imagem no slot (contain/cover), decide
+// se a auto-rotação de 90° vale a pena e retorna o retângulo exato a desenhar.
+//
+// IMPORTANTE: no gofpdf, o retângulo desenhado dentro de um frame rotacionado tem
+// sua largura/altura trocadas após a rotação de 90°. Por isso, quando Rot=true,
+// DrawW/DrawH são devolvidos TROCADOS em relação ao encaixe visual (RW/RH), para que
+// a imagem final fique com o tamanho correto e não estoure os limites do slot.
+func computeRenderLayout(w, h, maxW, maxH float64, opts Options) renderLayout {
+	var layout renderLayout
+
+	// Encaixe sem rotação
+	renderWNorm, renderHNorm := calculateFitDimensions(w, h, maxW, maxH, opts.FitMode)
+	areaNorm := renderWNorm * renderHNorm
+
+	// Encaixe se rotacionado em 90°
+	renderWRot, renderHRot := calculateFitDimensions(h, w, maxW, maxH, opts.FitMode)
+	areaRot := renderWRot * renderHRot
+
+	if opts.AutoRotate && areaNorm > 0 {
+		gainPercent := ((areaRot - areaNorm) / areaNorm) * 100.0
+		if gainPercent >= opts.RotateThreshold {
+			layout.Rot = true
+		}
+	}
+
+	if layout.Rot {
+		// Frame rotacionado: o retângulo é desenhado com as dimensões trocadas,
+		// pois após a rotação de 90° o encaixe visual passa a ser (RW × RH).
+		layout.DrawW = renderHRot
+		layout.DrawH = renderWRot
+		layout.RW = renderWRot
+		layout.RH = renderHRot
+	} else {
+		layout.DrawW = renderWNorm
+		layout.DrawH = renderHNorm
+		layout.RW = renderWNorm
+		layout.RH = renderHNorm
+	}
+
+	return layout
+}
+
 // renderImageInSlot calcula as dimensões, decide por rotação, otimiza se ativado e posiciona a imagem no slot
 func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, maxH float64, opts Options) error {
 	imgW, imgH, err := getImageDimensions(imgPath)
@@ -171,31 +225,17 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 		return fmt.Errorf("dimensões inválidas para a imagem '%s': %dx%d", imgPath, imgW, imgH)
 	}
 
-	w := float64(imgW)
-	h := float64(imgH)
+	layout := computeRenderLayout(float64(imgW), float64(imgH), maxW, maxH, opts)
 
-	// Cálculo da área normal (sem rotação)
-	renderWNorm, renderHNorm := calculateFitDimensions(w, h, maxW, maxH, opts.FitMode)
-	areaNorm := renderWNorm * renderHNorm
-
-	// Cálculo da área se rotacionada em 90°
-	renderWRot, renderHRot := calculateFitDimensions(h, w, maxW, maxH, opts.FitMode)
-	areaRot := renderWRot * renderHRot
-
-	shouldRotate := false
-	if opts.AutoRotate && areaNorm > 0 {
-		gainPercent := ((areaRot - areaNorm) / areaNorm) * 100.0
-		if gainPercent >= opts.RotateThreshold {
-			shouldRotate = true
-		}
-	}
+	centerX := slotX + maxW/2.0
+	centerY := slotY + maxH/2.0
 
 	imageTarget := imgPath
 	var imageType string
 
-	// Otimização em memória se habilitada
+	// Otimização em memória se habilitada (usa as dimensões visuais reais do encaixe)
 	if opts.Optimize {
-		reader, optFormat, optErr := optimizeImageInMemory(imgPath, maxW, maxH, opts)
+		reader, optFormat, optErr := optimizeImageInMemory(imgPath, layout.RW, layout.RH, opts)
 		if optErr == nil && reader != nil {
 			imageKey := fmt.Sprintf("opt_%s", filepath.Base(imgPath))
 			imageType = optFormat
@@ -216,26 +256,34 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 		}
 	}
 
-	centerX := slotX + maxW/2.0
-	centerY := slotY + maxH/2.0
+	imgDrawX := centerX - layout.DrawW/2.0
+	imgDrawY := centerY - layout.DrawH/2.0
 
-	if shouldRotate {
-		imgDrawX := centerX - renderWRot/2.0
-		imgDrawY := centerY - renderHRot/2.0
+	// AllowNegativePosition é essencial para imagens rotacionadas no slot ESQUERDO:
+	// imgDrawX = centerX - DrawW/2 fica negativo quando o retângulo rotacionado é mais
+	// largo que o dobro da margem, e sem essa opção o gofpdf coage x para a posição do
+	// cursor (f.x), deslocando a imagem para fora do slot e da folha.
+	imgOpts := gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true, AllowNegativePosition: true}
 
+	if layout.Rot {
 		pdf.TransformBegin()
 		pdf.TransformRotate(90, centerX, centerY)
-		pdf.ImageOptions(imageTarget, imgDrawX, imgDrawY, renderWRot, renderHRot, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
+		pdf.ImageOptions(imageTarget, imgDrawX, imgDrawY, layout.DrawW, layout.DrawH, false, imgOpts, 0, "")
 		pdf.TransformEnd()
 	} else {
-		finalX := centerX - renderWNorm/2.0
-		finalY := centerY - renderHNorm/2.0
-		pdf.ImageOptions(imageTarget, finalX, finalY, renderWNorm, renderHNorm, false, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, 0, "")
+		pdf.ImageOptions(imageTarget, imgDrawX, imgDrawY, layout.DrawW, layout.DrawH, false, imgOpts, 0, "")
 	}
 
 	return nil
 }
 
+// optimizeImageInMemory lê a imagem, reduz (se necessário) para a resolução máxima
+// indicada por maxDPI na área de renderização real (maxWMM × maxHMM, em mm) e
+// recompacta em JPEG em memória. Retorna um reader pronto para registro no PDF.
+//
+// maxWMM/maxHMM devem ser as dimensões VISUAIS REAIS que a imagem ocupará na página
+// (calculadas pelo encaixe), não as dimensões brutas do slot — isso evita redimensionar
+// desnecessariamente imagens que já cabem no limite de DPI.
 func optimizeImageInMemory(imgPath string, maxWMM, maxHMM float64, opts Options) (io.Reader, string, error) {
 	file, err := os.Open(imgPath)
 	if err != nil {
@@ -265,13 +313,10 @@ func optimizeImageInMemory(imgPath string, maxWMM, maxHMM float64, opts Options)
 		quality = 85
 	}
 
-	// Resolução limite em pixels para 300 DPI no slot A5
+	// Limite de resolução em pixels para a área de renderização real, sem troca de eixos:
+	// a largura da imagem fica limitada pelos mm de largura e a altura pelos mm de altura.
 	maxAllowedW := int((maxWMM / 25.4) * float64(maxDPI))
 	maxAllowedH := int((maxHMM / 25.4) * float64(maxDPI))
-
-	if maxAllowedW < maxAllowedH {
-		maxAllowedW, maxAllowedH = maxAllowedH, maxAllowedW
-	}
 
 	needsRescale := srcW > maxAllowedW || srcH > maxAllowedH
 	var finalImg image.Image = srcImg
