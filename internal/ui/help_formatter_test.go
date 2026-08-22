@@ -59,6 +59,23 @@ func TestSearchCommandDocs(t *testing.T) {
 			t.Errorf("Esperava 0 resultados para termo inexistente, obteve %d", len(results))
 		}
 	})
+
+	t.Run("Busca por Nome de Flag", func(t *testing.T) {
+		results := ui.SearchCommandDocs("custom-style")
+		if len(results) == 0 {
+			t.Errorf("Esperava encontrar resultados ao buscar por nome de flag 'custom-style'")
+		}
+		foundGenerate := false
+		for _, doc := range results {
+			if doc.Name == "caramel generate" {
+				foundGenerate = true
+				break
+			}
+		}
+		if !foundGenerate {
+			t.Errorf("Esperava encontrar 'caramel generate' na busca por 'custom-style'")
+		}
+	})
 }
 
 func TestRenderSearchHelp(t *testing.T) {

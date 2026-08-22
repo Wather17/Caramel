@@ -168,7 +168,17 @@ func SearchCommandDocs(query string) []CommandHelpDoc {
 			}
 		}
 
-		// 4. Verifica em exemplos
+		// 4. Verifica nas flags (nome e descrição)
+		if !matched {
+			for _, f := range doc.Flags {
+				if strings.Contains(strings.ToLower(f.Flag), cleanQuery) || strings.Contains(strings.ToLower(f.Description), cleanQuery) {
+					matched = true
+					break
+				}
+			}
+		}
+
+		// 5. Verifica em exemplos
 		if !matched {
 			for _, ex := range doc.Examples {
 				if strings.Contains(strings.ToLower(ex.Description), cleanQuery) || strings.Contains(strings.ToLower(ex.Command), cleanQuery) {

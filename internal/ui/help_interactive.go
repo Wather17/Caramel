@@ -32,7 +32,7 @@ func ShowInteractiveHelp() error {
 
 		err := formCategory.Run()
 		if err != nil || selectedCategory == "EXIT" {
-			fmt.Println("👋 Atadinho! Até a próxima.")
+			fmt.Println("👋 Até logo! Até a próxima.")
 			return nil
 		}
 
