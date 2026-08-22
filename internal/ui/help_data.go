@@ -130,10 +130,11 @@ O Caramel irá:
  1. Usar IA para sintetizar e padronizar prompts em inglês com fundo branco e estilo unificado;
  2. Gerar as imagens com concorrência adaptativa (worker pool inteligente sem bloqueios de rate limit);
  3. Exibir miniaturas ANSI em tempo real no terminal;
- 4. Opcionalmente compilar tudo em um PDF 2-up pronto para impressão (--2up).`,
+ 4. Gerar as imagens em formato 1:1 por padrão (use --aspect para outras proporções);
+ 5. Opcionalmente compilar tudo em um PDF 2-up pronto para impressão (--2up).`,
 			Syntax: "caramel generate [itens...] ou caramel image generate [flags]",
 			Keywords: []string{
-				"generate", "gerar", "harness", "lote", "batch", "imagens", "ilustracoes", "clipart", "3d", "vector", "ia", "flash-image",
+				"generate", "gerar", "harness", "lote", "batch", "imagens", "ilustracoes", "clipart", "3d", "vector", "ia", "flash-image", "aspect", "proporcao",
 			},
 			Flags: []FlagDoc{
 				{Flag: "-i, --items", Description: "Lista de itens separados por vírgula (ex: 'maçã, banana, melancia')."},
@@ -141,11 +142,15 @@ O Caramel irá:
 				{Flag: "-t, --theme", Description: "Tema descritivo para a IA escolher os itens automaticamente (ex: 'animais da fazenda')."},
 				{Flag: "-n, --count", Description: "Quantidade de itens ao usar com --theme (padrão: 10)."},
 				{Flag: "-s, --style", Description: "Estilo visual: clipart, vector, 3d-cute, coloring, realistic (padrão: clipart)."},
+				{Flag: "--custom-style", Description: "Instrução personalizada de estilo visual, sobrescreve o --style."},
+				{Flag: "-m, --model", Description: "Modelo de IA para geração de imagens (padrão: google/gemini-3.1-flash-image-preview)."},
+				{Flag: "--text-model", Description: "Modelo de IA para síntese de prompts (padrão: deepseek/deepseek-v4-flash)."},
 				{Flag: "--2up", Description: "Compila automaticamente todas as imagens geradas em um PDF 2-up A4."},
 				{Flag: "--preview", Description: "Exibe preview ANSI no terminal durante a geração (padrão: true)."},
 				{Flag: "--aspect", Description: "Proporção das imagens: 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 4:5, 5:4, 21:9 ou auto (padrão: 1:1)."},
 				{Flag: "-o, --output", Description: "Diretório onde as imagens serão salvas."},
 				{Flag: "-w, --workers", Description: "Número de workers concorrentes (padrão: adaptativo)."},
+				{Flag: "-v, --verbose", Description: "Exibe logs detalhados de depuração da API."},
 			},
 			Examples: []ExampleDoc{
 				{
@@ -175,9 +180,10 @@ Ao receber um arquivo .docx:
  2. Reconstrói um novo arquivo Word colorido ('<nome> colorida.docx');
  3. Suporta a flag -i para seleção interativa com preview ANSI no terminal.
 
-Antes de colorir, uma triagem de economia analisa cada imagem localmente (saturação) e com um
-modelo de visão gratuito: imagens já coloridas ou contendo apenas texto/tabelas são puladas
-automaticamente, evitando gastos desnecessários. Use --no-triage para desativar.`,
+Antes de colorir, uma triagem de economia analisa cada imagem em duas camadas: uma análise local
+de saturação (custo zero) e um modelo de visão de baixo custo (Qwen 3.7 Flash). Imagens já coloridas,
+textos, tabelas, caça-palavras e atividades de 'colorir' são puladas automaticamente — mas fichas de
+exercício com ilustrações coloríveis ao redor são aprovadas. Use --no-triage para desativar.`,
 			Syntax: "caramel colorize <imagem | pasta | arquivo.docx> [flags]",
 			Keywords: []string{
 				"colorize", "color", "colorir", "ia", "openrouter", "docx", "imagem", "png", "jpg", "foto", "desenho",
@@ -217,8 +223,9 @@ em documentos totalmente coloridos e atrativos para os alunos.
 
 O Caramel irá:
  1. Extrair todas as ilustrações/diagramas do arquivo Word (.docx);
- 2. Filtrar automaticamente cabeçalhos e logos pequenos (com base no tamanho);
- 3. Colorir cada ilustração utilizando Inteligência Artificial (OpenRouter);
+ 2. Triar cada imagem com a triagem de economia: análise local de saturação (custo zero) descarta
+    brasões, logos e imagens já coloridas; a LLM de baixo custo filtra textos, tabelas e jogos;
+ 3. Colorir cada ilustração aprovada utilizando Inteligência Artificial (OpenRouter);
  4. Reconstruir um novo arquivo .docx (ex: 'prova_colorida.docx') pronto para impressão ou uso digital.`,
 			Syntax: "caramel process <arquivo.docx> [flags]",
 			Keywords: []string{
@@ -261,14 +268,16 @@ Você também pode apenas listar as imagens para inspecionar o conteúdo sem ext
 			Keywords: []string{
 				"extract", "extrair", "figuras", "imagens", "docx", "word", "listar", "salvar",
 			},
-			Flags: []FlagDoc{
+Flags: []FlagDoc{
 				{Flag: "-l, --list", Description: "Apenas inspeciona e exibe a lista de imagens do arquivo sem salvá-las."},
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo para você selecionar apenas as figuras que deseja salvar."},
 				{Flag: "-c, --colorize", Description: "Ativa a IA para colorir as imagens extraídas."},
 				{Flag: "-s, --min-size", Description: "Define o tamanho mínimo para filtrar figuras (padrão: '0' — todas)."},
+				{Flag: "-m, --model", Description: "Modelo de IA multimodal para coloração (padrão: google/gemini-3.1-flash-image-preview)."},
 				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: qwen/qwen3.7-flash)."},
-				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens elegíveis diretamente."},
+				{Flag: "--no-triage", Description: "Desativa a triagem e colore todas as imagens elegíveis diretamente."},
 				{Flag: "-o, --output", Description: "Diretório de saída para salvar as imagens."},
+				{Flag: "-v, --verbose", Description: "Exibe informações detalhadas de depuração e resposta raw da API."},
 			},
 			Examples: []ExampleDoc{
 				{
@@ -362,6 +371,59 @@ dicas de uso pedagógico, busca por palavra-chave e exemplos práticos copiávei
 				{
 					Description: "Pesquisar guia sobre imagens do Figma:",
 					Command:     "caramel guide figma",
+				},
+			},
+		},
+		{
+			Name:     "caramel routine process",
+			Short:    "Processa rotinas pedagógicas semanais e compila relatório BNCC",
+			Category: CategoryDocx,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize este comando para transformar rotinas pedagógicas semanais (arquivos .docx) em um relatório
+consolidado, com as experiências classificadas de acordo com os Campos de Experiência da BNCC.
+
+O Caramel irá:
+ 1. Ler todas as rotinas de uma pasta (ou um único arquivo .docx);
+ 2. Extrair o texto localmente de forma otimizada;
+ 3. Enviar para a IA classificar as experiências com base na BNCC;
+ 4. Reconstruir o relatório final em tabela padrão Arial, orientação Paisagem.`,
+			Syntax: "caramel routine process <pasta_ou_arquivo.docx> [flags]",
+			Keywords: []string{
+				"routine", "rotina", "bncc", "relatorio", "semanal", "campos", "experiencia", "pedagogico",
+			},
+			Flags: []FlagDoc{
+				{Flag: "-o, --output", Description: "Diretório onde o relatório consolidado será salvo."},
+				{Flag: "-m, --model", Description: "Modelo de IA para análise de texto (padrão: deepseek/deepseek-v4-flash)."},
+				{Flag: "-p, --prompt", Description: "Caminho para arquivo com prompt de IA customizado."},
+				{Flag: "-v, --verbose", Description: "Exibe logs raw da API de IA."},
+			},
+			Examples: []ExampleDoc{
+				{
+					Description: "Processar todas as rotinas semanais de uma pasta e gerar o relatório consolidado:",
+					Command:     "caramel routine process ./abril/",
+				},
+				{
+					Description: "Processar uma rotina única de uma semana específica:",
+					Command:     "caramel routine process rotina_semana_1.docx",
+				},
+			},
+		},
+		{
+			Name:     "caramel install",
+			Short:    "Instala o Caramel CLI globalmente no sistema",
+			Category: CategorySystem,
+			PedagogicalContext: `💡 QUANDO USAR:
+Utilize após baixar o binário para instalá-lo globalmente: o comando copia o executável para um
+diretório local do usuário e adiciona esse diretório ao PATH do sistema automaticamente.`,
+			Syntax: "caramel install",
+			Keywords: []string{
+				"install", "instalar", "binario", "path", "sistema", "self-install",
+			},
+			Flags: []FlagDoc{},
+			Examples: []ExampleDoc{
+				{
+					Description: "Executar o auto-instalador e configurar o PATH global:",
+					Command:     "caramel install",
 				},
 			},
 		},
