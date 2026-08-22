@@ -58,7 +58,7 @@ caramel config show
 
 Executa o fluxo fim-a-fim automatizado para um arquivo `.docx`:
 1. Inspeciona o arquivo `.docx`
-2. Ignora automaticamente brasões, logos e ícones pequenos (padrão: `< 20KB`).
+2. Processa todas as imagens extraídas (padrão) — a triagem de economia descarta automaticamente brasões, logos, ícones já coloridos e conteúdos de texto sem custo de API.
 3. Extrai todas as imagens mantidas para uma pasta temporária.
 4. Colora cada imagem automaticamente usando a IA multimodal Nano Banana 2 (`google/gemini-3.1-flash-image`).
 5. **Redimensiona as imagens geradas pela IA** para baterem exatamente com a resolução em pixels da original, evitando distorções (aspect ratio) de layout.
@@ -76,7 +76,7 @@ caramel process <caminho-do-arquivo.docx> [flags]
 
 | Flag | Atalho | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- | :--- |
-| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
+| `--min-size` | `-s` | string | `0` | Tamanho mínimo para processar a imagem (ex: `20KB`, `50KB`, `0` para todas). |
 | `--interactive` | `-i` | bool | `false` | Habilita modo interativo com preview ANSI TrueColor no terminal. |
 | `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório de destino do novo `.docx` e das imagens. |
 | `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
@@ -125,6 +125,7 @@ caramel docx extract <arquivo.docx> [flags]
 | `--list` | `-l` | bool | `false` | Apenas lista as imagens no terminal sem salvar. |
 | `--interactive` | `-i` | bool | `false` | Abre formulário interativo de seleção de imagens. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
+| `--min-size` | `-s` | string | `0` | Tamanho mínimo da imagem para ser extraída (ex: `20KB`, `50KB`, `0` para todas). |
 | `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--triage-model` | | string | `qwen/qwen3.7-flash` | Modelo de visão da triagem de economia ($0.03/M input). |
 | `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens elegíveis diretamente. |
@@ -151,7 +152,7 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 | :--- | :--- | :--- | :--- | :--- |
 | `--interactive` | `-i` | bool | `false` | Habilita seleção interativa com miniaturas ANSI no terminal. |
 | `--all` | `-a` | bool | `false` | Colora todas as imagens sem abrir formulário de seleção. |
-| `--min-size` | `-s` | string | `20KB` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
+| `--min-size` | `-s` | string | `0` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Pasta original ou pasta de imagens do docx | Diretório onde os arquivos/imagens serão salvos. |
 | `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--triage-model` | | string | `qwen/qwen3.7-flash` | Modelo de visão da triagem de economia ($0.03/M input). |
