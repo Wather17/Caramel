@@ -62,7 +62,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 
 	minSizeStr := opts.MinSize
 	if minSizeStr == "" {
-		minSizeStr = "20KB"
+		minSizeStr = "0"
 	}
 
 	minSizeBytes, err := docx.ParseSizeInBytes(minSizeStr)
@@ -166,7 +166,11 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 	printTriageSummary(res)
 
 	if res.TotalColorized == 0 {
-		fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
+		if res.TotalTriageSkipped > 0 {
+			fmt.Printf("ℹ️  Nenhuma imagem foi aprovada pela triagem em '%s' (todas foram puladas).\n", docxPath)
+		} else {
+			fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
+		}
 		return nil
 	}
 
@@ -225,7 +229,7 @@ Use a flag '-i' ou '--interactive' para visualizar as miniaturas ANSI das imagen
 func init() {
 	processCmd.Flags().StringVarP(&processOutputDir, "output", "o", "", "Diretório onde os arquivos serão salvos (padrão: imagens <nome_do_arquivo>)")
 	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
-	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
+	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
 	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	processCmd.Flags().BoolVarP(&processInteractive, "interactive", "i", false, "Exibe formulário interativo com preview ANSI para selecionar quais imagens colorir e substituir no novo .docx")
 	processCmd.Flags().StringVar(&processTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
