@@ -54,3 +54,4 @@ issues/
 .agent/
 openspec/
 tests/
+.opencode/
