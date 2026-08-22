@@ -37,6 +37,30 @@ func GetColorizationPrompt() string {
 	return strings.TrimSpace(string(data))
 }
 
+// GetTriagePrompt retorna o prompt de triagem (gatekeeper) que decide se uma imagem
+// deve ser enviada para a etapa cara de coloração.
+// Se o usuário tiver um prompt customizado em ~/.config/caramel/prompts/triage.txt, ele será usado.
+// Caso contrário, retorna o prompt embarcado por padrão no binário.
+func GetTriagePrompt() string {
+	configDir, err := config.GetConfigDir()
+	if err == nil {
+		customPromptPath := filepath.Join(configDir, "prompts", "triage.txt")
+		if data, err := os.ReadFile(customPromptPath); err == nil {
+			content := strings.TrimSpace(string(data))
+			if content != "" {
+				return content
+			}
+		}
+	}
+
+	data, err := templateFS.ReadFile("templates/triage.txt")
+	if err != nil {
+		return "Decide whether this black-and-white image is a colorable illustration. Respond only with JSON: {\"should_colorize\": true|false, \"reason\": \"...\"}"
+	}
+
+	return strings.TrimSpace(string(data))
+}
+
 // GetRoutinePrompt retorna o prompt para o assistente de rotinas pedagógicas.
 // Se o usuário tiver um prompt customizado em ~/.config/caramel/prompts/routine.txt, ele será usado.
 // Caso contrário, retorna o prompt embarcado por padrão no binário.

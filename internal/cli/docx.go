@@ -22,6 +22,8 @@ var (
 	minSizeStr      string
 	docxVerbose     bool
 	docxInteractive bool
+	docxTriageModel string
+	docxNoTriage    bool
 )
 
 // docxCmd representa o grupo de comandos relacionados a arquivos .docx
@@ -117,11 +119,13 @@ Com a flag --interactive (-i), exibe um menu interativo para escolher quais imag
 					return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 				}
 
-				fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
-				pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose)
-				if err != nil {
-					return err
-				}
+			fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
+			pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose, docxTriageModel, docxNoTriage)
+			if err != nil {
+				return err
+			}
+
+			printTriageSummary(pipeRes)
 
 				fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
 				for _, res := range pipeRes.Results {
@@ -158,15 +162,17 @@ Com a flag --interactive (-i), exibe um menu interativo para escolher quais imag
 				return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>' para poder utilizar a IA de coloração")
 			}
 
-			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose)
-			if err != nil {
-				return err
-			}
+		fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
+		pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose, docxTriageModel, docxNoTriage)
+		if err != nil {
+			return err
+		}
 
-			if pipeRes.TotalSkipped > 0 {
-				fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, pipeRes.TotalSkipped)
-			}
+		if pipeRes.TotalSkipped > 0 {
+			fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, pipeRes.TotalSkipped)
+		}
+
+		printTriageSummary(pipeRes)
 
 			if pipeRes.TotalColorized == 0 {
 				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi extraída/colorida do arquivo '%s'.\n", minSizeStr, docxPath)
@@ -218,6 +224,8 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")
+	docxExtractCmd.Flags().StringVar(&docxTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
+	docxExtractCmd.Flags().BoolVar(&docxNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens elegíveis diretamente")
 
 	// Registra subcomandos
 	docxCmd.AddCommand(docxExtractCmd)

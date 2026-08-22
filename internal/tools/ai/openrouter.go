@@ -15,10 +15,14 @@ import (
 )
 
 const (
-	OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	DefaultModel     = "google/gemini-3.1-flash-image-preview" // Google Nano Banana 2 (Gemini 3.1 Flash Image)
-	DefaultTextModel = "deepseek/deepseek-v4-flash"            // DeepSeek V4 Flash
+	DefaultModel       = "google/gemini-3.1-flash-image-preview" // Google Nano Banana 2 (Gemini 3.1 Flash Image)
+	DefaultTextModel   = "deepseek/deepseek-v4-flash"            // DeepSeek V4 Flash
+	DefaultTriageModel = "google/gemma-4-26b-a4b-it:free"        // Gemma 4 26B A4B (visão, free tier)
 )
+
+// OpenRouterAPIURL é o endpoint de chat completions do OpenRouter.
+// Declarado como var para permitir a substituição por servidor de teste (httptest).
+var OpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 
 var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
 
@@ -88,24 +92,10 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		model = modelOverride
 	}
 
-	imageData, err := os.ReadFile(imagePath)
+	dataURL, err := encodeImageAsDataURL(imagePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("falha ao ler arquivo de imagem '%s': %w", imagePath, err)
+		return nil, "", err
 	}
-
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(imagePath), "."))
-	mimeType := "image/png"
-	switch ext {
-	case "jpg", "jpeg":
-		mimeType = "image/jpeg"
-	case "webp":
-		mimeType = "image/webp"
-	case "svg":
-		mimeType = "image/svg+xml"
-	}
-
-	base64Image := base64.StdEncoding.EncodeToString(imageData)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
 
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
@@ -324,6 +314,28 @@ func (c *Client) GenerateImage(promptText string, modelOverride string) ([]byte,
 	}
 
 	return outBytes, outExt, nil
+}
+
+// encodeImageAsDataURL lê uma imagem local e a codifica como Data URL (base64) para envio multimodal
+func encodeImageAsDataURL(imagePath string) (string, error) {
+	imageData, err := os.ReadFile(imagePath)
+	if err != nil {
+		return "", fmt.Errorf("falha ao ler arquivo de imagem '%s': %w", imagePath, err)
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(imagePath), "."))
+	mimeType := "image/png"
+	switch ext {
+	case "jpg", "jpeg":
+		mimeType = "image/jpeg"
+	case "webp":
+		mimeType = "image/webp"
+	case "svg":
+		mimeType = "image/svg+xml"
+	}
+
+	base64Image := base64.StdEncoding.EncodeToString(imageData)
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image), nil
 }
 
 // extractImageBytesFromResponse extrai os bytes de imagem (Data URL, URL remota ou Base64 puro)
