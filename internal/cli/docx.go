@@ -174,10 +174,14 @@ Com a flag --interactive (-i), exibe um menu interativo para escolher quais imag
 
 		printTriageSummary(pipeRes)
 
-			if pipeRes.TotalColorized == 0 {
+if pipeRes.TotalColorized == 0 {
+			if pipeRes.TotalTriageSkipped > 0 {
+				fmt.Printf("ℹ️  Nenhuma imagem foi aprovada pela triagem do arquivo '%s' (todas foram puladas).\n", docxPath)
+			} else {
 				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi extraída/colorida do arquivo '%s'.\n", minSizeStr, docxPath)
-				return nil
 			}
+			return nil
+		}
 
 			fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
 			for _, res := range pipeRes.Results {
@@ -221,7 +225,7 @@ func init() {
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
 	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
-	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
+	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "0", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")
 	docxExtractCmd.Flags().StringVar(&docxTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
