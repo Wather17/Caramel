@@ -154,7 +154,7 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 | `--all` | `-a` | bool | `false` | Colora todas as imagens sem abrir formulário de seleção. |
 | `--min-size` | `-s` | string | `0` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Pasta original ou pasta de imagens do docx | Diretório onde os arquivos/imagens serão salvos. |
-| `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
 | `--triage-model` | | string | `qwen/qwen3.7-flash` | Modelo de visão da triagem de economia ($0.03/M input). |
 | `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens selecionadas diretamente. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |

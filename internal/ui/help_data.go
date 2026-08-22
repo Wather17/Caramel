@@ -352,7 +352,7 @@ dicas de uso pedagógico, busca por palavra-chave e exemplos práticos copiávei
 				"guide", "help", "ajuda", "duvida", "comando", "exemplo", "como-usar", "tui",
 			},
 			Flags: []FlagDoc{
-				{Flag: "-i, --interactive", Description: "Abre a central de ajuda no modo TUI interativo com menu navegável."},
+				{Flag: "caramel -i", Description: "No comando raiz, abre a central de ajuda no modo TUI interativo."},
 			},
 			Examples: []ExampleDoc{
 				{

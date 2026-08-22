@@ -30,8 +30,7 @@ Navegue visualmente pelo guia didático no terminal ou pesquise diretamente por 
 }
 
 func init() {
-	// Registra flag -i / --interactive no comando de ajuda padrão e no guide
-	guideCmd.Flags().BoolVarP(&helpInteractive, "interactive", "i", false, "Abre a central de ajuda interativa TUI")
+	// Registra flag -i / --interactive apenas no RootCmd (usada pelo SetHelpFunc)
 	RootCmd.Flags().BoolVarP(&helpInteractive, "interactive", "i", false, "Abre a central de ajuda interativa TUI")
 
 	// Customiza a função de ajuda do Cobra para usar o formatador Lipgloss e suportar -i ou busca por argumentos
