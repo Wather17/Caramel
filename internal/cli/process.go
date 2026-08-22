@@ -22,6 +22,8 @@ var (
 	processMinSize     string
 	processVerbose     bool
 	processInteractive bool
+	processTriageModel string
+	processNoTriage    bool
 )
 
 // ProcessDocxOptions contém os parâmetros para execução do pipeline de processamento e reconstrução de .docx
@@ -32,6 +34,8 @@ type ProcessDocxOptions struct {
 	MinSize     string
 	Interactive bool
 	Verbose     bool
+	TriageModel string // Modelo de visão usado na triagem (vazio = padrão gratuito)
+	NoTriage    bool   // true desativa a triagem e colora todas as imagens elegíveis
 }
 
 // RunProcessDocx executa o fluxo completo do pipeline DOCX (interativo ou automatizado)
@@ -122,10 +126,12 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 		}
 
 		fmt.Printf("🚀 Iniciando Pipeline Automatizado para %d imagem(ns) selecionada(s)...\n", len(selectedImages))
-		res, err := pipeline.RunDocxPipelineSelected(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, opts.Verbose)
+		res, err := pipeline.RunDocxPipelineSelected(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, opts.Verbose, opts.TriageModel, opts.NoTriage)
 		if err != nil {
 			return err
 		}
+
+		printTriageSummary(res)
 
 		fmt.Printf("✅ Pipeline concluído com sucesso!\n")
 		fmt.Printf(" ├─ Total de imagens coloridas/substituídas: %d\n", res.TotalColorized)
@@ -144,7 +150,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 		fmt.Printf(" ├─ Filtro de Tamanho Mínimo: %s (%d bytes)\n", minSizeStr, minSizeBytes)
 	}
 
-	res, err := pipeline.RunDocxPipeline(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, opts.Verbose)
+	res, err := pipeline.RunDocxPipeline(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, opts.Verbose, opts.TriageModel, opts.NoTriage)
 	if err != nil {
 		return err
 	}
@@ -156,6 +162,8 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 			fmt.Printf(" │   └─ Ignorada: %s (%.1f KB)\n", img.OriginalName, sizeKB)
 		}
 	}
+
+	printTriageSummary(res)
 
 	if res.TotalColorized == 0 {
 		fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
@@ -170,6 +178,22 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 	fmt.Printf(" └─ Imagens individuais salvas no diretório: %s\n", res.OutputDir)
 
 	return nil
+}
+
+// printTriageSummary exibe o resumo das imagens puladas pela triagem de economia, se houver
+func printTriageSummary(res *pipeline.PipelineResult) {
+	if res == nil || res.TotalTriageSkipped == 0 {
+		return
+	}
+
+	fmt.Printf(" ├─ Imagens puladas pela triagem (economia de API): %d\n", res.TotalTriageSkipped)
+	for _, skipped := range res.TriageSkipped {
+		stage := "LLM"
+		if skipped.Stage == "local" {
+			stage = "análise local"
+		}
+		fmt.Printf(" │   └─ %s [%s]: %s\n", skipped.Name, stage, skipped.Reason)
+	}
 }
 
 var processCmd = &cobra.Command{
@@ -192,6 +216,8 @@ Use a flag '-i' ou '--interactive' para visualizar as miniaturas ANSI das imagen
 			MinSize:     processMinSize,
 			Interactive: processInteractive,
 			Verbose:     processVerbose,
+			TriageModel: processTriageModel,
+			NoTriage:    processNoTriage,
 		})
 	},
 }
@@ -202,6 +228,8 @@ func init() {
 	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
 	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	processCmd.Flags().BoolVarP(&processInteractive, "interactive", "i", false, "Exibe formulário interativo com preview ANSI para selecionar quais imagens colorir e substituir no novo .docx")
+	processCmd.Flags().StringVar(&processTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
+	processCmd.Flags().BoolVar(&processNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens elegíveis diretamente")
 
 	RootCmd.AddCommand(processCmd)
 	docxCmd.AddCommand(processCmd)

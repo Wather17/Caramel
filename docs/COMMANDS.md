@@ -80,7 +80,19 @@ caramel process <caminho-do-arquivo.docx> [flags]
 | `--interactive` | `-i` | bool | `false` | Habilita modo interativo com preview ANSI TrueColor no terminal. |
 | `--output` | `-o` | string | `imagens <nome_do_arquivo>` | Diretório de destino do novo `.docx` e das imagens. |
 | `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--triage-model` | | string | `google/gemma-4-26b-a4b-it:free` | Modelo de visão da triagem de economia (gratuito por padrão). |
+| `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens elegíveis diretamente. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
+
+### Triagem de Economia (padrão ativada)
+
+Antes de enviar cada imagem para a coloração (etapa paga), o Caramel executa uma triagem em duas camadas:
+
+1. **Análise local (custo zero):** mede a saturação de cor da imagem — se ela já estiver colorida, é pulada imediatamente.
+2. **Modelo de visão gratuito (Gemma 4):** decide se a imagem em P&B é uma ilustração colorível ou apenas texto/tabela/diagrama.
+
+Imagens reprovadas são **puladas** (não são substituídas no `.docx`) e reportadas no resumo final.
+Em caso de erro na triagem (ex: limite do free tier), a imagem é colorida normalmente (**fail-open**) — nenhuma ilustração legítima é perdida.
 
 ### Exemplos Prático
 ```bash
@@ -114,6 +126,8 @@ caramel docx extract <arquivo.docx> [flags]
 | `--interactive` | `-i` | bool | `false` | Abre formulário interativo de seleção de imagens. |
 | `--colorize`| `-c` | bool | `false` | Colora automaticamente as imagens extraídas usando IA. |
 | `--model` | `-m` | string | `google/gemini-3.1-flash-image-preview` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--triage-model` | | string | `google/gemma-4-26b-a4b-it:free` | Modelo de visão da triagem de economia (gratuito por padrão). |
+| `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens elegíveis diretamente. |
 
 ---
 
@@ -140,6 +154,8 @@ caramel colorize <imagem | pasta | arquivo.docx> [flags]
 | `--min-size` | `-s` | string | `20KB` | Tamanho mínimo da imagem ao processar `.docx` (ex: `20KB`, `50KB`, `0` para todas). |
 | `--output` | `-o` | string | Pasta original ou pasta de imagens do docx | Diretório onde os arquivos/imagens serão salvos. |
 | `--model` | `-m` | string | `google/gemini-2.5-flash-image` | Modelo de IA multimodal a ser utilizado no OpenRouter. |
+| `--triage-model` | | string | `google/gemma-4-26b-a4b-it:free` | Modelo de visão da triagem de economia (gratuito por padrão). |
+| `--no-triage` | | bool | `false` | Desativa a triagem e colore todas as imagens selecionadas diretamente. |
 | `--verbose`| `-v` | bool | `false` | Exibe o log de depuração da API. |
 
 ### Exemplos Práticos

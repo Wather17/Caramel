@@ -12,23 +12,27 @@ import (
 
 // PipelineResult guarda o resumo da execução do pipeline automatizado
 type PipelineResult struct {
-	DocxPath         string
-	OutputDir        string
-	RebuiltDocxPath  string
-	TotalExtracted   int
-	TotalSkipped     int
-	TotalColorized   int
-	Results          []ai.ColorizeResult
-	SkippedImages    []docx.ExtractedImage
+	DocxPath           string
+	OutputDir          string
+	RebuiltDocxPath    string
+	TotalExtracted     int
+	TotalSkipped       int
+	TotalColorized     int
+	TotalTriageSkipped int
+	Results            []ai.ColorizeResult
+	SkippedImages      []docx.ExtractedImage
+	TriageSkipped      []ai.TriageSkipInfo
 }
 
 // RunDocxPipeline executa o fluxo completo:
 // 1. Extração automática de todas as imagens contidas no .docx (filtrando por tamanho mínimo)
 // 2. Sanitização automática do nome do diretório de destino
-// 3. Coloração de cada imagem via IA (OpenRouter / Nano Banana 2)
-// 4. Redimensionamento para o tamanho original das imagens
-// 5. Reconstrução de um novo arquivo .docx com as imagens substituídas
-func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model string, minSizeBytes int64, verbose bool) (*PipelineResult, error) {
+// 3. Triagem de economia por imagem (análise local de saturação + LLM de visão barata),
+//    pulando imagens que não precisam de coloração (fail-open em caso de erro)
+// 4. Coloração de cada imagem aprovada via IA (OpenRouter / Nano Banana 2)
+// 5. Redimensionamento para o tamanho original das imagens
+// 6. Reconstrução de um novo arquivo .docx com as imagens substituídas
+func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model string, minSizeBytes int64, verbose bool, triageModel string, noTriage bool) (*PipelineResult, error) {
 	targetDir := outputDir
 	if targetDir == "" {
 		targetDir = docx.SanitizeFolderName(docxPath)
@@ -52,14 +56,35 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 	}
 
 	// 2. Colora cada imagem mantida e redimensiona para a dimensão original
+	colorizeOpts := ai.ColorizeOptions{
+		OutputDir:     targetDir,
+		APIKey:        apiKey,
+		Model:         model,
+		TriageModel:   triageModel,
+		DisableTriage: noTriage,
+		Verbose:       verbose,
+	}
+
 	var colorizedResults []ai.ColorizeResult
+	var triageSkipped []ai.TriageSkipInfo
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ai.ColorizeSingleImage(imgPath, targetDir, apiKey, model, verbose)
+		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
 			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
+			continue
+		}
+
+		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
+		if res.Skipped {
+			fmt.Printf("⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
+			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
+				Name:   img.OriginalName,
+				Stage:  res.SkipStage,
+				Reason: res.SkipReason,
+			})
 			continue
 		}
 
@@ -87,19 +112,21 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 	}
 
 	return &PipelineResult{
-		DocxPath:         docxPath,
-		OutputDir:        targetDir,
-		RebuiltDocxPath:  rebuiltDocxPath,
-		TotalExtracted:   extractRes.TotalExtracted,
-		TotalSkipped:     extractRes.TotalSkipped,
-		TotalColorized:   len(colorizedResults),
-		Results:          colorizedResults,
-		SkippedImages:    extractRes.SkippedImages,
+		DocxPath:           docxPath,
+		OutputDir:          targetDir,
+		RebuiltDocxPath:    rebuiltDocxPath,
+		TotalExtracted:     extractRes.TotalExtracted,
+		TotalSkipped:       extractRes.TotalSkipped,
+		TotalColorized:     len(colorizedResults),
+		TotalTriageSkipped: len(triageSkipped),
+		Results:            colorizedResults,
+		SkippedImages:      extractRes.SkippedImages,
+		TriageSkipped:      triageSkipped,
 	}, nil
 }
 
 // RunDocxPipelineSelected executa o pipeline apenas nas imagens pré-selecionadas pelo usuário
-func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, model string, selectedImages []docx.ExtractedImage, verbose bool) (*PipelineResult, error) {
+func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, model string, selectedImages []docx.ExtractedImage, verbose bool, triageModel string, noTriage bool) (*PipelineResult, error) {
 	targetDir := outputDir
 	if targetDir == "" {
 		targetDir = docx.SanitizeFolderName(docxPath)
@@ -121,14 +148,35 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 	defer os.RemoveAll(tempExtractDir)
 
 	// 2. Colora cada imagem selecionada e redimensiona para a dimensão original
+	colorizeOpts := ai.ColorizeOptions{
+		OutputDir:     targetDir,
+		APIKey:        apiKey,
+		Model:         model,
+		TriageModel:   triageModel,
+		DisableTriage: noTriage,
+		Verbose:       verbose,
+	}
+
 	var colorizedResults []ai.ColorizeResult
+	var triageSkipped []ai.TriageSkipInfo
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ai.ColorizeSingleImage(imgPath, targetDir, apiKey, model, verbose)
+		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
 			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
+			continue
+		}
+
+		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
+		if res.Skipped {
+			fmt.Printf("⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
+			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
+				Name:   img.OriginalName,
+				Stage:  res.SkipStage,
+				Reason: res.SkipReason,
+			})
 			continue
 		}
 
@@ -155,11 +203,13 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 	}
 
 	return &PipelineResult{
-		DocxPath:        docxPath,
-		OutputDir:       targetDir,
-		RebuiltDocxPath: rebuiltDocxPath,
-		TotalExtracted:  extractRes.TotalExtracted,
-		TotalColorized:  len(colorizedResults),
-		Results:         colorizedResults,
+		DocxPath:           docxPath,
+		OutputDir:          targetDir,
+		RebuiltDocxPath:    rebuiltDocxPath,
+		TotalExtracted:     extractRes.TotalExtracted,
+		TotalColorized:     len(colorizedResults),
+		TotalTriageSkipped: len(triageSkipped),
+		Results:            colorizedResults,
+		TriageSkipped:      triageSkipped,
 	}, nil
 }

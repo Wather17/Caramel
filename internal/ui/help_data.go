@@ -173,7 +173,11 @@ ou processar documentos .docx diretamente com a IA do OpenRouter.
 Ao receber um arquivo .docx:
  1. Executa o pipeline automatizado de extração, coloração e redimensionamento;
  2. Reconstrói um novo arquivo Word colorido ('<nome> colorida.docx');
- 3. Suporta a flag -i para seleção interativa com preview ANSI no terminal.`,
+ 3. Suporta a flag -i para seleção interativa com preview ANSI no terminal.
+
+Antes de colorir, uma triagem de economia analisa cada imagem localmente (saturação) e com um
+modelo de visão gratuito: imagens já coloridas ou contendo apenas texto/tabelas são puladas
+automaticamente, evitando gastos desnecessários. Use --no-triage para desativar.`,
 			Syntax: "caramel colorize <imagem | pasta | arquivo.docx> [flags]",
 			Keywords: []string{
 				"colorize", "color", "colorir", "ia", "openrouter", "docx", "imagem", "png", "jpg", "foto", "desenho",
@@ -183,6 +187,8 @@ Ao receber um arquivo .docx:
 				{Flag: "-a, --all", Description: "Colora todas as imagens encontradas sem abrir formulário de seleção."},
 				{Flag: "-s, --min-size", Description: "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0')."},
 				{Flag: "-m, --model", Description: "Modelo de IA multimodal do OpenRouter (padrão: google/gemini-3.1-flash-image-preview)."},
+				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: google/gemma-4-26b-a4b-it:free)."},
+				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens selecionadas diretamente."},
 				{Flag: "-o, --output", Description: "Diretório de destino para salvar imagens/documento coloridos."},
 				{Flag: "-v, --verbose", Description: "Exibe detalhes de depuração e resposta da API."},
 			},
@@ -222,6 +228,8 @@ O Caramel irá:
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo com checkboxes para você escolher visualmente quais imagens deseja colorir."},
 				{Flag: "-s, --min-size", Description: "Tamanho mínimo das imagens a serem processadas (ex: '20KB', '50KB'). Ignora logos/brasões."},
 				{Flag: "-m, --model", Description: "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)."},
+				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: google/gemma-4-26b-a4b-it:free)."},
+				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens elegíveis diretamente."},
 				{Flag: "-o, --output", Description: "Diretório personalizado onde as imagens intermediárias serão salvas."},
 				{Flag: "-v, --verbose", Description: "Exibe detalhes técnicos de execução e depuração no terminal."},
 			},
@@ -258,6 +266,8 @@ Você também pode apenas listar as imagens para inspecionar o conteúdo sem ext
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo para você selecionar apenas as figuras que deseja salvar."},
 				{Flag: "-c, --colorize", Description: "Ativa a IA para colorir as imagens extraídas."},
 				{Flag: "-s, --min-size", Description: "Define o tamanho mínimo para filtrar figuras (padrão: '20KB')."},
+				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: google/gemma-4-26b-a4b-it:free)."},
+				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens elegíveis diretamente."},
 				{Flag: "-o, --output", Description: "Diretório de saída para salvar as imagens."},
 			},
 			Examples: []ExampleDoc{

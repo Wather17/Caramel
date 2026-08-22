@@ -27,4 +27,14 @@ func TestGetPromptSynthesizerPrompt(t *testing.T) {
 	}
 }
 
+func TestGetTriagePrompt(t *testing.T) {
+	prompt := prompts.GetTriagePrompt()
+	if prompt == "" {
+		t.Error("Esperado prompt de triagem não vazio")
+	}
+	if !strings.Contains(prompt, "should_colorize") {
+		t.Errorf("Prompt de triagem deve exigir resposta JSON com a chave 'should_colorize', obtido: %s", prompt)
+	}
+}
+
 
