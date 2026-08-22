@@ -13,10 +13,10 @@ func TestSanitizeSlug(t *testing.T) {
 		name     string
 		expected string
 	}{
-		{1, "Maçã", "01_ma"},
+		{1, "Maçã", "01_maçã"},
 		{2, "Banana Prata", "02_banana_prata"},
 		{10, "Cachorro & Gato", "10_cachorro__gato"},
-		{3, "   Espaços   ", "03_espaos"},
+		{3, "   Espaços   ", "03_espaços"},
 		{5, "!!!", "05_item"},
 	}
 
