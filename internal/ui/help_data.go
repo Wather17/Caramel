@@ -185,7 +185,7 @@ automaticamente, evitando gastos desnecessários. Use --no-triage para desativar
 			Flags: []FlagDoc{
 				{Flag: "-i, --interactive", Description: "Habilita seleção interativa com preview ANSI TrueColor no terminal."},
 				{Flag: "-a, --all", Description: "Colora todas as imagens encontradas sem abrir formulário de seleção."},
-				{Flag: "-s, --min-size", Description: "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0')."},
+				{Flag: "-s, --min-size", Description: "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)."},
 				{Flag: "-m, --model", Description: "Modelo de IA multimodal do OpenRouter (padrão: google/gemini-3.1-flash-image-preview)."},
 				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: qwen/qwen3.7-flash)."},
 				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens selecionadas diretamente."},
@@ -226,7 +226,7 @@ O Caramel irá:
 			},
 			Flags: []FlagDoc{
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo com checkboxes para você escolher visualmente quais imagens deseja colorir."},
-				{Flag: "-s, --min-size", Description: "Tamanho mínimo das imagens a serem processadas (ex: '20KB', '50KB'). Ignora logos/brasões."},
+				{Flag: "-s, --min-size", Description: "Tamanho mínimo das imagens a serem processadas (ex: '20KB', '50KB', '0' para todas)."},
 				{Flag: "-m, --model", Description: "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)."},
 				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: qwen/qwen3.7-flash)."},
 				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens elegíveis diretamente."},
@@ -265,7 +265,7 @@ Você também pode apenas listar as imagens para inspecionar o conteúdo sem ext
 				{Flag: "-l, --list", Description: "Apenas inspeciona e exibe a lista de imagens do arquivo sem salvá-las."},
 				{Flag: "-i, --interactive", Description: "Abre o menu interativo para você selecionar apenas as figuras que deseja salvar."},
 				{Flag: "-c, --colorize", Description: "Ativa a IA para colorir as imagens extraídas."},
-				{Flag: "-s, --min-size", Description: "Define o tamanho mínimo para filtrar figuras (padrão: '20KB')."},
+				{Flag: "-s, --min-size", Description: "Define o tamanho mínimo para filtrar figuras (padrão: '0' — todas)."},
 				{Flag: "--triage-model", Description: "Modelo de visão da triagem de economia (padrão: qwen/qwen3.7-flash)."},
 				{Flag: "--no-triage", Description: "Desativa a triagem e colora todas as imagens elegíveis diretamente."},
 				{Flag: "-o, --output", Description: "Diretório de saída para salvar as imagens."},

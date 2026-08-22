@@ -47,11 +47,6 @@ Ao receber um arquivo .docx:
 
 		// Se o alvo for um arquivo .docx, executa o pipeline unificado de DOCX
 		if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
-			effectiveMinSize := imgMinSize
-			if allFlag && !cmd.Flags().Changed("min-size") {
-				effectiveMinSize = "0"
-			}
-
 			isInteractive := interactiveFlag
 			if allFlag {
 				isInteractive = false
@@ -61,7 +56,7 @@ Ao receber um arquivo .docx:
 				DocxPath:    inputPath,
 				OutputDir:   imgOutputDir,
 				ModelName:   imgModelName,
-				MinSize:     effectiveMinSize,
+				MinSize:     imgMinSize,
 				Interactive: isInteractive,
 				Verbose:     verboseFlag,
 				TriageModel: imgTriageModel,
@@ -180,7 +175,7 @@ func isImageFile(path string) bool {
 func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou pasta do docx)")
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração")
-	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "20KB", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
+	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Colora todas as imagens encontradas sem abrir formulário de seleção")
