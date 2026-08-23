@@ -19,9 +19,11 @@ type PipelineResult struct {
 	TotalSkipped       int
 	TotalColorized     int
 	TotalTriageSkipped int
+	TotalFormatSkipped int
 	Results            []ai.ColorizeResult
 	SkippedImages      []docx.ExtractedImage
 	TriageSkipped      []ai.TriageSkipInfo
+	FormatSkipped      []docx.ExtractedImage
 }
 
 // RunDocxPipeline executa o fluxo completo:
@@ -67,9 +69,17 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 
 	var colorizedResults []ai.ColorizeResult
 	var triageSkipped []ai.TriageSkipInfo
+	var formatSkipped []docx.ExtractedImage
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
+		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
+		if !docx.IsColorableFormat(img.Format) {
+			fmt.Printf("⏭️  Pulada (formato não colorível): %s (%s)\n", img.OriginalName, img.Format)
+			formatSkipped = append(formatSkipped, img)
+			continue
+		}
+
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
 		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
@@ -111,7 +121,7 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		}
 	}
 
-	return &PipelineResult{
+return &PipelineResult{
 		DocxPath:           docxPath,
 		OutputDir:          targetDir,
 		RebuiltDocxPath:    rebuiltDocxPath,
@@ -119,9 +129,10 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		TotalSkipped:       extractRes.TotalSkipped,
 		TotalColorized:     len(colorizedResults),
 		TotalTriageSkipped: len(triageSkipped),
+		TotalFormatSkipped: len(formatSkipped),
 		Results:            colorizedResults,
-		SkippedImages:      extractRes.SkippedImages,
 		TriageSkipped:      triageSkipped,
+		FormatSkipped:      formatSkipped,
 	}, nil
 }
 
@@ -159,9 +170,17 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 
 	var colorizedResults []ai.ColorizeResult
 	var triageSkipped []ai.TriageSkipInfo
+	var formatSkipped []docx.ExtractedImage
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
+		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
+		if !docx.IsColorableFormat(img.Format) {
+			fmt.Printf("⏭️  Pulada (formato não colorível): %s (%s)\n", img.OriginalName, img.Format)
+			formatSkipped = append(formatSkipped, img)
+			continue
+		}
+
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
 		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
