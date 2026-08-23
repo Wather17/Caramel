@@ -188,7 +188,10 @@ func RenderGuideOverview() string {
 		label string
 		docs  []CommandHelpDoc
 	}{
-		{string(CategoryMedia), nil},
+		{string(CategoryDocx), nil},
+		{string(CategoryImage), nil},
+		{string(CategoryPrint), nil},
+		{string(CategoryRoutine), nil},
 		{string(CategoryConfig), nil},
 		{string(CategorySystem), nil},
 	}

@@ -12,18 +12,6 @@ import (
 	"caramel/internal/tools/pdf"
 	"caramel/internal/tools/pipeline"
 	"caramel/internal/ui"
-
-	"github.com/spf13/cobra"
-)
-
-var (
-	processOutputDir   string
-	processModelName   string
-	processMinSize     string
-	processVerbose     bool
-	processInteractive bool
-	processTriageModel string
-	processNoTriage    bool
 )
 
 // ProcessDocxOptions contém os parâmetros para execução do pipeline de processamento e reconstrução de .docx
@@ -198,58 +186,4 @@ func printTriageSummary(res *pipeline.PipelineResult) {
 		}
 		fmt.Printf(" │   └─ %s [%s]: %s\n", skipped.Name, stage, skipped.Reason)
 	}
-}
-
-var processCmd = &cobra.Command{
-	Use:     "process <arquivo.docx>",
-	Aliases: []string{"pipeline", "run"},
-	Short:   "Pipeline automatizado: extrai, colore e reconstrói o arquivo .docx com IA",
-	Long: `Executa o fluxo completo e automatizado para arquivos .docx:
-1. Inspeciona e extrai todas as imagens do documento .docx;
-2. Tria cada imagem com a triagem de economia (análise local de saturação + LLM de baixo custo):
-   brasões, logos, imagens já coloridas, textos, tabelas e jogos são pulados automaticamente;
-3. Colore cada ilustração aprovada utilizando IA multimodal (OpenRouter);
-4. Ajusta a proporção das imagens para o tamanho original;
-5. Reconstrói um novo arquivo .docx (ex: '<nome> colorida.docx') com as novas imagens.
-
-📚 QUANDO USAR:
-Use para transformar avaliações, apostilas ou atividades em preto e branco (P&B) em documentos
-totalmente coloridos e atrativos para os alunos. A triagem de economia evita gastos desnecessários
-de API — apenas ilustrações P&B reais são enviadas para a coloração.
-Use a flag '-i'/'--interactive' para visualizar as miniaturas ANSI das imagens do .docx e escolher
-quais deseja colorir. Use '--no-triage' para colorir tudo diretamente.`,
-	Example: `# Processar um arquivo .docx de forma 100% automatizada
-caramel process avaliacao_historia.docx
-
-# Escolher interativamente quais imagens colorir antes de recriar o arquivo
-caramel process apostila_ciencias.docx -i
-
-# Processar ignorando apenas imagens menores que 50KB
-caramel process livro_exercicios.docx -s 50KB`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return RunProcessDocx(ProcessDocxOptions{
-			DocxPath:    args[0],
-			OutputDir:   processOutputDir,
-			ModelName:   processModelName,
-			MinSize:     processMinSize,
-			Interactive: processInteractive,
-			Verbose:     processVerbose,
-			TriageModel: processTriageModel,
-			NoTriage:    processNoTriage,
-		})
-	},
-}
-
-func init() {
-	processCmd.Flags().StringVarP(&processOutputDir, "output", "o", "", "Diretório onde os arquivos serão salvos (padrão: imagens <nome_do_arquivo>)")
-	processCmd.Flags().StringVarP(&processModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
-	processCmd.Flags().StringVarP(&processMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem para ser processada (ex: '20KB', '50KB', '0' para todas)")
-	processCmd.Flags().BoolVarP(&processVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
-	processCmd.Flags().BoolVarP(&processInteractive, "interactive", "i", false, "Exibe formulário interativo com preview ANSI para selecionar quais imagens colorir e substituir no novo .docx")
-	processCmd.Flags().StringVar(&processTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
-	processCmd.Flags().BoolVar(&processNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens elegíveis diretamente")
-
-	RootCmd.AddCommand(processCmd)
-	docxCmd.AddCommand(processCmd)
 }

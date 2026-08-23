@@ -33,7 +33,7 @@ var imageCmd = &cobra.Command{
 
 var imageColorizeCmd = &cobra.Command{
 	Use:     "colorize <imagem|diretorio|arquivo.docx>",
-	Aliases: []string{"color", "colorir"},
+	Aliases: []string{"color", "colorir", "process", "pipeline", "run"},
 	Short:   "Colora imagem(ns) ou documentos .docx em preto e branco usando IA (OpenRouter)",
 	Long: `Envia ilustrações em preto e branco para a IA e gera versões coloridas.
 Aceita arquivos de imagem individuais (PNG, JPG, WEBP), pastas inteiras ou arquivos .docx.
@@ -123,9 +123,10 @@ caramel colorize atividade.docx -i`,
 		// Ordena a lista de imagens de forma numérica natural (ex: image1, image2, ..., image10)
 		pdf.SortNatural(candidateImages)
 
-		// Se a flag --all (-a) for passada, seleciona todas sem abrir formulário interativo
+		// Seleciona todas sem formulário interativo quando --all ou --no-triage
+		// (a triagem desativada já implica processar tudo automaticamente)
 		var selectedImages []string
-		if allFlag {
+		if allFlag || imgNoTriage {
 			selectedImages = candidateImages
 		} else if interactiveFlag || len(candidateImages) > 1 {
 			selected, err := ui.SelectImageFilesWithPreviewInteractive(candidateImages)
@@ -189,13 +190,13 @@ func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
-	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Colora todas as imagens encontradas sem abrir formulário de seleção")
+	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Processa todas as imagens automaticamente, sem abrir o formulário de seleção")
 	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
-	imageColorizeCmd.Flags().BoolVar(&imgNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens selecionadas diretamente")
+	imageColorizeCmd.Flags().BoolVar(&imgNoTriage, "no-triage", false, "Desativa a triagem de economia e processa todas as imagens automaticamente, sem seleção")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
 
-	// Atalho direto no Root Cmd para aceitar 'caramel colorize <imagem|docx>'
+	// Atalho direto no Root Cmd para aceitar 'caramel colorize <imagem|docx>' (compat)
 	RootCmd.AddCommand(imageColorizeCmd)
 }

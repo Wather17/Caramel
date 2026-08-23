@@ -37,13 +37,13 @@ func TestSearchCommandDocs(t *testing.T) {
 		}
 		found2Up := false
 		for _, doc := range results {
-			if doc.Name == "caramel 2up" {
+			if doc.Name == "caramel print 2up" {
 				found2Up = true
 				break
 			}
 		}
 		if !found2Up {
-			t.Errorf("Esperava encontrar 'caramel 2up' nos resultados de 'figma'")
+			t.Errorf("Esperava encontrar 'caramel print 2up' nos resultados de 'figma'")
 		}
 	})
 
@@ -68,13 +68,13 @@ func TestSearchCommandDocs(t *testing.T) {
 		}
 		foundGenerate := false
 		for _, doc := range results {
-			if doc.Name == "caramel generate" {
+			if doc.Name == "caramel image generate" {
 				foundGenerate = true
 				break
 			}
 		}
 		if !foundGenerate {
-			t.Errorf("Esperava encontrar 'caramel generate' na busca por 'custom-style'")
+			t.Errorf("Esperava encontrar 'caramel image generate' na busca por 'custom-style'")
 		}
 	})
 
@@ -88,8 +88,8 @@ func TestSearchCommandDocs(t *testing.T) {
 
 func TestRenderSearchHelp(t *testing.T) {
 	out := ui.RenderSearchHelp("2up")
-	if !strings.Contains(out, "caramel 2up") {
-		t.Errorf("RenderSearchHelp para '2up' deveria conter 'caramel 2up'")
+	if !strings.Contains(out, "caramel print 2up") {
+		t.Errorf("RenderSearchHelp para '2up' deveria conter 'caramel print 2up'")
 	}
 
 	outEmpty := ui.RenderSearchHelp("termoinvalidoxyz123")
@@ -104,11 +104,11 @@ func TestRenderGuideOverview(t *testing.T) {
 	if !strings.Contains(out, "Guia Didático") {
 		t.Errorf("Overview deveria conter o cabeçalho 'Guia Didático'")
 	}
-	if !strings.Contains(out, "caramel cards") {
-		t.Errorf("Overview deveria listar 'caramel cards'")
+	if !strings.Contains(out, "caramel print cards") {
+		t.Errorf("Overview deveria listar 'caramel print cards'")
 	}
-	if !strings.Contains(out, "caramel generate") {
-		t.Errorf("Overview deveria listar 'caramel generate'")
+	if !strings.Contains(out, "caramel image generate") {
+		t.Errorf("Overview deveria listar 'caramel image generate'")
 	}
 	if !strings.Contains(out, "Configurações") {
 		t.Errorf("Overview deveria conter a categoria de Configurações")

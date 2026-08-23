@@ -43,19 +43,18 @@ func TestGetAllCommandDocs_ComandosEsperados(t *testing.T) {
 	docs := ui.GetAllCommandDocs()
 
 	expected := map[string]bool{
-		"caramel cards":          false,
-		"caramel colorize":       false,
-		"caramel process":        false,
-		"caramel generate":       false,
-		"caramel 2up":            false,
-		"caramel docx extract":   false,
-		"caramel routine process": false,
-		"caramel install":        false,
-		"caramel guide":          false,
-		"caramel version":        false,
-		"caramel config setup":   false,
-		"caramel config set":     false,
-		"caramel config show":    false,
+		"caramel print 2up":          false,
+		"caramel print cards":        false,
+		"caramel image colorize":     false,
+		"caramel image generate":     false,
+		"caramel docx extract":       false,
+		"caramel routine process":    false,
+		"caramel install":            false,
+		"caramel guide":              false,
+		"caramel version":            false,
+		"caramel config setup":       false,
+		"caramel config set":         false,
+		"caramel config show":        false,
 	}
 
 	for _, doc := range docs {

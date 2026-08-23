@@ -57,7 +57,7 @@ func init() {
 		// Tenta resolver os args como um caminho de comando real
 		if len(cleanArgs) > 0 {
 			target, _, err := RootCmd.Find(cleanArgs)
-			if err == nil && target != RootCmd && target.Runnable() {
+			if err == nil && target != RootCmd {
 				fmt.Print(ui.RenderStyledHelp(target))
 				return
 			}

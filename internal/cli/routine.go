@@ -32,7 +32,6 @@ var routineCmd = &cobra.Command{
 
 var routineProcessCmd = &cobra.Command{
 	Use:     "process <pasta_ou_arquivo.docx>",
-	Aliases: []string{"pipeline", "run"},
 	Short:   "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
 	Long: `Inspeciona arquivos .docx com as rotinas semanais de aula, extrai as informações de texto,
 envia ao OpenRouter para resumir e classificar os Campos de Experiência da BNCC,
