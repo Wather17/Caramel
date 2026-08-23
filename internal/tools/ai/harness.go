@@ -3,7 +3,6 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -201,25 +200,14 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 				}
 				mu.Unlock()
 
-				// Executa com retry com exponential backoff
-				maxRetries := 3
+				// Executa com retry seletivo (apenas falhas transitórias: 429, 5xx, rede)
 				var imgBytes []byte
 				var ext string
-				var genErr error
-
-				for attempt := 1; attempt <= maxRetries; attempt++ {
-					imgBytes, ext, genErr = client.GenerateImage(item.Prompt, cfg.ImageModel, cfg.Aspect)
-					if genErr == nil {
-						break
-					}
-
-					// Se for rate limit ou erro temporário, aplica jitter e backoff
-					if attempt < maxRetries {
-						backoff := time.Duration(attempt) * 1200 * time.Millisecond
-						jitter := time.Duration(rand.Intn(400)) * time.Millisecond
-						time.Sleep(backoff + jitter)
-					}
-				}
+				genErr := retryWithBackoff(3, func() error {
+					var e error
+					imgBytes, ext, e = client.GenerateImage(item.Prompt, cfg.ImageModel, cfg.Aspect)
+					return e
+				})
 
 				mu.Lock()
 				completedCount++

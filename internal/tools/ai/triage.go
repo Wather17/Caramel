@@ -71,7 +71,7 @@ func (c *Client) TriageImage(imagePath string, promptText string, modelOverride 
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("erro na comunicação com a API de triagem: %w", err)
+		return nil, &retryableError{err: fmt.Errorf("erro na comunicação com a API de triagem: %w", err)}
 	}
 	defer resp.Body.Close()
 
@@ -85,7 +85,7 @@ func (c *Client) TriageImage(imagePath string, promptText string, modelOverride 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API de triagem retornou status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, statusError(resp.StatusCode, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
