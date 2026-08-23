@@ -43,7 +43,30 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 | :--- | :--- |
 | `caramel config setup` | Assistente interativo de configuração de chaves |
 | `caramel config set` | Define o valor de uma chave diretamente |
-| `caramel config show` | Exibe local do arquivo e status das chaves |
+| `caramel config show` | Exibe local do arquivo e status das chaves/modelos |
+| `caramel config models` | TUI para escolher os modelos de IA (imagem, texto, triagem) |
+
+#### Chaves suportadas no `.env`
+
+| Chave | Descrição | Padrão |
+| :--- | :--- | :--- |
+| `OPENROUTER_API_KEY` | Chave de API do OpenRouter | — |
+| `MODEL_IMAGE` | Geração/coloração de imagens | `google/gemini-3.1-flash-image-preview` |
+| `MODEL_TEXT` | Síntese de prompts e rotinas | `deepseek/deepseek-v4-flash` |
+| `MODEL_TRIAGE` | Triagem de economia (visão) | `qwen/qwen3.7-flash` |
+
+**Prioridade de resolução dos modelos:** flag no comando (`-m`, `--text-model`, `--triage-model`) > valor salvo no `.env` > padrão de fábrica.
+
+```bash
+# Escolher modelos via TUI (busca incremental por categoria)
+caramel config models
+
+# Listar modelos de imagem em texto puro
+caramel config models --list --role image --limit 10
+
+# Definir um modelo diretamente
+caramel config set model_image google/gemini-3.1-flash-image
+```
 
 ### ℹ️ Sistema & Utilidades
 | Comando | Finalidade |

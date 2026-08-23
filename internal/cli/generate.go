@@ -145,6 +145,10 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 		}
 
+		// Resolve os modelos com prioridade: flag > config (.env) > default de fábrica
+		imageModel := resolveModel(genModelName, cmd.Flags().Changed("model"), cfg.ModelImage)
+		textModel := resolveModel(genTextModel, cmd.Flags().Changed("text-model"), cfg.ModelText)
+
 		client, err := ai.NewClient(cfg.OpenRouterAPIKey)
 		if err != nil {
 			return err
@@ -159,8 +163,8 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			CustomStyle: genCustomStyle,
 			OutputDir:   genOutputDir,
 			MaxWorkers:  genWorkers,
-			TextModel:   genTextModel,
-			ImageModel:  genModelName,
+			TextModel:   textModel,
+			ImageModel:  imageModel,
 			Aspect:      genAspect,
 			Verbose:     genVerbose,
 		}
@@ -311,8 +315,8 @@ func init() {
 	imageGenerateCmd.Flags().BoolVar(&genCards, "cards", true, "Gera layout HTML A4 de fichas com legendas pronto para impressão")
 	imageGenerateCmd.Flags().BoolVar(&gen2UpPDF, "2up", false, "Compila automaticamente todas as imagens geradas em um PDF 2-up A4")
 	imageGenerateCmd.Flags().BoolVarP(&genVerbose, "verbose", "v", false, "Exibe logs detalhados de depuração da API")
-	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens")
-	imageGenerateCmd.Flags().StringVar(&genTextModel, "text-model", ai.DefaultTextModel, "Modelo de IA para síntese de prompts")
+	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens (config: model_image)")
+	imageGenerateCmd.Flags().StringVar(&genTextModel, "text-model", ai.DefaultTextModel, "Modelo de IA para síntese de prompts (config: model_text)")
 
 	// Off-switches: permitem desligar comportamentos ligados por padrão
 	imageGenerateCmd.Flags().BoolVar(&genPreview, "no-preview", false, "Não renderiza miniaturas ANSI no terminal durante a geração")

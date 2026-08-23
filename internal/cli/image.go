@@ -61,23 +61,27 @@ caramel colorize atividade.docx -i`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputPath := args[0]
 
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			return err
+		}
+
+		// Resolve os modelos com prioridade: flag > config (.env) > default de fábrica
+		modelName := resolveModel(imgModelName, cmd.Flags().Changed("model"), cfg.ModelImage)
+		triageModel := resolveModel(imgTriageModel, cmd.Flags().Changed("triage-model"), cfg.ModelTriage)
+
 		// Se o alvo for um arquivo .docx, executa o pipeline unificado de DOCX
 		if strings.ToLower(filepath.Ext(inputPath)) == ".docx" {
 			return RunProcessDocx(ProcessDocxOptions{
 				DocxPath:    inputPath,
 				OutputDir:   imgOutputDir,
-				ModelName:   imgModelName,
+				ModelName:   modelName,
 				MinSize:     imgMinSize,
 				Interactive: interactiveFlag,
 				Verbose:     verboseFlag,
-				TriageModel: imgTriageModel,
+				TriageModel: triageModel,
 				NoTriage:    imgNoTriage,
 			})
-		}
-
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			return err
 		}
 
 		if cfg.OpenRouterAPIKey == "" {
@@ -145,7 +149,7 @@ caramel colorize atividade.docx -i`,
 		// Determina diretório final de saída para imagens coloridas
 		defaultOutputDir := filepath.Dir(inputPath)
 
-		fmt.Printf("🎨 Processando %d imagem(ns) com o modelo '%s'...\n", len(selectedImages), imgModelName)
+		fmt.Printf("🎨 Processando %d imagem(ns) com o modelo '%s'...\n", len(selectedImages), modelName)
 
 		for i, imgPath := range selectedImages {
 			targetDir := imgOutputDir
@@ -157,8 +161,8 @@ caramel colorize atividade.docx -i`,
 			res, err := ai.ColorizeSingleImage(imgPath, ai.ColorizeOptions{
 				OutputDir:     targetDir,
 				APIKey:        cfg.OpenRouterAPIKey,
-				Model:         imgModelName,
-				TriageModel:   imgTriageModel,
+				Model:         modelName,
+				TriageModel:   triageModel,
 				DisableTriage: imgNoTriage,
 				Verbose:       verboseFlag,
 			})
@@ -186,12 +190,12 @@ func isImageFile(path string) bool {
 
 func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou pasta do docx)")
-	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração")
+	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (config: model_image)")
 	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
 	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Processa todas as imagens automaticamente, sem abrir o formulário de seleção")
-	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
+	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração (config: model_triage)")
 	imageColorizeCmd.Flags().BoolVar(&imgNoTriage, "no-triage", false, "Desativa a triagem de economia e processa todas as imagens automaticamente, sem seleção")
 
 	imageCmd.AddCommand(imageColorizeCmd)

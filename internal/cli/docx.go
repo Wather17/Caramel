@@ -96,6 +96,15 @@ caramel docx extract mapa_biologia.docx -c`,
 			targetDir = docx.SanitizeFolderName(docxPath)
 		}
 
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			return err
+		}
+
+		// Resolve os modelos com prioridade: flag > config (.env) > default de fábrica
+		modelName := resolveModel(modelName, cmd.Flags().Changed("model"), cfg.ModelImage)
+		triageModel := resolveModel(docxTriageModel, cmd.Flags().Changed("triage-model"), cfg.ModelTriage)
+
 		// Se a flag --interactive (-i) estiver ativada, exibe a TUI de seleção de imagens
 		if docxInteractive {
 			allImages, err := docx.ListImages(docxPath)
@@ -125,16 +134,12 @@ caramel docx extract mapa_biologia.docx -c`,
 			}
 
 			if colorize {
-				cfg, err := config.LoadConfig()
-				if err != nil {
-					return err
-				}
 				if cfg.OpenRouterAPIKey == "" {
 					return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 				}
 
-			fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
-			pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose, docxTriageModel, docxNoTriage)
+				fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
+				pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose, triageModel, docxNoTriage)
 			if err != nil {
 				return err
 			}
@@ -167,17 +172,12 @@ caramel docx extract mapa_biologia.docx -c`,
 
 		// Se a flag --colorize (-c) foi ativada
 		if colorize {
-			cfg, err := config.LoadConfig()
-			if err != nil {
-				return err
-			}
-
 			if cfg.OpenRouterAPIKey == "" {
 				return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>' para poder utilizar a IA de coloração")
 			}
 
-		fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-		pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose, docxTriageModel, docxNoTriage)
+			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
+			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose, triageModel, docxNoTriage)
 		if err != nil {
 			return err
 		}
@@ -238,11 +238,11 @@ func init() {
 	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
 	docxExtractCmd.Flags().BoolVarP(&listOnly, "list", "l", false, "Apenas lista as imagens encontradas sem extraí-las para o disco")
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
-	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (padrão: google/gemini-3.1-flash-image-preview)")
+	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (config: model_image)")
 	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "0", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
 	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")
-	docxExtractCmd.Flags().StringVar(&docxTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração")
+	docxExtractCmd.Flags().StringVar(&docxTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração (config: model_triage)")
 	docxExtractCmd.Flags().BoolVar(&docxNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens elegíveis diretamente")
 
 	// Registra subcomandos
