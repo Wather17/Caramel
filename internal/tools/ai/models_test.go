@@ -136,3 +136,89 @@ func TestSearchModelsAndSortByPrice(t *testing.T) {
 		t.Errorf("Busca vazia deveria retornar todos, obtido %d", len(found))
 	}
 }
+
+func TestPricedModels(t *testing.T) {
+	models := []ai.Model{
+		{ID: "openrouter/auto", PromptPrice: -1},
+		{ID: "gratis/model", PromptPrice: 0},
+		{ID: "pago/model", PromptPrice: 0.5},
+	}
+
+	got := ai.PricedModels(models)
+	if len(got) != 2 || got[0].ID != "gratis/model" || got[1].ID != "pago/model" {
+		t.Errorf("esperado apenas modelos com preço >= 0 na ordem original, obtido %+v", got)
+	}
+	if len(ai.PricedModels(nil)) != 0 {
+		t.Error("lista nula deveria retornar lista vazia")
+	}
+}
+
+func TestSortModelsByPriceAndName(t *testing.T) {
+	baratos := []ai.Model{
+		{ID: "c/caro", PromptPrice: 3.0},
+		{ID: "a/barato", PromptPrice: 0.1},
+		{ID: "b/medio", PromptPrice: 1.5},
+	}
+	ai.SortModelsByPrice(baratos)
+	for i, id := range []string{"a/barato", "b/medio", "c/caro"} {
+		if baratos[i].ID != id {
+			t.Fatalf("SortModelsByPrice: esperado %s na posição %d, obtido %s", id, i, baratos[i].ID)
+		}
+	}
+
+	nomes := []ai.Model{{ID: "z/model"}, {ID: "a/model"}, {ID: "m/model"}}
+	ai.SortModelsByName(nomes)
+	for i, id := range []string{"a/model", "m/model", "z/model"} {
+		if nomes[i].ID != id {
+			t.Fatalf("SortModelsByName: esperado %s na posição %d, obtido %s", id, i, nomes[i].ID)
+		}
+	}
+}
+
+func TestModalitiesFallbackViaPredicados(t *testing.T) {
+	tests := []struct {
+		name          string
+		mod           ai.Model
+		wantImage     bool
+		wantVision    bool
+		wantTextModel bool
+	}{
+		{
+			name:       "fallback para campo modality texto->texto",
+			mod:        ai.Model{Architecture: ai.Arch{Modality: "text->text"}},
+			wantTextModel: true,
+		},
+		{
+			name:      "fallback multimodal text+image->image",
+			mod:       ai.Model{Architecture: ai.Arch{Modality: "text+image->image"}},
+			wantImage: true,
+		},
+		{
+			name: "listas explicitas tem prioridade sobre modality",
+			mod: ai.Model{Architecture: ai.Arch{
+				Modality:         "text->text",
+				InputModalities:  []string{"image"},
+				OutputModalities: []string{"text"},
+			}},
+			wantVision: true,
+		},
+		{
+			name: "sem modalidades nao é nada",
+			mod:  ai.Model{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mod.IsImageModel(); got != tt.wantImage {
+				t.Errorf("IsImageModel() = %v, esperado %v", got, tt.wantImage)
+			}
+			if got := tt.mod.IsVisionModel(); got != tt.wantVision {
+				t.Errorf("IsVisionModel() = %v, esperado %v", got, tt.wantVision)
+			}
+			if got := tt.mod.IsTextModel(); got != tt.wantTextModel {
+				t.Errorf("IsTextModel() = %v, esperado %v", got, tt.wantTextModel)
+			}
+		})
+	}
+}

@@ -33,6 +33,23 @@ func TestStatusError_RetryableAndTruncation(t *testing.T) {
 	}
 }
 
+func TestRetryableErrorUnwrap(t *testing.T) {
+	inner := fmt.Errorf("conexão resetada")
+	wrapped := fmt.Errorf("falha ao colorir: %w", &retryableError{err: inner})
+
+	if !strings.Contains(wrapped.Error(), "conexão resetada") {
+		t.Errorf("Unwrap deveria expor o erro original, obtido: %v", wrapped)
+	}
+
+	re, ok := statusError(http.StatusServiceUnavailable, []byte("lento")).(*retryableError)
+	if !ok {
+		t.Fatal("503 deveria produzir retryableError")
+	}
+	if re.Unwrap() == nil || !strings.Contains(re.Unwrap().Error(), "503") {
+		t.Errorf("Unwrap do retryableError deveria preservar a mensagem de status, obtido: %v", re.Unwrap())
+	}
+}
+
 func TestRetryWithBackoff_OnlyRetriesTransient(t *testing.T) {
 	old := retryBackoffBase
 	retryBackoffBase = time.Millisecond

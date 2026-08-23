@@ -228,7 +228,9 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 		TotalExtracted:     extractRes.TotalExtracted,
 		TotalColorized:     len(colorizedResults),
 		TotalTriageSkipped: len(triageSkipped),
+		TotalFormatSkipped: len(formatSkipped),
 		Results:            colorizedResults,
 		TriageSkipped:      triageSkipped,
+		FormatSkipped:      formatSkipped,
 	}, nil
 }

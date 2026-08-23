@@ -1,10 +1,17 @@
 package ai_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"caramel/internal/tools/ai"
@@ -119,5 +126,86 @@ func TestGenerateImage_AspectAuto(t *testing.T) {
 	imgCfg := captured["image_config"].(map[string]interface{})
 	if ratio, _ := imgCfg["aspect_ratio"].(string); ratio != "auto" {
 		t.Errorf("esperado aspect_ratio 'auto', obtido '%v'", imgCfg["aspect_ratio"])
+	}
+}
+
+func TestColorizeImageErrorBranches(t *testing.T) {
+	// PNG válido em arquivo temporário para o encode da requisição
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			img.Set(x, y, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("falha ao gerar png: %v", err)
+	}
+	imgPath := filepath.Join(t.TempDir(), "origem.png")
+	if err := os.WriteFile(imgPath, buf.Bytes(), 0644); err != nil {
+		t.Fatalf("falha ao salvar png: %v", err)
+	}
+
+	client, _ := ai.NewClient("sk-test")
+
+	tests := []struct {
+		name      string
+		responder func(w http.ResponseWriter, r *http.Request)
+		wantMsg   string
+	}{
+		{
+			name: "erro http permanente",
+			responder: func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, `{"error":{"message":"sem créditos"}}`, http.StatusBadRequest)
+			},
+			wantMsg: "400",
+		},
+		{
+			name: "erro http transitorio",
+			responder: func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "gateway", http.StatusBadGateway)
+			},
+			wantMsg: "502",
+		},
+		{
+			name: "api devolve objeto de erro",
+			responder: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"error":{"message":"quota excedida"}}`)
+			},
+			wantMsg: "quota excedida",
+		},
+		{
+			name: "resposta sem escolhas",
+			responder: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"choices":[]}`)
+			},
+			wantMsg: "resposta vazia",
+		},
+		{
+			name: "conteudo textual sem imagem",
+			responder: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"desculpe, nao sei desenhar"}}]}`)
+			},
+			wantMsg: "falha ao extrair imagem",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(tt.responder))
+			defer srv.Close()
+
+			old := ai.OpenRouterAPIURL
+			ai.OpenRouterAPIURL = srv.URL
+			defer func() { ai.OpenRouterAPIURL = old }()
+
+			_, _, err := client.ColorizeImage(imgPath, "colorize", "m/imagem")
+			if err == nil || !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("esperado erro contendo %q, obtido: %v", tt.wantMsg, err)
+			}
+		})
 	}
 }
