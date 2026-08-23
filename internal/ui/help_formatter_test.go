@@ -114,3 +114,40 @@ func TestRenderGuideOverview(t *testing.T) {
 		t.Errorf("Overview deveria conter a categoria de Configurações")
 	}
 }
+func TestRenderStyledHelpGrupoComSubcomandos(t *testing.T) {
+	sub := &cobra.Command{
+		Use:   "extract <arquivo.docx>",
+		Short: "Extrai imagens",
+		Run:   func(cmd *cobra.Command, args []string) {},
+	}
+	group := &cobra.Command{
+		Use:     "docx",
+		Example: "caramel docx extract arquivo.docx",
+	}
+	group.AddCommand(sub)
+
+	output := ui.RenderStyledHelp(group)
+
+	if !strings.Contains(output, "SUBCOMANDOS DISPONÍVEIS") {
+		t.Errorf("grupo deveria listar subcomandos, obtido: %s", output)
+	}
+	if !strings.Contains(output, "extract") {
+		t.Errorf("subcomando 'extract' deveria aparecer na listagem, obtido: %s", output)
+	}
+	if !strings.Contains(output, "EXEMPLOS") || !strings.Contains(output, "arquivo.docx") {
+		t.Errorf("exemplos do comando deveriam ser renderizados, obtido: %s", output)
+	}
+}
+
+func TestRenderStyledHelpSemLongUsaShort(t *testing.T) {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Mostra a versão",
+		Run:   func(cmd *cobra.Command, args []string) {},
+	}
+
+	output := ui.RenderStyledHelp(cmd)
+	if !strings.Contains(output, "Mostra a versão") {
+		t.Errorf("sem Long, a Short deveria ser usada como descrição, obtido: %s", output)
+	}
+}

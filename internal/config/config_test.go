@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"caramel/internal/config"
@@ -97,5 +98,33 @@ func TestEnvModelPriority(t *testing.T) {
 	}
 	if cfg.ModelImage != "google/do-sistema" {
 		t.Errorf("Variável do SO deveria ter prioridade: esperado %q, obtido %q", "google/do-sistema", cfg.ModelImage)
+	}
+}
+
+func TestGetConfigDirComXDG(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	got, err := config.GetConfigDir()
+	if err != nil {
+		t.Fatalf("GetConfigDir falhou: %v", err)
+	}
+	want := filepath.Join(tempDir, "caramel")
+	if got != want {
+		t.Errorf("esperado %q, obtido %q", want, got)
+	}
+}
+
+func TestGetEnvFilePathComXDG(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	got, err := config.GetEnvFilePath()
+	if err != nil {
+		t.Fatalf("GetEnvFilePath falhou: %v", err)
+	}
+	want := filepath.Join(tempDir, "caramel", ".env")
+	if got != want {
+		t.Errorf("esperado %q, obtido %q", want, got)
 	}
 }

@@ -109,3 +109,71 @@ func TestRebuildDocx(t *testing.T) {
 		}
 	}
 }
+
+func TestResizeToMatchErrorBranches(t *testing.T) {
+	dir := t.TempDir()
+
+	// Original inexistente
+	if _, err := docx.ResizeToMatch(filepath.Join(dir, "nao-existe.png"), "qualquer"); err == nil {
+		t.Error("original inexistente deveria retornar erro")
+	}
+
+	// Original corrompida (não decodificável)
+	corrupta := filepath.Join(dir, "corrompida.png")
+	if err := os.WriteFile(corrupta, []byte("isto não é um png"), 0644); err != nil {
+		t.Fatalf("falha ao criar fixture: %v", err)
+	}
+	if _, err := docx.ResizeToMatch(corrupta, corrupta); err == nil {
+		t.Error("imagem original inválida deveria retornar erro")
+	}
+
+	// Colorizada inexistente
+	valida := gerarPngAux(t, filepath.Join(dir, "valida.png"), 4)
+	if _, err := docx.ResizeToMatch(valida, filepath.Join(dir, "colorida-fantasma.png")); err == nil {
+		t.Error("colorida inexistente deveria retornar erro")
+	}
+
+	// Colorizada corrompida
+	coloridaCorrupta := filepath.Join(dir, "colorida-corrupta.png")
+	if err := os.WriteFile(coloridaCorrupta, []byte("lixo"), 0644); err != nil {
+		t.Fatalf("falha ao criar fixture: %v", err)
+	}
+	if _, err := docx.ResizeToMatch(valida, coloridaCorrupta); err == nil {
+		t.Error("imagem colorida inválida deveria retornar erro")
+	}
+}
+
+func TestResizeToMatchMesmasDimensoesNaoReencoda(t *testing.T) {
+	dir := t.TempDir()
+	original := gerarPngAux(t, filepath.Join(dir, "orig.png"), 6)
+
+	// Colorizada idêntica em dimensões: deve devolver os bytes sem re-encode
+	bytes1, err := docx.ResizeToMatch(original, original)
+	if err != nil {
+		t.Fatalf("ResizeToMatch falhou: %v", err)
+	}
+	noDisco, _ := os.ReadFile(original)
+	if !bytes.Equal(bytes1, noDisco) {
+		t.Error("dimensões iguais deveriam devolver os bytes originais do arquivo")
+	}
+}
+
+// gerarPngAux grava um PNG quadrado cinza no caminho indicado e retorna o caminho
+func gerarPngAux(t *testing.T, path string, size int) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			img.Set(x, y, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("falha ao criar imagem: %v", err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatalf("falha ao encodar imagem: %v", err)
+	}
+	return path
+}
