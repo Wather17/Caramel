@@ -24,15 +24,9 @@ var (
 	pdfQuality         int
 )
 
-var pdfCmd = &cobra.Command{
-	Use:   "pdf",
-	Short: "Comandos para manipulação e geração de PDFs para impressão",
-	Long:  `Subcomandos para montagem de PDFs pedagógicos em layout 2-up (2 por folha), impressão e otimização.`,
-}
-
 var pdf2UpCmd = &cobra.Command{
 	Use:     "2up <imagem_ou_pasta>",
-	Aliases: []string{"print", "layout"},
+	Aliases: []string{"layout"},
 	Short:   "Gera um PDF A4 Paisagem com 2 atividades lado a lado na mesma folha (economiza papel)",
 	Long: `Lê uma imagem isolada ou uma pasta de imagens (PNG, JPG, WEBP) e monta um PDF em orientação Paisagem 
 com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de corte central orientativa.
@@ -43,13 +37,13 @@ atividades lado a lado em uma única folha A4 — economiza papel e tinta. Image
 (landscape) são rotacionadas automaticamente para aproveitar a área útil, e imagens pesadas do
 Figma são comprimidas em memória para gerar PDFs leves (~500KB).`,
 	Example: `# Gerar PDF 2-up de uma pasta de atividades exportadas do Figma
-caramel 2up ./atividades_figma
+caramel print 2up ./atividades_figma
 
 # Gerar 2-up de uma prova única, duplicando-a no segundo slot
-caramel 2up prova_historia.png
+caramel print 2up prova_historia.png
 
 # Forçar preenchimento total do slot (cover) sem margem em branco
-caramel 2up ./fichas_estudo -f cover`,
+caramel print 2up ./fichas_estudo -f cover`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputArg := args[0]
@@ -152,9 +146,18 @@ func init() {
 	pdf2UpCmd.Flags().IntVar(&pdfMaxDPI, "max-dpi", 300, "Resolução máxima em DPI para renderização de imagens no PDF")
 	pdf2UpCmd.Flags().IntVarP(&pdfQuality, "quality", "q", 85, "Qualidade de compressão JPEG de 1 a 100 (padrão: 85)")
 
-	pdfCmd.AddCommand(pdf2UpCmd)
-	RootCmd.AddCommand(pdfCmd)
+	// Off-switches: permitem desligar comportamentos ligados por padrão
+	pdf2UpCmd.Flags().BoolVar(&pdfAutoRotate, "no-auto-rotate", false, "Desativa a rotação automática de imagens landscape")
+	pdf2UpCmd.Flags().BoolVar(&pdfDuplicateSingle, "no-duplicate", false, "Não duplica imagens ímpares ou isoladas no segundo slot")
+	pdf2UpCmd.Flags().BoolVar(&pdfOptimize, "no-optimize", false, "Desativa a compactação/redimensionamento das imagens no PDF")
+	// Restaura os padrões (pflag sobrescreve a variável ao registrar a negativa)
+	pdfAutoRotate = true
+	pdfDuplicateSingle = true
+	pdfOptimize = true
 
-	// Atalhos no RootCmd para acesso direto
+	printCmd.AddCommand(pdf2UpCmd)
+	RootCmd.AddCommand(printCmd)
+
+	// Atalho silencioso no RootCmd para compatibilidade com 'caramel 2up'
 	RootCmd.AddCommand(pdf2UpCmd)
 }

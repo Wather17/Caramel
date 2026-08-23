@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestProcessCmd_NonDocxFile(t *testing.T) {
-	err := processCmd.RunE(processCmd, []string{"documento.pdf"})
+func TestColorizeCmd_NonImageOrDocxFile(t *testing.T) {
+	err := imageColorizeCmd.RunE(imageColorizeCmd, []string{"documento.pdf"})
 	if err == nil {
-		t.Errorf("esperava erro ao passar arquivo não-docx para processCmd")
+		t.Errorf("esperava erro ao passar arquivo não suportado para colorize")
 	}
 }
 
-func TestProcessCmd_NoAPIKey(t *testing.T) {
+func TestColorizeCmd_NoAPIKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("OPENROUTER_API_KEY", "")
@@ -23,7 +23,7 @@ func TestProcessCmd_NoAPIKey(t *testing.T) {
 		t.Fatalf("falha ao criar docx de teste: %v", err)
 	}
 
-	err := processCmd.RunE(processCmd, []string{docxPath})
+	err := imageColorizeCmd.RunE(imageColorizeCmd, []string{docxPath})
 	if err == nil {
 		t.Errorf("esperava erro por ausência de chave de API")
 	}

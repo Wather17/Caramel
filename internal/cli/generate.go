@@ -61,18 +61,18 @@ A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com conco
 Use para criar coleções visuais inteiras (5, 10, 30+ itens) com fundo branco e estilo unificado
 (clipart, vector, 3d-cute, coloring ou realistic) para fichas, jogos de memória e atividades.
 As imagens são geradas em formato 1:1 por padrão — use --aspect para outras proporções
-(ex: 16:9 para slides). Compile tudo em um PDF 2-up com --2up, ou diagrame fichas A4 com 'caramel cards'.`,
+(ex: 16:9 para slides). Compile tudo em um PDF 2-up com --2up, ou diagrame fichas A4 com 'caramel print cards'.`,
 	Example: `# Gerar imagens de frutas tropicais em estilo 3D fofo
-caramel generate --items "abacaxi, manga, maracujá, caju" -s 3d-cute
+caramel image generate --items "abacaxi, manga, maracujá, caju" -s 3d-cute
 
 # Gerar 10 animais da fazenda e compilar em PDF 2-up
-caramel generate --theme "animais da fazenda" -n 10 --2up
+caramel image generate --theme "animais da fazenda" -n 10 --2up
 
 # Gerar desenhos para colorir a partir de um arquivo de texto
-caramel generate -f ./itens.txt -s coloring
+caramel image generate -f ./itens.txt -s coloring
 
 # Gerar imagens em formato widescreen 16:9 (slides/apresentações)
-caramel generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
+caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var rawItems []string
 
@@ -313,6 +313,13 @@ func init() {
 	imageGenerateCmd.Flags().BoolVarP(&genVerbose, "verbose", "v", false, "Exibe logs detalhados de depuração da API")
 	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens")
 	imageGenerateCmd.Flags().StringVar(&genTextModel, "text-model", ai.DefaultTextModel, "Modelo de IA para síntese de prompts")
+
+	// Off-switches: permitem desligar comportamentos ligados por padrão
+	imageGenerateCmd.Flags().BoolVar(&genPreview, "no-preview", false, "Não renderiza miniaturas ANSI no terminal durante a geração")
+	imageGenerateCmd.Flags().BoolVar(&genCards, "no-cards", false, "Não gera o layout HTML A4 de fichas")
+	// Restaura os padrões (pflag sobrescreve a variável ao registrar as negativas)
+	genPreview = true
+	genCards = true
 
 	imageCmd.AddCommand(imageGenerateCmd)
 	RootCmd.AddCommand(imageGenerateCmd)

@@ -13,10 +13,21 @@ import (
 type CommandCategory string
 
 const (
-	CategoryMedia  CommandCategory = "🖼️ Mídia & Arquivos"
-	CategoryConfig CommandCategory = "⚙️ Configurações & IA"
-	CategorySystem CommandCategory = "ℹ️ Sistema & Utilidades"
+	CategoryDocx    CommandCategory = "📄 Documentos Word (.docx)"
+	CategoryImage   CommandCategory = "🎨 Imagens"
+	CategoryPrint   CommandCategory = "🖨️ Impressão & Papel"
+	CategoryRoutine CommandCategory = "📅 Rotinas de Aula"
+	CategoryConfig  CommandCategory = "⚙️ Configurações & IA"
+	CategorySystem  CommandCategory = "ℹ️ Sistema & Utilidades"
 )
+
+// legacyAliases são apelidos mantidos apenas por compatibilidade (ex: 'process'
+// foi absorvido pelo 'colorize'). Não são exibidos no guia para não poluir a navegação.
+var legacyAliases = map[string]bool{
+	"process":  true,
+	"pipeline": true,
+	"run":      true,
+}
 
 // ExampleDoc representa um exemplo prático de uso do comando
 type ExampleDoc struct {
@@ -55,6 +66,10 @@ func SetRootCommand(cmd *cobra.Command) {
 // GetAllCommandDocs percorre a árvore de comandos e deriva a documentação ao vivo.
 // Flags, sintaxe, aliases e exemplos são extraídos dos próprios comandos Cobra,
 // eliminando a duplicação manual que causava defasagem entre guia e CLI.
+//
+// A exibição prioriza o caminho agrupado por fluxo pedagógico ('caramel print 2up',
+// 'caramel image colorize'...). Comandos registrados também na raiz apenas por
+// compatibilidade ('caramel 2up', 'caramel process'...) não aparecem na raiz.
 func GetAllCommandDocs() []CommandHelpDoc {
 	if rootCmd == nil {
 		return nil
@@ -62,7 +77,31 @@ func GetAllCommandDocs() []CommandHelpDoc {
 
 	seen := make(map[*cobra.Command]bool)
 	var docs []CommandHelpDoc
-	collectCommands(rootCmd, seen, &docs)
+
+	// Fase 1: comandos dentro de grupos pedagógicos (caminho agrupado)
+	for _, child := range rootCmd.Commands() {
+		if child == nil || seen[child] || !child.IsAvailableCommand() || child.Runnable() {
+			continue
+		}
+		if child.Name() == "completion" {
+			seen[child] = true
+			continue
+		}
+		collectGroupLeaves(child, seen, &docs)
+	}
+
+	// Fase 2: comandos autênticos da raiz (guide, install, version, config...)
+	for _, child := range rootCmd.Commands() {
+		if child == nil || seen[child] || !child.IsAvailableCommand() || !child.Runnable() {
+			continue
+		}
+		if child.Name() == "completion" {
+			seen[child] = true
+			continue
+		}
+		seen[child] = true
+		docs = append(docs, buildDoc(child, "caramel "+child.Name(), categoryForRoot(child)))
+	}
 
 	sort.Slice(docs, func(i, j int) bool {
 		return docs[i].Name < docs[j].Name
@@ -70,11 +109,12 @@ func GetAllCommandDocs() []CommandHelpDoc {
 	return docs
 }
 
-// collectCommands percorre recursivamente a árvore (deduplicando comandos registrados
-// em múltiplos pais, ex: 'caramel process' também existe como 'caramel docx process')
-func collectCommands(cmd *cobra.Command, seen map[*cobra.Command]bool, docs *[]CommandHelpDoc) {
-	for _, sub := range cmd.Commands() {
-		if seen[sub] || !sub.IsAvailableCommand() {
+// collectGroupLeaves percorre recursivamente um grupo e documenta suas folhas com
+// o caminho agrupado (ex: 'caramel print 2up'), deduplicando comandos que também
+// são registrados na raiz para compatibilidade.
+func collectGroupLeaves(group *cobra.Command, seen map[*cobra.Command]bool, docs *[]CommandHelpDoc) {
+	for _, sub := range group.Commands() {
+		if sub == nil || seen[sub] || !sub.IsAvailableCommand() {
 			continue
 		}
 
@@ -87,61 +127,58 @@ func collectCommands(cmd *cobra.Command, seen map[*cobra.Command]bool, docs *[]C
 		seen[sub] = true
 
 		if sub.Runnable() {
-			*docs = append(*docs, buildDoc(sub))
+			path := group.CommandPath() + " " + sub.Name()
+			*docs = append(*docs, buildDoc(sub, path, categoryForGroup(group)))
 		}
-		collectCommands(sub, seen, docs)
+		collectGroupLeaves(sub, seen, docs)
 	}
 }
 
 // buildDoc constrói a documentação de um comando a partir dos seus próprios campos
-func buildDoc(cmd *cobra.Command) CommandHelpDoc {
-	path := commandDisplayPath(cmd)
-
+func buildDoc(cmd *cobra.Command, path string, category CommandCategory) CommandHelpDoc {
 	return CommandHelpDoc{
 		Name:               path,
 		Short:              cmd.Short,
-		Category:           categoryFor(cmd),
+		Category:           category,
 		PedagogicalContext: cmd.Long,
 		Syntax:             cmd.UseLine(),
 		Flags:              collectFlagDocs(cmd),
 		Examples:           parseExamples(cmd.Example),
-		Aliases:            strings.Join(cmd.Aliases, ", "),
+		Aliases:            strings.Join(filteredAliases(cmd.Aliases), ", "),
 	}
 }
 
-// commandDisplayPath retorna o nome como o usuário invoca: comandos também registrados
-// diretamente no RootCmd (ex: 'caramel process', 'caramel colorize') mostram o caminho curto,
-// mesmo que o parent do Cobra seja um grupo (docx/image/pdf)
-func commandDisplayPath(cmd *cobra.Command) string {
-	if rootCmd != nil {
-		for _, child := range rootCmd.Commands() {
-			if child == cmd {
-				return "caramel " + cmd.Name()
-			}
+// filteredAliases remove apelidos de compatibilidade legados (ex: 'process', 'run')
+func filteredAliases(aliases []string) []string {
+	var out []string
+	for _, a := range aliases {
+		if !legacyAliases[a] {
+			out = append(out, a)
 		}
 	}
-	path := cmd.CommandPath()
-	if !strings.HasPrefix(path, "caramel") {
-		path = "caramel " + path
-	}
-	return path
+	return out
 }
 
-// categoryFor deriva a categoria a partir do comando pai da árvore; comandos do topo
-// usam um mapa fixo pequeno (estável, não por comando)
-func categoryFor(cmd *cobra.Command) CommandCategory {
-	if cmd.Parent() != nil && cmd.Parent().Parent() != nil {
-		switch cmd.Parent().Name() {
-		case "docx", "image", "pdf", "routine":
-			return CategoryMedia
-		case "config":
-			return CategoryConfig
-		}
+// categoryForGroup deriva a categoria do grupo pedagógico que contém o comando
+func categoryForGroup(group *cobra.Command) CommandCategory {
+	switch group.Name() {
+	case "docx":
+		return CategoryDocx
+	case "image":
+		return CategoryImage
+	case "print":
+		return CategoryPrint
+	case "routine":
+		return CategoryRoutine
+	case "config":
+		return CategoryConfig
 	}
+	return CategorySystem
+}
 
+// categoryForRoot deriva a categoria de comandos autênticos da raiz (guide, install, version...)
+func categoryForRoot(cmd *cobra.Command) CommandCategory {
 	switch cmd.Name() {
-	case "process", "colorize", "generate", "cards", "2up", "extract", "docx":
-		return CategoryMedia
 	case "config", "setup", "set", "show":
 		return CategoryConfig
 	}
