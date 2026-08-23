@@ -48,3 +48,54 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Errorf("Esperado valor %s, obtido %s", testValue, cfg.OpenRouterAPIKey)
 	}
 }
+
+func TestSaveAndLoadModels(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	values := map[string]string{
+		"MODEL_IMAGE":  "google/gemini-3.1-flash-image-preview",
+		"MODEL_TEXT":   "deepseek/deepseek-v4-flash",
+		"MODEL_TRIAGE": "qwen/qwen3.7-flash",
+	}
+	for k, v := range values {
+		if err := config.SaveConfigValue(k, v); err != nil {
+			t.Fatalf("SaveConfigValue(%s) falhou: %v", k, err)
+		}
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig falhou: %v", err)
+	}
+
+	if cfg.ModelImage != values["MODEL_IMAGE"] {
+		t.Errorf("ModelImage: esperado %q, obtido %q", values["MODEL_IMAGE"], cfg.ModelImage)
+	}
+	if cfg.ModelText != values["MODEL_TEXT"] {
+		t.Errorf("ModelText: esperado %q, obtido %q", values["MODEL_TEXT"], cfg.ModelText)
+	}
+	if cfg.ModelTriage != values["MODEL_TRIAGE"] {
+		t.Errorf("ModelTriage: esperado %q, obtido %q", values["MODEL_TRIAGE"], cfg.ModelTriage)
+	}
+}
+
+func TestEnvModelPriority(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	if err := config.SaveConfigValue("MODEL_IMAGE", "google/do-arquivo"); err != nil {
+		t.Fatalf("SaveConfigValue falhou: %v", err)
+	}
+
+	// Variável de ambiente do SO tem prioridade máxima
+	t.Setenv("MODEL_IMAGE", "google/do-sistema")
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig falhou: %v", err)
+	}
+	if cfg.ModelImage != "google/do-sistema" {
+		t.Errorf("Variável do SO deveria ter prioridade: esperado %q, obtido %q", "google/do-sistema", cfg.ModelImage)
+	}
+}

@@ -12,6 +12,9 @@ import (
 // Config armazena as configurações e chaves de API da aplicação
 type Config struct {
 	OpenRouterAPIKey string
+	ModelImage       string // Modelo de IA para geração/coloração de imagens (MODEL_IMAGE)
+	ModelText        string // Modelo de IA para síntese de texto/prompts (MODEL_TEXT)
+	ModelTriage      string // Modelo de IA de visão para a triagem de economia (MODEL_TRIAGE)
 }
 
 // GetConfigDir retorna o caminho absoluto da pasta de configuração do usuário no sistema operacional
@@ -65,6 +68,15 @@ func LoadConfig() (*Config, error) {
 	// 3. Variáveis do SO têm prioridade máxima
 	if envVal := os.Getenv("OPENROUTER_API_KEY"); envVal != "" {
 		cfg.OpenRouterAPIKey = envVal
+	}
+	if envVal := os.Getenv("MODEL_IMAGE"); envVal != "" {
+		cfg.ModelImage = envVal
+	}
+	if envVal := os.Getenv("MODEL_TEXT"); envVal != "" {
+		cfg.ModelText = envVal
+	}
+	if envVal := os.Getenv("MODEL_TRIAGE"); envVal != "" {
+		cfg.ModelTriage = envVal
 	}
 
 	return cfg, nil
@@ -136,6 +148,12 @@ func loadEnvFileToMap(filePath string, cfg *Config) {
 			switch k {
 			case "OPENROUTER_API_KEY":
 				cfg.OpenRouterAPIKey = v
+			case "MODEL_IMAGE":
+				cfg.ModelImage = v
+			case "MODEL_TEXT":
+				cfg.ModelText = v
+			case "MODEL_TRIAGE":
+				cfg.ModelTriage = v
 			}
 		}
 	}

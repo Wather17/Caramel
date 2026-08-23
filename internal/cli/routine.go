@@ -59,6 +59,9 @@ caramel routine process rotina_semana_1.docx`,
 			return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup'")
 		}
 
+		// Resolve o modelo com prioridade: flag > config (.env) > default de fábrica
+		routineModel := resolveModel(routineModelName, cmd.Flags().Changed("model"), cfg.ModelText)
+
 		// 1. Coleta os arquivos .docx a serem processados
 		var files []string
 		fileInfo, err := os.Stat(targetPath)
@@ -124,7 +127,7 @@ caramel routine process rotina_semana_1.docx`,
 			}
 
 			fmt.Printf(" │  └─ Consultando IA para resumir atividades...\n")
-			jsonResponse, err := aiClient.AnalyzeRoutine(txt, prompt, routineModelName)
+			jsonResponse, err := aiClient.AnalyzeRoutine(txt, prompt, routineModel)
 			if err != nil {
 				fmt.Printf(" ⚠️ Erro na análise de IA para '%s': %v. Pulando...\n", filepath.Base(file), err)
 				continue
@@ -186,7 +189,7 @@ caramel routine process rotina_semana_1.docx`,
 
 func init() {
 	routineProcessCmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino para salvar o arquivo consolidado")
-	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise")
+	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise (config: model_text)")
 	routineProcessCmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Caminho para arquivo contendo prompt customizado")
 	routineProcessCmd.Flags().BoolVarP(&routineVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
