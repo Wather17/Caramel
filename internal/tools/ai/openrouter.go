@@ -144,7 +144,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)
+		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
 	}
 	defer resp.Body.Close()
 
@@ -158,7 +158,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("API OpenRouter retornou status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, "", statusError(resp.StatusCode, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -263,7 +263,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)
+		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
 	}
 	defer resp.Body.Close()
 
@@ -277,7 +277,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("API OpenRouter retornou status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, "", statusError(resp.StatusCode, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -355,27 +355,42 @@ func encodeImageAsDataURL(imagePath string) (string, error) {
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image), nil
 }
 
-// extractImageBytesFromResponse extrai os bytes de imagem (Data URL, URL remota ou Base64 puro)
+// extractImageBytesFromResponse extrai os bytes de imagem (Data URL, URL remota ou Base64 puro).
+// A validação é feita por magic bytes (PNG/JPEG/WEBP), não por heurística de tamanho.
 func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, error) {
-	// 1. Procura por formato Data URL (data:image/png;base64,...)
-	if idx := strings.Index(content, "data:image/"); idx != -1 {
-		dataPart := content[idx:]
-		if endIdx := strings.IndexAny(dataPart, `"' `); endIdx != -1 {
-			dataPart = dataPart[:endIdx]
+	// 1. Procura por todas as ocorrências de Data URL (data:image/png;base64,...),
+	//    tolerando case e aspas escapadas de JSON (\")
+	for {
+		idx := indexFold(content, "data:image/")
+		if idx == -1 {
+			break
 		}
 
+		dataPart := content[idx:]
+		content = content[idx+1:] // avança a busca para a próxima ocorrência
+
+		if endIdx := strings.IndexAny(dataPart, "\"' \n\r\t"); endIdx != -1 {
+			dataPart = dataPart[:endIdx]
+		}
+		// Remove backslashes de escape de JSON (\") que ficaram presos no final
+		dataPart = strings.TrimRight(dataPart, "\\")
+
 		commaIdx := strings.Index(dataPart, ",")
-		if commaIdx != -1 {
-			header := dataPart[:commaIdx]
-			b64Str := dataPart[commaIdx+1:]
-			ext := "png"
-			if strings.Contains(header, "jpeg") || strings.Contains(header, "jpg") {
-				ext = "jpg"
+		if commaIdx == -1 {
+			continue
+		}
+
+		b64Str := dataPart[commaIdx+1:]
+		decBytes, err := base64.StdEncoding.DecodeString(b64Str)
+		if err != nil {
+			// Alguns modelos retornam base64 URL-safe sem padding
+			decBytes, err = base64.RawURLEncoding.DecodeString(strings.TrimRight(b64Str, "="))
+			if err != nil {
+				continue
 			}
-			decBytes, err := base64.StdEncoding.DecodeString(b64Str)
-			if err == nil && len(decBytes) > 50 {
-				return decBytes, ext, nil
-			}
+		}
+		if ext, ok := detectImageType(decBytes); ok {
+			return decBytes, ext, nil
 		}
 	}
 
@@ -403,14 +418,36 @@ func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, 
 	// 4. Fallback se for uma string base64 pura
 	trimmed := strings.TrimSpace(content)
 	decBytes, err := base64.StdEncoding.DecodeString(trimmed)
-	if err == nil && len(decBytes) > 100 {
-		return decBytes, "png", nil
+	if err == nil {
+		if ext, ok := detectImageType(decBytes); ok {
+			return decBytes, ext, nil
+		}
 	}
 
 	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem")
 }
 
-// downloadImageFromURL baixa os bytes de uma imagem via HTTP GET
+// indexFold retorna o índice da primeira ocorrência case-insensitive de needle em haystack
+func indexFold(haystack, needle string) int {
+	return strings.Index(strings.ToLower(haystack), strings.ToLower(needle))
+}
+
+// detectImageType identifica o formato da imagem pelos bytes mágicos (PNG/JPEG/WEBP)
+func detectImageType(data []byte) (string, bool) {
+	if len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}) {
+		return "png", true
+	}
+	if len(data) >= 3 && bytes.Equal(data[:3], []byte{0xff, 0xd8, 0xff}) {
+		return "jpg", true
+	}
+	if len(data) >= 12 && bytes.HasPrefix(data, []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")) {
+		return "webp", true
+	}
+	return "", false
+}
+
+// downloadImageFromURL baixa os bytes de uma imagem via HTTP GET com limite de tamanho
+// e validação por magic bytes
 func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
 	resp, err := c.HTTPClient.Get(url)
 	if err != nil {
@@ -422,17 +459,19 @@ func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("status HTTP %d ao baixar imagem da URL", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	// Limita o download para evitar estouro de memória com respostas gigantes
+	const maxDownloadBytes = 25 * 1024 * 1024 // 25 MB
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadBytes+1))
 	if err != nil {
 		return nil, "", err
 	}
+	if len(data) > maxDownloadBytes {
+		return nil, "", fmt.Errorf("imagem baixada excede o limite de %d MB", maxDownloadBytes/(1024*1024))
+	}
 
-	ext := "png"
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
-		ext = "jpg"
-	} else if strings.Contains(contentType, "webp") {
-		ext = "webp"
+	ext, ok := detectImageType(data)
+	if !ok {
+		return nil, "", fmt.Errorf("conteúdo baixado não é uma imagem válida (PNG/JPEG/WEBP)")
 	}
 
 	return data, ext, nil
@@ -477,7 +516,7 @@ func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOver
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to contact OpenRouter API: %w", err)
+		return "", &retryableError{err: fmt.Errorf("failed to contact OpenRouter API: %w", err)}
 	}
 	defer resp.Body.Close()
 
@@ -491,7 +530,7 @@ func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOver
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenRouter API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", statusError(resp.StatusCode, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse

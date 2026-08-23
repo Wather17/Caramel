@@ -63,3 +63,19 @@ func FilterImagesByNames(images []ExtractedImage, allowedNames []string) []Extra
 	}
 	return filtered
 }
+
+// colorableFormats são os formatos raster que o pipeline de coloração suporta de
+// ponta a ponta (envio para a IA, redimensionamento e reinserção no .docx).
+// Formatos vetoriais/metafile (emf, wmf), OLE (.bin), svg e outros não são
+// coloríveis — enviá-los à API desperdiçaria chamadas e dinheiro.
+var colorableFormats = map[string]bool{
+	"png":  true,
+	"jpg":  true,
+	"jpeg": true,
+	"webp": true,
+}
+
+// IsColorableFormat indica se o formato da imagem pode ser colorido e reinserido no .docx
+func IsColorableFormat(format string) bool {
+	return colorableFormats[strings.ToLower(format)]
+}

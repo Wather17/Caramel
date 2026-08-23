@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp" // registra o decodificador WEBP para DecodeConfig/Decode
 )
 
 // ResizeToMatch lê a imagem em colorizedPath e a redimensiona para ter exatamente as mesmas

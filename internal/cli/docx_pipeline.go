@@ -174,7 +174,16 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 
 // printTriageSummary exibe o resumo das imagens puladas pela triagem de economia, se houver
 func printTriageSummary(res *pipeline.PipelineResult) {
-	if res == nil || res.TotalTriageSkipped == 0 {
+	if res == nil {
+		return
+	}
+	if res.TotalFormatSkipped > 0 {
+		fmt.Printf(" ├─ Imagens puladas (formato não colorível): %d\n", res.TotalFormatSkipped)
+		for _, skipped := range res.FormatSkipped {
+			fmt.Printf(" │   └─ %s (%s)\n", skipped.OriginalName, skipped.Format)
+		}
+	}
+	if res.TotalTriageSkipped == 0 {
 		return
 	}
 

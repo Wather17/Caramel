@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"image"
 	"image/color"
 	"image/png"
@@ -352,4 +353,37 @@ func TestComputeRenderLayout(t *testing.T) {
 			t.Errorf("Cover deveria preencher o slot: %fx%f (slot %fx%f)", layout.RW, layout.RH, maxW, maxH)
 		}
 	})
+}
+
+// tinyWEBPBase64 é um WebP lossless válido (gopher-doc.1bpp.lossless.webp, 442 bytes)
+const tinyWEBPBase64 = "UklGRrIBAABXRUJQVlA4TKUBAAAvSsAYAA8w//M///MfeJAkbXvaSG7m8Q3GfYSBJekwQztm/IcZlgwnmWImn2BK7aFmBtnVir6q//8VOkFE/xm4baTIu8c48ArEo6+B3zFKYln3pqClSCKX0begFTAXFOLXHSyF8cCNcZEG4OywuA4KVVfJCiArU7GAgJI8+lJP/OKMT/fBAjevg1cYB7YVkFuWga2lyPi5I0HFy5YTpWIHg0RZpkniRVW9odHAKOwosWuOGdxIyn2OvaCDvhg/we6TwadPBPbqBV58MsLmMJ8yZnOWk8SRz4N+QoyPL+MnamzMvcE1rHNEr91F9GKZPVUcS9w7PhhH36suB9qPeYb/oLk6cuTiJ0wOK3m5h1cKjW6EVZCYMK7dxcKCBdgP9HkKr9gkAO2P8GKZGWVdIAatQa+1IDpt6qyorVwdy01xdW8Jkfk6xjEXmVQQ+HQdFr6OKhIN34dXWq0+0qr6EJSCeeVLH9+gvGTLyqM65PQ44ihzlTXxQKjKbAvshXgir7Lil9w4L2bvMycmjQcqXaMCO6BlY28i+FOLzbfI1vEqxAhotocAAA=="
+
+func TestGenerate2UpPDF_WebPSemOtimizacao(t *testing.T) {
+	tempDir := t.TempDir()
+	webpBytes, err := base64.StdEncoding.DecodeString(tinyWEBPBase64)
+	if err != nil {
+		t.Fatalf("falha ao decodificar fixture webp: %v", err)
+	}
+	testImgPath := filepath.Join(tempDir, "test_activity.webp")
+	if err := os.WriteFile(testImgPath, webpBytes, 0644); err != nil {
+		t.Fatalf("falha ao criar webp de teste: %v", err)
+	}
+	outPdfPath := filepath.Join(tempDir, "output_webp.pdf")
+
+	// Otimização DESATIVADA: sem o fix, o gofpdf não renderiza webp e falharia
+	opts := DefaultOptions()
+	opts.Optimize = false
+
+	err = Generate2UpPDF([]string{testImgPath}, outPdfPath, opts)
+	if err != nil {
+		t.Fatalf("Generate2UpPDF com webp e otimização desativada falhou: %v", err)
+	}
+
+	stat, err := os.Stat(outPdfPath)
+	if err != nil {
+		t.Fatalf("PDF não foi gerado: %v", err)
+	}
+	if stat.Size() == 0 {
+		t.Errorf("PDF de webp está com 0 bytes")
+	}
 }

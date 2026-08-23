@@ -52,9 +52,18 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 	}
 
 	prompt := prompts.GetColorizationPrompt()
-	imgBytes, ext, err := client.ColorizeImage(imagePath, prompt, opts.Model)
-	if err != nil {
-		return nil, fmt.Errorf("falha ao colorir imagem '%s': %w", filepath.Base(imagePath), err)
+
+	// Coloração com retry: falhas transitórias (429, 5xx, rede) são reexecutadas
+	// com backoff para não perder a imagem no batch/docx.
+	var imgBytes []byte
+	var ext string
+	colorizeErr := retryWithBackoff(3, func() error {
+		var e error
+		imgBytes, ext, e = client.ColorizeImage(imagePath, prompt, opts.Model)
+		return e
+	})
+	if colorizeErr != nil {
+		return nil, fmt.Errorf("falha ao colorir imagem '%s': %w", filepath.Base(imagePath), colorizeErr)
 	}
 
 	if err := os.MkdirAll(opts.OutputDir, 0755); err != nil {
@@ -102,7 +111,7 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 		}
 	}
 
-	// Camada 2: triagem por LLM de visão barata
+	// Camada 2: triagem por LLM de visão barata (com retry em falhas transitórias)
 	triageModel := opts.TriageModel
 	if triageModel == "" {
 		triageModel = DefaultTriageModel
@@ -112,11 +121,16 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 		fmt.Printf("🔎 [TRIAGE] Analisando '%s' com o modelo '%s'...\n", baseName, triageModel)
 	}
 
-	triageRes, err := client.TriageImage(imagePath, prompts.GetTriagePrompt(), triageModel)
-	if err != nil {
+	var triageRes *TriageResult
+	triageErr := retryWithBackoff(2, func() error {
+		var e error
+		triageRes, e = client.TriageImage(imagePath, prompts.GetTriagePrompt(), triageModel)
+		return e
+	})
+	if triageErr != nil {
 		// Fail-open: em caso de erro (rate limit, API fora, parse), colore mesmo assim
 		if opts.Verbose {
-			fmt.Printf("⚠️ [TRIAGE] Falha na triagem de '%s': %v (fail-open: colorindo mesmo assim)\n", baseName, err)
+			fmt.Printf("⚠️ [TRIAGE] Falha na triagem de '%s': %v (fail-open: colorindo mesmo assim)\n", baseName, triageErr)
 		}
 		return false, nil
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	_ "image/jpeg"
 	_ "image/png"
 	"io"
 	"os"
@@ -233,8 +232,12 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 	imageTarget := imgPath
 	var imageType string
 
+	// WebP não é suportado nativamente pelo gofpdf — sempre converte em memória
+	// (para JPG), mesmo com a otimização desativada.
+	forceConvert := strings.EqualFold(filepath.Ext(imgPath), ".webp")
+
 	// Otimização em memória se habilitada (usa as dimensões visuais reais do encaixe)
-	if opts.Optimize {
+	if opts.Optimize || forceConvert {
 		reader, optFormat, optErr := optimizeImageInMemory(imgPath, layout.RW, layout.RH, opts)
 		if optErr == nil && reader != nil {
 			imageKey := fmt.Sprintf("opt_%s", filepath.Base(imgPath))
