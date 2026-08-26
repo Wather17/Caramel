@@ -27,6 +27,7 @@ type Options struct {
 	AutoRotate      bool    // Se true, calcula e rotaciona imagens landscape quando benéfico
 	RotateThreshold float64 // Porcentagem mínima de ganho de área para disparar a rotação (padrão: 15.0%)
 	FitMode         string  // Modo de encaixe: "contain" (padrão) ou "cover"
+	Size            string  // Preset de tamanho da atividade no slot: "large" (100%), "medium" (80%) ou "small" (60%)
 	Optimize        bool    // Se true, faz downsampling e recompressão JPEG em memória das imagens pesadas
 	MaxDPI          int     // Limite máximo de resolução em DPI (padrão: 300)
 	Quality         int     // Qualidade de compressão JPEG de 1 a 100 (padrão: 85)
@@ -41,6 +42,7 @@ func DefaultOptions() Options {
 		AutoRotate:      true,
 		RotateThreshold: 15.0,
 		FitMode:         "contain",
+		Size:            "large",
 		Optimize:        true,
 		MaxDPI:          300,
 		Quality:         85,
@@ -70,6 +72,12 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 		opts.Quality = 85
 	}
 
+	// Valida o preset de tamanho (--size) e obtém o fator de escala do slot
+	sizeScale, err := resolveSizeScale(opts.Size)
+	if err != nil {
+		return err
+	}
+
 	// Cria o documento PDF em Orientação Paisagem (Landscape), unidade em milímetros (mm), tamanho A4
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	pdf.SetAutoPageBreak(false, 0)
@@ -81,6 +89,14 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 		midX       = pageWidth / 2.0 // 148.5 mm
 	)
 
+	// Área útil bruta de cada slot e retângulo final após o preset de tamanho.
+	// A escala reduz o slot em torno do próprio centro, mantendo as atividades
+	// centralizadas na metade da folha para qualquer preset (large/medium/small).
+	baseSlotW := midX - 2*opts.MarginMM
+	baseSlotH := pageHeight - 2*opts.MarginMM
+	leftSlotX, slotY, slotW, slotH := scaleSlotRect(opts.MarginMM, opts.MarginMM, baseSlotW, baseSlotH, sizeScale)
+	rightSlotX, _, _, _ := scaleSlotRect(midX+opts.MarginMM, opts.MarginMM, baseSlotW, baseSlotH, sizeScale)
+
 	// Prepara os pares de imagens por página
 	pairs := prepareImagePairs(imagePaths, opts.DuplicateSingle)
 
@@ -89,7 +105,7 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 
 		// Slot Esquerdo (Slot 1)
 		if pair.Left != "" {
-			err := renderImageInSlot(pdf, pair.Left, opts.MarginMM, opts.MarginMM, midX-2*opts.MarginMM, pageHeight-2*opts.MarginMM, opts)
+			err := renderImageInSlot(pdf, pair.Left, leftSlotX, slotY, slotW, slotH, opts)
 			if err != nil {
 				return fmt.Errorf("erro ao inserir imagem no slot esquerdo (%s): %w", pair.Left, err)
 			}
@@ -97,7 +113,7 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 
 		// Slot Direito (Slot 2)
 		if pair.Right != "" {
-			err := renderImageInSlot(pdf, pair.Right, midX+opts.MarginMM, opts.MarginMM, midX-2*opts.MarginMM, pageHeight-2*opts.MarginMM, opts)
+			err := renderImageInSlot(pdf, pair.Right, rightSlotX, slotY, slotW, slotH, opts)
 			if err != nil {
 				return fmt.Errorf("erro ao inserir imagem no slot direito (%s): %w", pair.Right, err)
 			}
@@ -157,6 +173,32 @@ func prepareImagePairs(imagePaths []string, duplicateSingle bool) []imagePair {
 	}
 
 	return pairs
+}
+
+// sizeScales mapeia os presets de tamanho (--size) para o fator de escala aplicado ao slot.
+// O valor vazio equivale a "large" para tolerar a struct Options zerada.
+var sizeScales = map[string]float64{
+	"":       1.0,
+	"large":  1.0,
+	"medium": 0.8,
+	"small":  0.6,
+}
+
+// resolveSizeScale valida o preset de tamanho e retorna o fator de escala correspondente
+func resolveSizeScale(size string) (float64, error) {
+	factor, ok := sizeScales[strings.ToLower(strings.TrimSpace(size))]
+	if !ok {
+		return 0, fmt.Errorf("tamanho inválido '%s': use large (100%%), medium (80%%) ou small (60%%)", size)
+	}
+	return factor, nil
+}
+
+// scaleSlotRect reduz o retângulo do slot pelo fator informado mantendo o mesmo centro,
+// para que atividades medium/small continuem centralizadas na metade da folha.
+func scaleSlotRect(x, y, w, h, scale float64) (float64, float64, float64, float64) {
+	newW := w * scale
+	newH := h * scale
+	return x + (w-newW)/2, y + (h-newH)/2, newW, newH
 }
 
 // renderLayout descreve o posicionamento final de uma imagem dentro de um slot,
