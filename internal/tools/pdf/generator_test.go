@@ -3,12 +3,14 @@ package pdf
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -353,6 +355,121 @@ func TestComputeRenderLayout(t *testing.T) {
 			t.Errorf("Cover deveria preencher o slot: %fx%f (slot %fx%f)", layout.RW, layout.RH, maxW, maxH)
 		}
 	})
+}
+
+func TestResolveSizeScale(t *testing.T) {
+	valid := map[string]float64{
+		"":        1.0,
+		"large":   1.0,
+		"LARGE":   1.0,
+		" Large ": 1.0,
+		"medium":  0.8,
+		"Medium":  0.8,
+		"small":   0.6,
+		" SMALL ": 0.6,
+	}
+	for input, want := range valid {
+		got, err := resolveSizeScale(input)
+		if err != nil {
+			t.Errorf("resolveSizeScale(%q) retornou erro inesperado: %v", input, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("resolveSizeScale(%q) = %v, esperado %v", input, got, want)
+		}
+	}
+
+	for _, input := range []string{"gigante", "50%", "0.5"} {
+		if _, err := resolveSizeScale(input); err == nil {
+			t.Errorf("resolveSizeScale(%q) deveria retornar erro para valor inválido", input)
+		}
+	}
+}
+
+func TestScaleSlotRect(t *testing.T) {
+	// Slot bruto do 2up: x=5, y=5, w=138.5, h=200
+	x, y, w, h := scaleSlotRect(5, 5, 138.5, 200, 0.6)
+
+	if w != 83.1 || h != 120 {
+		t.Errorf("Dimensões escaladas incorretas: %fx%f (esperado 83.1x120)", w, h)
+	}
+
+	// O centro do slot escalado deve coincidir com o centro do slot original
+	cxOriginal, cyOriginal := 5+138.5/2, 5+200.0/2
+	cxEscalado, cyEscalado := x+w/2, y+h/2
+	if cxEscalado != cxOriginal || cyEscalado != cyOriginal {
+		t.Errorf("Centro deslocado: (%f,%f), esperado (%f,%f)", cxEscalado, cyEscalado, cxOriginal, cyOriginal)
+	}
+
+	// Escala 1.0 não altera o retângulo
+	x1, y1, w1, h1 := scaleSlotRect(5, 5, 138.5, 200, 1.0)
+	if x1 != 5 || y1 != 5 || w1 != 138.5 || h1 != 200 {
+		t.Errorf("Escala 1.0 alterou o retângulo: %f,%f %fx%f", x1, y1, w1, h1)
+	}
+}
+
+func TestGenerate2UpPDF_SizePresets(t *testing.T) {
+	tempDir := t.TempDir()
+	testImgPath := filepath.Join(tempDir, "atividade.png")
+
+	img := image.NewRGBA(image.Rect(0, 0, 400, 600))
+	for x := 0; x < 400; x++ {
+		for y := 0; y < 600; y++ {
+			img.Set(x, y, color.White)
+		}
+	}
+	f, err := os.Create(testImgPath)
+	if err != nil {
+		t.Fatalf("Falha ao criar imagem de teste: %v", err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("Falha ao codificar PNG: %v", err)
+	}
+	f.Close()
+
+	for _, size := range []string{"large", "medium", "small"} {
+		outPdfPath := filepath.Join(tempDir, fmt.Sprintf("output_%s.pdf", size))
+
+		opts := DefaultOptions()
+		opts.Size = size
+
+		if err := Generate2UpPDF([]string{testImgPath}, outPdfPath, opts); err != nil {
+			t.Fatalf("Generate2UpPDF com --size %s falhou: %v", size, err)
+		}
+
+		stat, err := os.Stat(outPdfPath)
+		if err != nil {
+			t.Fatalf("PDF '%s' gerado não foi encontrado: %v", outPdfPath, err)
+		}
+		if stat.Size() == 0 {
+			t.Errorf("PDF com --size %s está com 0 bytes", size)
+		}
+	}
+}
+
+func TestGenerate2UpPDF_TamanhoInvalido(t *testing.T) {
+	tempDir := t.TempDir()
+	testImgPath := filepath.Join(tempDir, "atividade.png")
+
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	f, _ := os.Create(testImgPath)
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("Falha ao codificar PNG: %v", err)
+	}
+	f.Close()
+
+	opts := DefaultOptions()
+	opts.Size = "gigante"
+
+	err := Generate2UpPDF([]string{testImgPath}, filepath.Join(tempDir, "out.pdf"), opts)
+	if err == nil {
+		t.Fatal("Esperado erro para tamanho inválido, obteve nil")
+	}
+	if !strings.Contains(err.Error(), "tamanho inválido") {
+		t.Errorf("Erro sem mensagem amigável de tamanho inválido: %v", err)
+	}
 }
 
 // tinyWEBPBase64 é um WebP lossless válido (gopher-doc.1bpp.lossless.webp, 442 bytes)

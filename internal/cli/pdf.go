@@ -19,6 +19,7 @@ var (
 	pdfAutoRotate      bool
 	pdfRotateThreshold float64
 	pdfFitMode         string
+	pdfSize            string
 	pdfOptimize        bool
 	pdfMaxDPI          int
 	pdfQuality         int
@@ -35,7 +36,11 @@ com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de co
 Use para preparar avaliações, atividades ou apostilas em formato 2 por folha, imprimindo duas
 atividades lado a lado em uma única folha A4 — economiza papel e tinta. Imagens horizontais
 (landscape) são rotacionadas automaticamente para aproveitar a área útil, e imagens pesadas do
-Figma são comprimidas em memória para gerar PDFs leves (~500KB).`,
+Figma são comprimidas em memória para gerar PDFs leves (~500KB).
+
+O preset --size controla o tamanho da atividade dentro do slot: large (100% da área útil),
+medium (80%, sobra espaço para nome/data/anotações) ou small (60%, ideal para recortar e
+colar no caderno). A atividade permanece centralizada no slot em qualquer preset.`,
 	Example: `# Gerar PDF 2-up de uma pasta de atividades exportadas do Figma
 caramel print 2up ./atividades_figma
 
@@ -43,7 +48,10 @@ caramel print 2up ./atividades_figma
 caramel print 2up prova_historia.png
 
 # Forçar preenchimento total do slot (cover) sem margem em branco
-caramel print 2up ./fichas_estudo -f cover`,
+caramel print 2up ./fichas_estudo -f cover
+
+# Gerar atividades menores para recortar e colar no caderno
+caramel print 2up ./atividades --size small`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		inputArg := args[0]
@@ -115,6 +123,7 @@ caramel print 2up ./fichas_estudo -f cover`,
 			AutoRotate:      pdfAutoRotate,
 			RotateThreshold: pdfRotateThreshold,
 			FitMode:         pdfFitMode,
+			Size:            pdfSize,
 			Optimize:        pdfOptimize,
 			MaxDPI:          pdfMaxDPI,
 			Quality:         pdfQuality,
@@ -142,6 +151,7 @@ func init() {
 	pdf2UpCmd.Flags().BoolVarP(&pdfAutoRotate, "auto-rotate", "r", true, "Rotaciona imagens landscape automaticamente para maximizar área útil")
 	pdf2UpCmd.Flags().Float64VarP(&pdfRotateThreshold, "rotate-threshold", "t", 15.0, "Porcentagem mínima de ganho de área útil para autorizar a rotação")
 	pdf2UpCmd.Flags().StringVarP(&pdfFitMode, "fit", "f", "contain", "Modo de encaixe da imagem no slot: contain (sem cortes) ou cover (preenchimento total)")
+	pdf2UpCmd.Flags().StringVar(&pdfSize, "size", "large", "Tamanho da atividade dentro do slot: large (100%), medium (80%) ou small (60%)")
 	pdf2UpCmd.Flags().BoolVarP(&pdfOptimize, "optimize", "O", true, "Redimensiona (300 DPI) e comprime imagens pesadas em memória para reduzir o tamanho do PDF")
 	pdf2UpCmd.Flags().IntVar(&pdfMaxDPI, "max-dpi", 300, "Resolução máxima em DPI para renderização de imagens no PDF")
 	pdf2UpCmd.Flags().IntVarP(&pdfQuality, "quality", "q", 85, "Qualidade de compressão JPEG de 1 a 100 (padrão: 85)")
