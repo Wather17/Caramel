@@ -61,3 +61,10 @@ agents/issue-architect.md
 .agents/skills/autonomous-batch.md
 # Synced GitHub issues
 AGENTS.md
+.agents/skills/refine-issues/SKILL.md
+.agents/skills/autonomous-batch/SKILL.md
+.opencode/agent/issue-architect.md
+.opencode/skill/refine-issues/SKILL.md
+.opencode/skill/autonomous-batch/SKILL.md
+.agents/skills/audit-issues/SKILL.md
+.opencode/skill/audit-issues/SKILL.md
