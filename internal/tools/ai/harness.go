@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -151,8 +152,18 @@ func CalculateConcurrencyDecision(total int, userWorkers int) (workers int, disp
 
 // ExecuteGenerationHarness processa a lista de prompts com concorrência adaptativa e retries
 func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client *Client, onProgress HarnessProgressFunc) ([]GenerationItem, error) {
+	return ExecuteGenerationHarnessContext(context.Background(), items, cfg, client, onProgress)
+}
+
+// ExecuteGenerationHarnessContext é a variante cancelável do harness de geração.
+// O cancelamento é observado entre itens; a chamada HTTP corrente termina pelo
+// timeout normal do cliente quando a API não oferece interrupção imediata.
+func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem, cfg HarnessConfig, client *Client, onProgress HarnessProgressFunc) ([]GenerationItem, error) {
 	if len(items) == 0 {
 		return items, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	targetDir := cfg.OutputDir
@@ -183,7 +194,17 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for idx := range jobs {
+			for {
+				var idx int
+				var ok bool
+				select {
+				case <-ctx.Done():
+					return
+				case idx, ok = <-jobs:
+					if !ok {
+						return
+					}
+				}
 				item := results[idx]
 
 				mu.Lock()
@@ -251,9 +272,23 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 
 	// Despacha os itens com delay adaptativo
 	for i := 0; i < total; i++ {
-		jobs <- i
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return results, ctx.Err()
+		case jobs <- i:
+		}
 		if dispatchDelay > 0 && i < total-1 {
-			time.Sleep(dispatchDelay)
+			timer := time.NewTimer(dispatchDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				close(jobs)
+				wg.Wait()
+				return results, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 	close(jobs)
