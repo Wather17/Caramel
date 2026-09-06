@@ -63,7 +63,9 @@ A área de trabalho visual é aberta com `caramel workspace` e funciona como uma
 um acervo global. O usuário pensa em materiais, não em pastas: cada material é identificado
 por hash, armazenado uma única vez em `objects/` e indexado em `vault.sqlite`. Coleções são
 temporárias e apenas referenciam materiais; execuções registram entradas, saídas,
-proveniência e derivações.
+proveniência e derivações. O nome de um arquivo também pode declarar uma classificação
+pedagógica opcional, separada do formato técnico: por exemplo, `at ciencias 01.png` vira
+uma atividade com a tag `ciencias`.
 
 O diretório do vault é escolhido por `CARAMEL_VAULT_DIR` ou pelo diretório de dados padrão
 do sistema (`~/.local/share/caramel` no Linux). A TUI importa, pesquisa, seleciona e encadeia
