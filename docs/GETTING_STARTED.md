@@ -6,8 +6,11 @@ Este documento instrui como compilar, testar e instalar o **Caramel CLI** localm
 
 ## 📋 Pré-requisitos
 
-- **Go** (versão 1.20 ou superior). Verifique com `go version`.
+- **Go** (versão 1.25 ou superior). Verifique com `go version`.
 - **Git** (para captura dos hashes de commit na compilação).
+
+Para usar a área de trabalho visual, o Caramel também precisa ser executado em um terminal
+interativo compatível com cores ANSI.
 
 ---
 
@@ -25,9 +28,20 @@ go build -o caramel ./cmd/caramel
 ./caramel --help
 ```
 
+### 2. Abrindo a área de trabalho visual
+
+```bash
+go run ./cmd/caramel workspace
+```
+
+A área de trabalho mantém um acervo global no diretório de dados do usuário. Os arquivos
+importados são deduplicados por hash e as saídas ficam registradas no vault, sem criar
+pastas de trabalho no diretório atual. Para escolher outro local, defina
+`CARAMEL_VAULT_DIR` antes de iniciar.
+
 ---
 
-### 2. Compilação Multiplataforma (Linux + Windows)
+### 3. Compilação Multiplataforma (Linux + Windows)
 Para gerar executáveis para Linux e Windows simultaneamente em `dist/`:
 
 #### No Linux / macOS:
@@ -65,4 +79,3 @@ Se você utiliza o **Scoop**, pode instalar o Caramel diretamente com o comando:
 ```powershell
 scoop install https://raw.githubusercontent.com/Wather17/Caramel/main/bucket/caramel.json
 ```
-

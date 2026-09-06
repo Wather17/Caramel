@@ -17,11 +17,19 @@ Caramel/
 ├── internal/                # Regras de negócio e código privado
 │   ├── cli/                 # Comandos e subcomandos CLI (Cobra)
 │   │   ├── root.go          # Comando raiz (`caramel`)
-│   │   └── version.go       # Comando de versão (`caramel version`)
+│   │   ├── workspace.go     # Entrada da área de trabalho visual
+│   │   └── ...              # Comandos agrupados por fluxo
 │   ├── config/              # Gerenciador de configurações e preferências
+│   ├── ui/                  # Componentes TUI, tema, previews e workspace
+│   ├── vault/               # Acervo global SQLite, objetos e migração legada
+│   ├── workspace/           # Compatibilidade com projetos JSON do MVP
+│   ├── workflow/            # Orquestração compartilhada pela CLI e pela TUI
 │   └── tools/               # Módulos e motores das ferramentas pedagógicas
-│       ├── activity/        # Geradores de atividades, exercícios e gabaritos
-│       └── dev/             # Ferramentas para desenvolvedores pedagógicos
+│       ├── ai/              # Clientes OpenRouter, triagem e geração
+│       ├── cards/            # Geração de fichas A4
+│       ├── docx/             # Leitura, extração e reconstrução de DOCX
+│       ├── pdf/              # Geração de PDFs de impressão
+│       └── pipeline/         # Pipelines compostos de DOCX
 ├── dist/                    # Binários gerados pela compilação (ignorado no git)
 ├── scripts/                 # Scripts automatizados
 │   ├── build.sh             # Compilação cross-platform (Linux & Windows)
@@ -49,6 +57,24 @@ Isola toda a lógica de negócio das ferramentas da CLI:
 - Não deve conter código direto de CLI (como prints de flags ou parsing de argumentos de terminal).
 - Retorna dados puros, estruturas Go ou erros formatados para o pacote `cli`.
 
+### 4. Área de trabalho (`internal/vault/`, `internal/workflow/` e `internal/ui/`)
+
+A área de trabalho visual é aberta com `caramel workspace` e funciona como uma inbox para
+um acervo global. O usuário pensa em materiais, não em pastas: cada material é identificado
+por hash, armazenado uma única vez em `objects/` e indexado em `vault.sqlite`. Coleções são
+temporárias e apenas referenciam materiais; execuções registram entradas, saídas,
+proveniência e derivações.
+
+O diretório do vault é escolhido por `CARAMEL_VAULT_DIR` ou pelo diretório de dados padrão
+do sistema (`~/.local/share/caramel` no Linux). A TUI importa, pesquisa, seleciona e encadeia
+geração, coloração e impressão sem criar pastas no diretório atual. Materiais arquivados
+continuam preservados e podem ser incluídos explicitamente nas buscas.
+
+O pacote `workspace` permanece como camada de compatibilidade para os manifestos JSON do
+MVP. Na abertura da TUI, projetos antigos são migrados automaticamente para coleções e
+materiais do vault, sem apagar os diretórios legados. Os comandos CLI existentes preservam
+seus próprios contratos e destinos.
+
 ---
 
 ## 🔄 Fluxo de Execução
@@ -61,6 +87,13 @@ graph TD
     Command -->|Chama regra de negócio| Tools[internal/tools/activity]
     Tools -->|Retorna dados/resultado| Command
     Command -->|Renderiza resposta no terminal| User
+
+    Workspace[caramel workspace] --> UI[internal/ui]
+    UI --> Vault[internal/vault]
+    Vault --> SQLite[(vault.sqlite)]
+    Vault --> Objects[(objects/<hash>.<ext>)]
+    Vault --> Workflow[internal/workflow]
+    Workflow --> Tools
 ```
 
 ---

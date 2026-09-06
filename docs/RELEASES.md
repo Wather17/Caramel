@@ -13,7 +13,7 @@ Antes de gerar uma nova tag e disparar o build automatizado, garanta que todos o
    go test -v ./...
    ```
 2. **Ambiente Limpo**: O branch `main` deve estar atualizado e sem alterações pendentes (`git status` limpo).
-3. **Documentação Atualizada**: Se novos comandos ou flags foram adicionados, eles devem constar no [`docs/COMMANDS.md`](./COMMANDS.md).
+3. **Documentação Atualizada**: Se a organização, os fluxos ou as políticas públicas mudaram, atualize o [`docs/COMMANDS.md`](./COMMANDS.md) e os guias afetados. A lista detalhada de comandos é derivada ao vivo pela própria CLI.
 4. **Build Local de Validação**: O script de build local não deve retornar erros:
    ```bash
    ./scripts/build.sh

@@ -1,6 +1,7 @@
 package ai_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -248,5 +249,19 @@ func TestExecuteGenerationHarnessErroDaAPI(t *testing.T) {
 	matches, _ := filepath.Glob(filepath.Join(outDir, "*"))
 	if len(matches) != 0 {
 		t.Errorf("nenhum arquivo deveria ser salvo em caso de falha, obtido %v", matches)
+	}
+}
+
+func TestExecuteGenerationHarnessContextCancelado(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client, err := ai.NewClient("sk-test")
+	if err != nil {
+		t.Fatalf("NewClient falhou: %v", err)
+	}
+	items := []ai.GenerationItem{{Index: 1, Name: "X", Slug: "01_x", Prompt: "teste"}}
+	_, err = ai.ExecuteGenerationHarnessContext(ctx, items, ai.HarnessConfig{OutputDir: t.TempDir()}, client, nil)
+	if err != context.Canceled {
+		t.Fatalf("esperava context.Canceled, obtido %v", err)
 	}
 }
