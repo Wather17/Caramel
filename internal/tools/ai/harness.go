@@ -159,11 +159,14 @@ func ExecuteGenerationHarness(items []GenerationItem, cfg HarnessConfig, client 
 // O cancelamento é observado entre itens; a chamada HTTP corrente termina pelo
 // timeout normal do cliente quando a API não oferece interrupção imediata.
 func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem, cfg HarnessConfig, client *Client, onProgress HarnessProgressFunc) ([]GenerationItem, error) {
-	if len(items) == 0 {
-		return items, nil
-	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return items, err
+	}
+	if len(items) == 0 {
+		return items, nil
 	}
 
 	targetDir := cfg.OutputDir
