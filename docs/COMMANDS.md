@@ -123,3 +123,18 @@ A workspace usa um vault global, deduplica materiais por hash e mantém a proven
 operações. As teclas principais da inbox são `/` para buscar, `i` para importar e `g`, `c`,
 `f` e `p` para geração, coloração, fichas e montagem 2-up. A variável
 `CARAMEL_VAULT_DIR` permite escolher o local do acervo.
+
+### Metadados pelo nome do arquivo
+
+Ao importar um arquivo, a workspace reconhece alguns termos no nome e os transforma em
+metadados pesquisáveis. A classificação não altera o nome original nem é obrigatória:
+
+```text
+atividade de ciências 01.png   → categoria: atividade · tag: ciencias
+at-ciencias-recorte.png        → categoria: atividade · tags: ciencias, recorte
+sequência didática animais.pdf → categoria: sequencia-didatica · tag: animais
+folha_frutas_02.png            → categoria: folha · tag: frutas
+```
+
+Aliases reconhecidos: `atividade`/`at`, `sequência`/`sequencia`/`sd` e `folha`. Materiais
+já existentes não são reclassificados automaticamente.

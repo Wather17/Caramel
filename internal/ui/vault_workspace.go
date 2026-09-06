@@ -401,7 +401,11 @@ func (m VaultWorkspaceModel) View() string {
 					style = SelectedItemStyle
 				}
 				b.WriteString(style.Render(fmt.Sprintf("%s%s %-30s", prefix, mark, material.Title)))
-				b.WriteString(HintStyle.Render(fmt.Sprintf("  %s  %s", material.Kind, strings.Join(material.Tags, ", "))))
+				kind := material.Kind
+				if material.Category != "" {
+					kind += " · " + material.Category
+				}
+				b.WriteString(HintStyle.Render(fmt.Sprintf("  %s  %s", kind, strings.Join(material.Tags, ", "))))
 				b.WriteString("\n")
 			}
 			if len(m.materials) > 0 {

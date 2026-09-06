@@ -2,15 +2,130 @@ package vault
 
 import (
 	"context"
+	"database/sql"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"caramel/internal/workspace"
 )
+
+func TestInferFilenameMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		category string
+		tags     []string
+	}{
+		{name: "atividade de Ciências 01.png", category: "atividade", tags: []string{"ciencias"}},
+		{name: "at-ciencias-recorte.png", category: "atividade", tags: []string{"ciencias", "recorte"}},
+		{name: "sequência didática animais.pdf", category: "sequencia-didatica", tags: []string{"animais"}},
+		{name: "folha_frutas_02.png", category: "folha", tags: []string{"frutas"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			metadata := inferFilenameMetadata(test.name)
+			if metadata.Category != test.category {
+				t.Fatalf("categoria inesperada: %q", metadata.Category)
+			}
+			if strings.Join(metadata.Tags, ",") != strings.Join(test.tags, ",") {
+				t.Fatalf("tags inesperadas: %v", metadata.Tags)
+			}
+		})
+	}
+}
+
+func TestImportInfersAndMergesFilenameMetadata(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	dir := t.TempDir()
+	firstPath := filepath.Join(dir, "at ciencias 01.png")
+	secondPath := filepath.Join(dir, "sequencia didatica animais.png")
+	writeVaultPNG(t, firstPath)
+	content, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secondPath, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := v.ImportFile(context.Background(), firstPath, "", []string{"importado"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Material.Category != "atividade" || !contains(first.Material.Tags, "ciencias") || !contains(first.Material.Tags, "importado") {
+		t.Fatalf("metadados inferidos inesperados: %+v", first.Material)
+	}
+	second, err := v.ImportFile(context.Background(), secondPath, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Created || second.Material.ID != first.Material.ID || second.Material.Category != "atividade" || !contains(second.Material.Tags, "animais") {
+		t.Fatalf("deduplicação não preservou/mesclou metadados: %+v", second.Material)
+	}
+
+	results, err := v.Search(context.Background(), SearchOptions{Query: "ciencias", Category: "atividade"})
+	if err != nil || len(results) != 1 {
+		t.Fatalf("busca por metadados falhou: %v, %d", err, len(results))
+	}
+}
+
+func TestOpenMigratesCategoryColumn(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CARAMEL_VAULT_DIR", root)
+	if err := os.MkdirAll(filepath.Join(root, "objects"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(root, "vault.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`
+CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+CREATE TABLE materials (
+ id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+ kind TEXT NOT NULL, extension TEXT NOT NULL, content_hash TEXT NOT NULL UNIQUE,
+ version INTEGER NOT NULL DEFAULT 1, size INTEGER NOT NULL, object_path TEXT NOT NULL UNIQUE,
+ source_name TEXT NOT NULL DEFAULT '', source_path TEXT NOT NULL DEFAULT '', archived_at TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE material_tags (material_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY(material_id, tag));
+INSERT INTO schema_versions(version, applied_at) VALUES (1, '2026-01-01T00:00:00Z');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	var category string
+	if err := v.db.QueryRow("SELECT category FROM materials LIMIT 1").Scan(&category); err != sql.ErrNoRows {
+		t.Fatalf("schema legado não foi migrado como esperado: %v", err)
+	}
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
 
 func TestVaultImportSearchCollectionAndArchive(t *testing.T) {
 	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())

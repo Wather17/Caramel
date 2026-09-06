@@ -20,7 +20,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -28,6 +28,7 @@ type Material struct {
 	Title       string
 	Description string
 	Kind        string
+	Category    string
 	Extension   string
 	ContentHash string
 	Version     int
@@ -68,6 +69,7 @@ type Run struct {
 type SearchOptions struct {
 	Query           string
 	Kind            string
+	Category        string
 	Tag             string
 	IncludeArchived bool
 }
@@ -153,8 +155,41 @@ func (v *Vault) configure() error {
 	if _, err := v.db.Exec(schemaSQL); err != nil {
 		return fmt.Errorf("falha ao criar schema do vault: %w", err)
 	}
+	if err := v.ensureCategoryColumn(); err != nil {
+		return err
+	}
+	if _, err := v.db.Exec("CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)"); err != nil {
+		return fmt.Errorf("falha ao criar índice de categorias: %w", err)
+	}
 	if _, err := v.db.Exec("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES (?, ?)", schemaVersion, nowString()); err != nil {
 		return fmt.Errorf("falha ao registrar versão do schema: %w", err)
+	}
+	return nil
+}
+
+func (v *Vault) ensureCategoryColumn() error {
+	rows, err := v.db.Query("PRAGMA table_info(materials)")
+	if err != nil {
+		return fmt.Errorf("falha ao inspecionar schema de materiais: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("falha ao ler schema de materiais: %w", err)
+		}
+		if name == "category" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("falha ao finalizar leitura do schema: %w", err)
+	}
+	if _, err := v.db.Exec("ALTER TABLE materials ADD COLUMN category TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("falha ao migrar coluna de categoria: %w", err)
 	}
 	return nil
 }
@@ -169,6 +204,7 @@ CREATE TABLE IF NOT EXISTS materials (
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT '',
     extension TEXT NOT NULL,
     content_hash TEXT NOT NULL UNIQUE,
     version INTEGER NOT NULL DEFAULT 1,
@@ -261,16 +297,15 @@ func (v *Vault) ImportFile(ctx context.Context, source, title string, tags []str
 	if err != nil {
 		return ImportResult{}, err
 	}
+	metadata := inferFilenameMetadata(source)
+	importTags := cleanTags(append(append([]string{}, tags...), metadata.Tags...))
 	existing, err := v.getByHash(hash)
 	if err != nil {
 		return ImportResult{}, err
 	}
 	if existing != nil {
-		if existing.ArchivedAt != nil {
-			if _, err := v.db.ExecContext(ctx, "UPDATE materials SET archived_at = NULL, updated_at = ? WHERE id = ?", nowString(), existing.ID); err != nil {
-				return ImportResult{}, err
-			}
-			existing.ArchivedAt = nil
+		if err := v.mergeImportedMetadata(ctx, existing, metadata.Category, importTags); err != nil {
+			return ImportResult{}, err
 		}
 		return ImportResult{Material: *existing}, nil
 	}
@@ -299,17 +334,17 @@ func (v *Vault) ImportFile(ctx context.Context, source, title string, tags []str
 		title = strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))
 	}
 	material := Material{
-		ID: "sha256:" + hash, Title: title, Kind: kindForExtension(ext), Extension: ext,
+		ID: "sha256:" + hash, Title: title, Kind: kindForExtension(ext), Category: metadata.Category, Extension: ext,
 		ContentHash: hash, Version: 1, Size: size, ObjectPath: objectName,
-		SourceName: filepath.Base(source), SourcePath: source, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Tags: cleanTags(tags),
+		SourceName: filepath.Base(source), SourcePath: source, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Tags: importTags,
 	}
 	tx, err := v.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ImportResult{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO materials
-        (id,title,description,kind,extension,content_hash,version,size,object_path,source_name,source_path,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, material.ID, material.Title, material.Description, material.Kind, material.Extension,
+        (id,title,description,kind,category,extension,content_hash,version,size,object_path,source_name,source_path,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, material.ID, material.Title, material.Description, material.Kind, material.Category, material.Extension,
 		material.ContentHash, material.Version, material.Size, material.ObjectPath, material.SourceName, material.SourcePath, timeString(material.CreatedAt), timeString(material.UpdatedAt)); err != nil {
 		_ = tx.Rollback()
 		if existing, lookupErr := v.getByHash(hash); lookupErr == nil && existing != nil {
@@ -384,13 +419,18 @@ func (v *Vault) Search(ctx context.Context, opts SearchOptions) ([]Material, err
 		query += " AND m.archived_at IS NULL"
 	}
 	if opts.Query != "" {
-		query += " AND (LOWER(m.title) LIKE LOWER(?) OR LOWER(m.description) LIKE LOWER(?) OR LOWER(m.source_name) LIKE LOWER(?))"
+		query += " AND (LOWER(m.title) LIKE LOWER(?) OR LOWER(m.description) LIKE LOWER(?) OR LOWER(m.source_name) LIKE LOWER(?) OR LOWER(m.category) LIKE LOWER(?) OR LOWER(t.tag) LIKE LOWER(?))"
 		term := "%" + opts.Query + "%"
-		args = append(args, term, term, term)
+		normalizedTerm := "%" + normalizeFilenameText(opts.Query) + "%"
+		args = append(args, term, term, term, normalizedTerm, normalizedTerm)
 	}
 	if opts.Kind != "" {
 		query += " AND m.kind = ?"
 		args = append(args, opts.Kind)
+	}
+	if opts.Category != "" {
+		query += " AND m.category = ?"
+		args = append(args, opts.Category)
 	}
 	if opts.Tag != "" {
 		query += " AND t.tag = ?"
@@ -415,6 +455,46 @@ func (v *Vault) Search(ctx context.Context, opts SearchOptions) ([]Material, err
 		materials = append(materials, *material)
 	}
 	return materials, rows.Err()
+}
+
+func (v *Vault) mergeImportedMetadata(ctx context.Context, material *Material, category string, tags []string) error {
+	mergedTags := cleanTags(append(append([]string{}, material.Tags...), tags...))
+	mergedCategory := material.Category
+	if mergedCategory == "" {
+		mergedCategory = category
+	}
+	shouldUnarchive := material.ArchivedAt != nil
+	if mergedCategory == material.Category && strings.Join(mergedTags, "\x00") == strings.Join(material.Tags, "\x00") && !shouldUnarchive {
+		return nil
+	}
+
+	tx, err := v.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	updated := nowString()
+	if _, err := tx.ExecContext(ctx, "UPDATE materials SET category=?, archived_at=NULL, updated_at=? WHERE id=?", mergedCategory, updated, material.ID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM material_tags WHERE material_id=?", material.ID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	for _, tag := range mergedTags {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO material_tags(material_id,tag) VALUES (?,?)", material.ID, tag); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	material.Category = mergedCategory
+	material.Tags = mergedTags
+	material.UpdatedAt = parseTime(updated)
+	material.ArchivedAt = nil
+	return nil
 }
 
 // ObjectPath resolve o arquivo físico de um material.
@@ -542,7 +622,7 @@ func (v *Vault) addRunMaterials(ctx context.Context, table, runID string, ids []
 	return nil
 }
 
-const materialSelect = `SELECT m.id,m.title,m.description,m.kind,m.extension,m.content_hash,m.version,m.size,m.object_path,m.source_name,m.source_path,m.archived_at,m.created_at,m.updated_at FROM materials m`
+const materialSelect = `SELECT m.id,m.title,m.description,m.kind,m.category,m.extension,m.content_hash,m.version,m.size,m.object_path,m.source_name,m.source_path,m.archived_at,m.created_at,m.updated_at FROM materials m`
 
 type scanner interface{ Scan(...any) error }
 
@@ -550,7 +630,7 @@ func scanMaterial(row scanner, tags []string) (*Material, error) {
 	var m Material
 	var archived sql.NullString
 	var created, updated string
-	if err := row.Scan(&m.ID, &m.Title, &m.Description, &m.Kind, &m.Extension, &m.ContentHash, &m.Version, &m.Size, &m.ObjectPath, &m.SourceName, &m.SourcePath, &archived, &created, &updated); err != nil {
+	if err := row.Scan(&m.ID, &m.Title, &m.Description, &m.Kind, &m.Category, &m.Extension, &m.ContentHash, &m.Version, &m.Size, &m.ObjectPath, &m.SourceName, &m.SourcePath, &archived, &created, &updated); err != nil {
 		return nil, err
 	}
 	if archived.Valid && archived.String != "" {

@@ -11,6 +11,7 @@
 - 💻 **Multiplataforma**: Executáveis pré-compilados para Linux e Windows.
 - 📦 **Instalação Simplificada**: Scripts automatizados de instalação para Linux (`.sh`) e Windows (`.ps1`).
 - 🗂️ **Área de Trabalho Visual**: Inbox de um acervo global deduplicado para encadear geração, coloração e impressão sem espalhar artefatos pelo diretório atual.
+- 🏷️ **Metadados Declarativos**: Classificação e tags opcionais inferidas de nomes como `atividade de ciências.png`, sem exigir organização por pastas.
 - 📚 **Arquitetura Modular**: Estrutura limpa (Clean Layout) para fácil expansão de novas ferramentas pedagógicas.
 
 ---
