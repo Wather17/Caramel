@@ -10,6 +10,7 @@
 - 🖼️ **Extrator de Imagens DOCX**: Extração e listagem automática de imagens contidas em arquivos `.docx`.
 - 💻 **Multiplataforma**: Executáveis pré-compilados para Linux e Windows.
 - 📦 **Instalação Simplificada**: Scripts automatizados de instalação para Linux (`.sh`) e Windows (`.ps1`).
+- 🗂️ **Área de Trabalho Visual**: Inbox de um acervo global deduplicado para encadear geração, coloração e impressão sem espalhar artefatos pelo diretório atual.
 - 📚 **Arquitetura Modular**: Estrutura limpa (Clean Layout) para fácil expansão de novas ferramentas pedagógicas.
 
 ---
@@ -42,6 +43,15 @@ go run ./cmd/caramel docx extract prova.docx --list
 ```bash
 ./scripts/build.sh
 ```
+
+### Usar a área de trabalho visual
+```bash
+go run ./cmd/caramel workspace
+```
+
+O vault global fica no diretório de dados do usuário e pode ser redirecionado com
+`CARAMEL_VAULT_DIR`. A área de trabalho preserva materiais, registra a proveniência das
+operações e migra automaticamente projetos antigos do MVP.
 
 ---
 

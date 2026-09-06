@@ -72,6 +72,7 @@ caramel config set model_image google/gemini-3.1-flash-image
 | Comando | Finalidade |
 | :--- | :--- |
 | `caramel guide` | Guia didático: lista comandos ou busca por termo |
+| `caramel workspace` | Abre a inbox do acervo global para pesquisar materiais e encadear fluxos |
 | `caramel install` | Instala o Caramel CLI globalmente |
 | `caramel version` | Exibe a versão atual do executável |
 
@@ -111,3 +112,14 @@ caramel print 2up ./imagens_frutas/
 
 Para criar um **novo comando**, siga as políticas de nomes, flags e documentação em
 [`docs/CONTRIBUTING_COMMANDS.md`](CONTRIBUTING_COMMANDS.md).
+
+## 🗃️ Área de trabalho visual
+
+```bash
+caramel workspace
+```
+
+A workspace usa um vault global, deduplica materiais por hash e mantém a proveniência das
+operações. As teclas principais da inbox são `/` para buscar, `i` para importar e `g`, `c`,
+`f` e `p` para geração, coloração, fichas e montagem 2-up. A variável
+`CARAMEL_VAULT_DIR` permite escolher o local do acervo.
