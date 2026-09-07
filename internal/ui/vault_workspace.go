@@ -24,6 +24,7 @@ const (
 	vaultGenerate
 	vaultConfirm
 	vaultRunning
+	vaultConsole
 )
 
 type vaultRunMessage struct {
@@ -36,21 +37,26 @@ type vaultRunMessage struct {
 
 // VaultWorkspaceModel é a experiência de inbox e busca do acervo global.
 type VaultWorkspaceModel struct {
-	vault       *vault.Vault
-	screen      vaultScreen
-	materials   []vault.Material
-	cursor      int
-	selected    map[string]bool
-	query       textinput.Model
-	input       textinput.Model
-	inputPrompt string
-	status      string
-	fatal       error
-	pendingOp   string
-	pendingText []string
-	collection  string
-	runCancel   context.CancelFunc
-	runEvents   []workflow.ProgressEvent
+	vault                *vault.Vault
+	screen               vaultScreen
+	materials            []vault.Material
+	cursor               int
+	selected             map[string]bool
+	query                textinput.Model
+	input                textinput.Model
+	inputPrompt          string
+	status               string
+	fatal                error
+	pendingOp            string
+	pendingText          []string
+	collection           string
+	runCancel            context.CancelFunc
+	runEvents            []workflow.ProgressEvent
+	consoleInput         textinput.Model
+	consoleLines         []string
+	consoleHistory       []string
+	consoleHistoryCursor int
+	returnToConsole      bool
 }
 
 // NewVaultWorkspaceModel abre o vault, migra projetos legados e prepara a inbox.
@@ -61,7 +67,11 @@ func NewVaultWorkspaceModel() VaultWorkspaceModel {
 	input := textinput.New()
 	input.CharLimit = 240
 	input.Width = 72
-	m := VaultWorkspaceModel{screen: vaultInbox, query: query, input: input, selected: map[string]bool{}}
+	consoleInput := textinput.New()
+	consoleInput.CharLimit = 500
+	consoleInput.Width = 78
+	consoleInput.Prompt = "> "
+	m := VaultWorkspaceModel{screen: vaultInbox, query: query, input: input, consoleInput: consoleInput, selected: map[string]bool{}}
 	v, err := vault.Open()
 	if err != nil {
 		m.fatal = err
@@ -101,16 +111,34 @@ func (m VaultWorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vaultRunMessage:
 		if typed.done {
 			m.runCancel = nil
-			if typed.err != nil {
-				m.status = fmt.Sprintf("❌ %v", typed.err)
-			} else {
-				m.status = fmt.Sprintf("✅ %d material(is) criado(s)", len(typed.materials))
-			}
 			m.reload()
-			m.screen = vaultInbox
+			if m.returnToConsole {
+				if typed.err != nil {
+					m.appendConsoleOutput(fmt.Sprintf("❌ %v", typed.err))
+				} else {
+					m.appendConsoleOutput(fmt.Sprintf("✅ %d material(is) criado(s)", len(typed.materials)))
+				}
+				m.returnToConsole = false
+				m.screen = vaultConsole
+				m.consoleInput.Focus()
+			} else {
+				if typed.err != nil {
+					m.status = fmt.Sprintf("❌ %v", typed.err)
+				} else {
+					m.status = fmt.Sprintf("✅ %d material(is) criado(s)", len(typed.materials))
+				}
+				m.screen = vaultInbox
+			}
 			return m, nil
 		}
 		m.runEvents = append(m.runEvents, typed.event)
+		if m.returnToConsole && typed.event.Message != "" {
+			line := typed.event.Message
+			if typed.event.Total > 0 {
+				line = fmt.Sprintf("[%d/%d] %s", typed.event.Current, typed.event.Total, line)
+			}
+			m.appendConsoleOutput(line)
+		}
 		if len(m.runEvents) > 10 {
 			m.runEvents = m.runEvents[len(m.runEvents)-10:]
 		}
@@ -138,6 +166,8 @@ func (m VaultWorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.runCancel()
 			m.status = "⏳ Cancelamento solicitado..."
 		}
+	case vaultConsole:
+		return m.updateConsole(msg)
 	}
 	return m, nil
 }
@@ -166,6 +196,8 @@ func (m VaultWorkspaceModel) updateInbox(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "/":
 		m.query.Focus()
+	case ":":
+		m.openConsole()
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -418,7 +450,7 @@ func (m VaultWorkspaceModel) View() string {
 			}
 		}
 		b.WriteString("\n")
-		b.WriteString(HintStyle.Render("↑/↓ navegar · espaço selecionar · a todos · n nenhum · / buscar · i importar · g gerar · c colorir · f fichas · p 2-up · q sair"))
+		b.WriteString(HintStyle.Render("↑/↓ navegar · espaço selecionar · a todos · n nenhum · / buscar · : console · i importar · g gerar · c colorir · f fichas · p 2-up · q sair"))
 	case vaultImport, vaultGenerate:
 		b.WriteString(HelpSectionTitleStyle.Render(m.inputPrompt))
 		b.WriteString("\n\n")
@@ -455,6 +487,20 @@ func (m VaultWorkspaceModel) View() string {
 			b.WriteString("Preparando operação...\n")
 		}
 		b.WriteString("\n" + HintStyle.Render("esc/c cancelar com segurança"))
+	case vaultConsole:
+		b.WriteString(HelpSectionTitleStyle.Render("Console do Caramel"))
+		b.WriteString("\n\n")
+		start := 0
+		if len(m.consoleLines) > 18 {
+			start = len(m.consoleLines) - 18
+		}
+		for _, line := range m.consoleLines[start:] {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+		b.WriteString(m.consoleInput.View())
+		b.WriteString("\n\n" + HintStyle.Render("enter executar · ↑/↓ histórico · esc inbox"))
 	}
 	if m.status != "" {
 		b.WriteString("\n\n" + lipgloss.NewStyle().Foreground(ColorWarning).Render(m.status))

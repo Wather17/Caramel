@@ -124,6 +124,21 @@ operações. As teclas principais da inbox são `/` para buscar, `i` para import
 `f` e `p` para geração, coloração, fichas e montagem 2-up. A variável
 `CARAMEL_VAULT_DIR` permite escolher o local do acervo.
 
+O console interno é aberto com `:` e aceita os comandos do fluxo do vault sem executar shell
+arbitrário:
+
+```text
+:help
+:search ciencias
+:import ~/Downloads
+:generate animais, frutas
+:colorize
+:cards
+:2up
+```
+
+Use `↑/↓` para recuperar o histórico, `enter` para executar e `esc` para voltar à inbox.
+
 ### Metadados pelo nome do arquivo
 
 Ao importar um arquivo, a workspace reconhece alguns termos no nome e os transforma em
