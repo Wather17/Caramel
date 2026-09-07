@@ -1,10 +1,26 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestExpandConsolePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := expandConsolePath("~/Downloads")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join(home, "Downloads") {
+		t.Fatalf("caminho expandido inesperado: %s", path)
+	}
+}
 
 func TestParseConsoleInput(t *testing.T) {
 	args, err := parseConsoleInput(`import "./Minha Pasta"`)
