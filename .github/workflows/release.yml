@@ -30,10 +30,15 @@ jobs:
 
       - name: Compile Cross-Platform Binaries
         run: |
-          TAG_VERSION=${GITHUB_REF_NAME}
+          RAW_VERSION=${GITHUB_REF_NAME#v}
+          if [ -z "${RAW_VERSION}" ] || [ "${RAW_VERSION}" = "${GITHUB_REF_NAME}" ] || [[ "${RAW_VERSION}" == v* ]]; then
+            echo "Tag inválida para build: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          LDFLAGS="-X caramel/internal/cli.Version=${TAG_VERSION} -X caramel/internal/cli.Commit=${COMMIT} -X caramel/internal/cli.Date=${DATE} -s -w"
+          LDFLAGS="-X caramel/internal/cli.Version=${RAW_VERSION} -X caramel/internal/cli.Commit=${COMMIT} -X caramel/internal/cli.Date=${DATE} -s -w"
           
           mkdir -p dist
           
