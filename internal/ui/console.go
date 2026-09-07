@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -110,6 +112,20 @@ func workspaceConsoleHelpLines() []string {
 	return lines
 }
 
+func expandConsolePath(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, "~\\") {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("não foi possível expandir '~': %w", err)
+	}
+	if path == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, path[2:]), nil
+}
+
 func (m *VaultWorkspaceModel) openConsole() {
 	m.screen = vaultConsole
 	m.consoleInput.SetValue("")
@@ -207,7 +223,12 @@ func (m VaultWorkspaceModel) executeConsoleCommand(raw string) (tea.Model, tea.C
 			m.appendConsoleOutput("❌ uso: import <arquivo ou pasta>")
 			return m, nil
 		}
-		results, importErr := m.vault.ImportPaths(context.Background(), []string{strings.Join(args[1:], " ")}, []string{"importado"})
+		path, pathErr := expandConsolePath(strings.Join(args[1:], " "))
+		if pathErr != nil {
+			m.appendConsoleOutput("❌ " + pathErr.Error())
+			return m, nil
+		}
+		results, importErr := m.vault.ImportPaths(context.Background(), []string{path}, []string{"importado"})
 		if importErr != nil {
 			m.appendConsoleOutput("❌ " + importErr.Error())
 			return m, nil
