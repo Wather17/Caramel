@@ -169,7 +169,7 @@ var (
 
 var configModelsCmd = &cobra.Command{
 	Use:   "models",
-	Short: "Lista e escolhe os modelos de IA da OpenRouter (imagem, texto e triagem)",
+	Short: "Gerencia os modelos de IA da OpenRouter",
 	Long: `Consulta o catálogo público de modelos da OpenRouter e abre uma TUI dividida em
 três categorias — imagem, texto e triagem — com busca incremental (digite para filtrar).
 Ao confirmar, salva as escolhas em MODEL_IMAGE, MODEL_TEXT e MODEL_TRIAGE no .env.
@@ -177,15 +177,16 @@ Ao confirmar, salva as escolhas em MODEL_IMAGE, MODEL_TEXT e MODEL_TRIAGE no .en
 📚 QUANDO USAR:
 Use para trocar os modelos padrão do Caramel sem digitar a flag -m toda vez. A prioridade
 de resolução é: flag no comando > valor salvo no .env > padrão de fábrica.
-Use '--list' para imprimir os modelos em texto puro (útil para scripts).`,
+Use 'models select' para abrir a seleção interativa ou 'models list' para imprimir o catálogo.
+O caminho 'models --list' permanece disponível por compatibilidade.`,
 	Example: `# Abrir a TUI de seleção de modelos (imagem, texto e triagem)
-caramel config models
+caramel config models select
 
 # Listar modelos de imagem em texto puro
-caramel config models --list --role image --limit 10
+caramel config models list --role image --limit 10
 
 # Listar modelos de texto que contenham 'deepseek'
-caramel config models --list --role text --search deepseek`,
+caramel config models list --role text --search deepseek`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		models, err := ai.ListModels()
 		if err != nil {
@@ -258,6 +259,49 @@ caramel config models --list --role text --search deepseek`,
 	},
 }
 
+var configModelsSelectCmd = &cobra.Command{
+	Use:   "select",
+	Short: "Escolhe modelos de IA pela interface interativa",
+	Long: `Abre a seleção interativa dos modelos de imagem, texto e triagem e salva as escolhas.
+
+📚 QUANDO USAR:
+Use para trocar os modelos padrão do Caramel sem editar o arquivo de configuração.`,
+	Example: `# Abrir a seleção de modelos
+caramel config models select`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runConfigModelsCompatibility(false)
+	},
+}
+
+var configModelsListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Lista modelos de IA em texto para inspeção ou scripts",
+	Long: `Consulta e imprime o catálogo de modelos da OpenRouter, permitindo filtrar por papel e termo.
+
+📚 QUANDO USAR:
+Use para descobrir IDs de modelos antes de configurar uma preferência ou automatizar uma consulta.`,
+	Example: `# Listar modelos de imagem mais baratos
+caramel config models list --role image --limit 10`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runConfigModelsCompatibility(true)
+	},
+}
+
+func runConfigModelsCompatibility(list bool) error {
+	previous := configModelsList
+	defer func() { configModelsList = previous }()
+	configModelsList = list
+	return configModelsCmd.RunE(configModelsCmd, nil)
+}
+
+func addConfigModelsListFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&configModelsRole, "role", "", "Filtra por papel: image, text ou triage")
+	cmd.Flags().IntVar(&configModelsLimit, "limit", 15, "Quantidade de modelos a exibir")
+	cmd.Flags().StringVar(&configModelsQuery, "search", "", "Busca por termo no ID ou nome")
+}
+
 // listModelsPlain imprime os modelos do catálogo em texto puro, sem TUI
 func listModelsPlain(models []ai.Model) error {
 	role := configModelsRole
@@ -312,10 +356,13 @@ func init() {
 	configModelsCmd.Flags().StringVar(&configModelsRole, "role", "", "Filtra por papel no modo --list: image, text ou triage (padrão: image)")
 	configModelsCmd.Flags().IntVar(&configModelsLimit, "limit", 15, "Quantidade de modelos a exibir no modo --list")
 	configModelsCmd.Flags().StringVar(&configModelsQuery, "search", "", "Busca por termo no id/nome no modo --list")
+	addConfigModelsListFlags(configModelsListCmd)
 
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configShowCmd)
 	configCmd.AddCommand(configSetupCmd)
 	configCmd.AddCommand(configModelsCmd)
+	configModelsCmd.AddCommand(configModelsSelectCmd)
+	configModelsCmd.AddCommand(configModelsListCmd)
 	RootCmd.AddCommand(configCmd)
 }

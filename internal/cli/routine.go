@@ -30,8 +30,9 @@ var routineCmd = &cobra.Command{
 }
 
 var routineProcessCmd = &cobra.Command{
-	Use:   "process <pasta_ou_arquivo.docx>",
-	Short: "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
+	Use:    "process <pasta_ou_arquivo.docx>",
+	Hidden: true,
+	Short:  "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
 	Long: `Inspeciona arquivos .docx com as rotinas semanais de aula, extrai as informações de texto,
 envia ao OpenRouter para resumir e classificar os Campos de Experiência da BNCC,
 e compila tudo cronologicamente em um único arquivo .docx formatado em Paisagem.
@@ -186,12 +187,36 @@ caramel routine process rotina_semana_1.docx`,
 	},
 }
 
+var routineConsolidateCmd = &cobra.Command{
+	Use:   "consolidate <pasta_ou_arquivo.docx>",
+	Short: "Consolida rotinas de aula em um relatório .docx",
+	Long: `Lê uma ou mais rotinas semanais, resume as atividades com IA e gera um relatório consolidado
+classificado pelos Campos de Experiência da BNCC.
+
+📚 QUANDO USAR:
+Use para reunir rotinas de aula em um único documento pronto para revisão e planejamento pedagógico.`,
+	Example: `# Consolidar todas as rotinas de uma pasta
+caramel routine consolidate ./abril/`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return routineProcessCmd.RunE(cmd, args)
+	},
+}
+
+func addRoutineFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino do relatório consolidado")
+	cmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA para análise")
+	cmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Arquivo com prompt personalizado")
+}
+
 func init() {
 	routineProcessCmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino para salvar o arquivo consolidado")
 	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise (config: model_text)")
 	routineProcessCmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Caminho para arquivo contendo prompt customizado")
+	addRoutineFlags(routineConsolidateCmd)
 
 	routineCmd.AddCommand(routineProcessCmd)
+	routineCmd.AddCommand(routineConsolidateCmd)
 	RootCmd.AddCommand(routineCmd)
 }
 

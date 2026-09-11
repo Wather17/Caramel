@@ -113,6 +113,10 @@ func GetAllCommandDocs() []CommandHelpDoc {
 // o caminho agrupado (ex: 'caramel print 2up'), deduplicando comandos que também
 // são registrados na raiz para compatibilidade.
 func collectGroupLeaves(group *cobra.Command, seen map[*cobra.Command]bool, docs *[]CommandHelpDoc) {
+	collectGroupLeavesWithCategory(group, seen, docs, categoryForGroup(group))
+}
+
+func collectGroupLeavesWithCategory(group *cobra.Command, seen map[*cobra.Command]bool, docs *[]CommandHelpDoc, category CommandCategory) {
 	for _, sub := range group.Commands() {
 		if sub == nil || seen[sub] || !sub.IsAvailableCommand() {
 			continue
@@ -126,11 +130,13 @@ func collectGroupLeaves(group *cobra.Command, seen map[*cobra.Command]bool, docs
 
 		seen[sub] = true
 
-		if sub.Runnable() {
+		// Um comando que também possui subcomandos funciona como grupo de
+		// compatibilidade; somente as folhas devem aparecer no guia.
+		if sub.Runnable() && !sub.HasSubCommands() {
 			path := group.CommandPath() + " " + sub.Name()
-			*docs = append(*docs, buildDoc(sub, path, categoryForGroup(group)))
+			*docs = append(*docs, buildDoc(sub, path, category))
 		}
-		collectGroupLeaves(sub, seen, docs)
+		collectGroupLeavesWithCategory(sub, seen, docs, category)
 	}
 }
 

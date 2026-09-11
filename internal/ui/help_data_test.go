@@ -41,20 +41,27 @@ func TestGetAllCommandDocs(t *testing.T) {
 
 func TestGetAllCommandDocs_ComandosEsperados(t *testing.T) {
 	docs := ui.GetAllCommandDocs()
+	names := make(map[string]bool, len(docs))
+	for _, doc := range docs {
+		names[doc.Name] = true
+	}
 
 	expected := map[string]bool{
-		"caramel print 2up":          false,
-		"caramel print cards":        false,
-		"caramel image colorize":     false,
-		"caramel image generate":     false,
-		"caramel docx extract":       false,
-		"caramel routine process":    false,
-		"caramel install":            false,
-		"caramel guide":              false,
-		"caramel version":            false,
-		"caramel config setup":       false,
-		"caramel config set":         false,
-		"caramel config show":        false,
+		"caramel print 2up":            false,
+		"caramel print cards":          false,
+		"caramel image colorize":       false,
+		"caramel image generate":       false,
+		"caramel docx images list":     false,
+		"caramel docx images extract":  false,
+		"caramel routine consolidate":  false,
+		"caramel install":              false,
+		"caramel guide":                false,
+		"caramel version":              false,
+		"caramel config setup":         false,
+		"caramel config set":           false,
+		"caramel config show":          false,
+		"caramel config models list":   false,
+		"caramel config models select": false,
 	}
 
 	for _, doc := range docs {
@@ -66,6 +73,12 @@ func TestGetAllCommandDocs_ComandosEsperados(t *testing.T) {
 	for name, found := range expected {
 		if !found {
 			t.Errorf("Comando '%s' não foi documentado no guia (pode não estar registrado no Cobra ou não ser runnable)", name)
+		}
+	}
+
+	for _, legacy := range []string{"caramel docx extract", "caramel routine process", "caramel config models"} {
+		if names[legacy] {
+			t.Errorf("caminho legado %q não deveria aparecer como canônico no guia", legacy)
 		}
 	}
 }
