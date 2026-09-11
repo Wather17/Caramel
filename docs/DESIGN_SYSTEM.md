@@ -12,7 +12,7 @@ O nome e a identidade do **Caramel** são inspirados na faixa *"Caramel"* da ban
 
 ## 🎨 Paleta de Cores Oficial
 
-A interface TUI do Caramel utiliza uma paleta enxuta de **4 cores principais** para garantir consistência visual, hierarquia clara e excelente legibilidade em terminais claros e escuros.
+A interface TUI do Caramel utiliza uma paleta enxuta de **5 cores principais** para garantir consistência visual, hierarquia clara e excelente legibilidade em terminais claros e escuros.
 
 | Papel Visual | HEX | Exemplo de Aplicação em Terminal |
 | :--- | :--- | :--- |
@@ -20,6 +20,7 @@ A interface TUI do Caramel utiliza uma paleta enxuta de **4 cores principais** p
 | **Highlight (Ativo)** | `#E8709C` | Elemento focado/selecionado em listas (`> [X]`), textos ativos. |
 | **Tag Accent (Acento)** | `#D96B27` | Badges de formato/extensão (`[DOCX]`, `[PDF]`), contadores e alertas suaves. |
 | **Muted (Secundário)** | `#A19BA8` | Itens desmarcados (`[ ]`), dicas de teclado (`esc to cancel`), caminhos secundários. |
+| **Warning (Aviso)** | `#E5C07B` | Avisos, resultados sem itens, cancelamentos e status que exigem atenção. |
 
 ---
 

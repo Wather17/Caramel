@@ -100,7 +100,7 @@ func init() {
 | Regra | Exemplo |
 | :--- | :--- |
 | **Inglês** (mais prático de digitar), minúsculas, verbo | `extract`, `colorize`, `generate` |
-| **Palavra única** (nunca com espaço) | `2up` é aceitável; `print cards` é proibido |
+| **Ação final curta** | Ações são palavras únicas (`extract`, `generate`); grupos e recursos podem formar caminhos como `print cards` e `docx images extract` |
 | **Comando vive num grupo** por fluxo pedagógico | `docx`, `image`, `print`, `routine` |
 | **Raiz só para o que não pertence a fluxo** | `guide`, `install`, `version` |
 | **Aliases em português** são bem-vindos | `colorir`, `ajuda` |
@@ -110,11 +110,11 @@ func init() {
 
 | Grupo | Finalidade | Comandos |
 | :--- | :--- | :--- |
-| `docx` | Manipulação de documentos Word | `extract` |
+| `docx` | Manipulação de documentos Word | `images list`, `images extract` |
 | `image` | Criação e tratamento de imagens | `colorize`, `generate` |
 | `print` | Preparação de materiais para impressão | `2up`, `cards` |
-| `routine` | Rotinas de aula | `process` |
-| `config` | Configuração de chaves e preferências | `set`, `show`, `setup` |
+| `routine` | Rotinas de aula | `consolidate` |
+| `config` | Configuração de chaves, modelos e preferências | `set`, `show`, `setup`, `models list`, `models select` |
 
 ### Atalho silencioso na raiz (compat)
 
@@ -191,7 +191,7 @@ Não reutilize essas exceções em comandos novos nem altere seu significado.
 | `Short` | Resumo de **até ~60 caracteres**, em português, começando com verbo |
 | `Long` | Contexto pedagógico com seção **`📚 QUANDO USAR`** (para que serve, quando usar) |
 | `Example` | **Exemplos reais no campo `Example`** do Cobra, com `# descrição` antes de cada comando |
-| `--help` | Proibido colocar `EXEMPLOS:` dentro do `Long` — o campo `Example` já renderiza |
+| `--help` | Não duplique a seção de exemplos dentro do `Long` — o campo `Example` já renderiza |
 
 Formato do campo `Example` (parseado pelo guia para a busca):
 

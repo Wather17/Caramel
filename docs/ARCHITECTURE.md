@@ -85,8 +85,8 @@ seus próprios contratos e destinos.
 graph TD
     User([Usuário]) -->|Digita comando| Main[cmd/caramel/main.go]
     Main -->|Invoca| CLI[internal/cli/Execute]
-    CLI -->|Parses flags & seleciona subcomando| Command[Subcomando ex: caramel activity generate]
-    Command -->|Chama regra de negócio| Tools[internal/tools/activity]
+    CLI -->|Parses flags & seleciona subcomando| Command[Subcomando ex: caramel image generate]
+    Command -->|Chama regra de negócio| Tools[internal/tools/ai]
     Tools -->|Retorna dados/resultado| Command
     Command -->|Renderiza resposta no terminal| User
 
