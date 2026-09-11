@@ -137,13 +137,25 @@ guia em `legacyAliases` em `internal/ui/help_data.go` (ex: `process` virou alias
 
 ### Shorthands padronizados (quando a flag existir)
 
-| Shorthand | Significado |
+| Shorthand | Significado preferencial |
 | :--- | :--- |
 | `-o` | `--output` (diretório/arquivo de saída) |
-| `-m` | `--model` (modelo de IA) |
-| `-v` | `--verbose` (logs de depuração) |
-| `-i` | `--interactive` (seleção interativa) |
+| `-m` | `--model` quando o comando recebe um modelo de IA |
+| `-v` | `--verbose` (diagnóstico detalhado; flag global) |
+| `-i` | `--interactive` quando o comando oferece seleção interativa |
 | `-s` | `--min-size` (tamanho mínimo de arquivo) |
+
+Os shorthands são convenções locais ao comando, não reservas globais. Um shorthand não pode
+ser usado por duas flags do mesmo comando. Ao adicionar um comando novo, prefira o significado
+da tabela; se o significado não se aplicar ou houver conflito de compatibilidade, use apenas o
+nome longo e registre a exceção na documentação.
+
+Exceções legadas preservadas:
+
+- `caramel image generate -i` significa `--items`.
+- `caramel print 2up -m` significa `--margin`.
+
+Não reutilize essas exceções em comandos novos nem altere seu significado.
 
 ### Regras
 
