@@ -2,11 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
 	"caramel/internal/tools/pdf"
@@ -24,10 +26,28 @@ type ProcessDocxOptions struct {
 	Verbose     bool
 	TriageModel string // Modelo de visão usado na triagem (vazio = padrão gratuito)
 	NoTriage    bool   // true desativa a triagem e colora todas as imagens elegíveis
+	Output      output.Options
+	Out         io.Writer
+	Err         io.Writer
 }
 
 // RunProcessDocx executa o fluxo completo do pipeline DOCX (interativo ou automatizado)
 func RunProcessDocx(opts ProcessDocxOptions) error {
+	if opts.Verbose {
+		opts.Output.Verbose = true
+	}
+	stdout, stderr := opts.Out, opts.Err
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	renderer, err := output.New(opts.Output, stdout, stderr)
+	if err != nil {
+		return err
+	}
+
 	docxPath := opts.DocxPath
 
 	if !strings.HasSuffix(strings.ToLower(docxPath), ".docx") {
@@ -60,20 +80,21 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 
 	// Modo Interativo (--interactive / -i) com preview ANSI TrueColor no terminal
 	if opts.Interactive {
+		if opts.Output.JSON {
+			return fmt.Errorf("o modo --json não pode ser combinado com --interactive")
+		}
 		allImages, err := docx.ListImages(docxPath)
 		if err != nil {
 			return err
 		}
 
 		if len(allImages) == 0 {
-			fmt.Printf("ℹ️  Nenhuma imagem foi encontrada no arquivo '%s'.\n", docxPath)
-			return nil
+			return renderer.Result(output.Result{Status: output.StateWarning, Summary: fmt.Sprintf("Nenhuma imagem foi encontrada em %s.", filepath.Base(docxPath))})
 		}
 
 		keptImages, _ := docx.FilterImagesByMinSize(allImages, minSizeBytes)
 		if len(keptImages) == 0 {
-			fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
-			return nil
+			return renderer.Result(output.Result{Status: output.StateWarning, Summary: fmt.Sprintf("Nenhuma imagem atende ao tamanho mínimo de %s.", minSizeStr)})
 		}
 
 		// Extrai imagens elegíveis para pasta temporária para gerar os previews ANSI
@@ -102,8 +123,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 		}
 
 		if len(selectedPaths) == 0 {
-			fmt.Println("ℹ️  Nenhuma imagem foi selecionada.")
-			return nil
+			return renderer.Result(output.Result{Status: output.StateCanceled, Summary: "Nenhuma imagem foi selecionada."})
 		}
 
 		selectedImages := make([]docx.ExtractedImage, 0, len(selectedPaths))
@@ -113,86 +133,80 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 			}
 		}
 
-		fmt.Printf("🚀 Iniciando Pipeline Automatizado para %d imagem(ns) selecionada(s)...\n", len(selectedImages))
-		res, err := pipeline.RunDocxPipelineSelected(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, opts.Verbose, opts.TriageModel, opts.NoTriage)
+		res, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 		if err != nil {
 			return err
 		}
-
-		printTriageSummary(res)
-
-		fmt.Printf("✅ Pipeline concluído com sucesso!\n")
-		fmt.Printf(" ├─ Total de imagens coloridas/substituídas: %d\n", res.TotalColorized)
-		if res.RebuiltDocxPath != "" {
-			fmt.Printf(" ├─ Novo arquivo reconstruído: %s\n", res.RebuiltDocxPath)
-		}
-		fmt.Printf(" └─ Imagens individuais salvas no diretório: %s\n", res.OutputDir)
-
-		return nil
+		return renderDocxPipelineResult(renderer, res, true)
 	}
 
 	// Execução Automatizada Padrão (Colora todas as imagens mantidas pelo filtro minSize)
-	fmt.Printf("🚀 Iniciando Pipeline Automatizado para '%s'...\n", filepath.Base(docxPath))
-	fmt.Printf(" ├─ Modelo IA: %s\n", modelName)
-	if minSizeBytes > 0 {
-		fmt.Printf(" ├─ Filtro de Tamanho Mínimo: %s (%d bytes)\n", minSizeStr, minSizeBytes)
-	}
-
-	res, err := pipeline.RunDocxPipeline(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, opts.Verbose, opts.TriageModel, opts.NoTriage)
+	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 	if err != nil {
 		return err
 	}
-
-	if res.TotalSkipped > 0 {
-		fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, res.TotalSkipped)
-		for _, img := range res.SkippedImages {
-			sizeKB := float64(img.Size) / 1024.0
-			fmt.Printf(" │   └─ Ignorada: %s (%.1f KB)\n", img.OriginalName, sizeKB)
-		}
-	}
-
-	printTriageSummary(res)
-
-	if res.TotalColorized == 0 {
-		if res.TotalTriageSkipped > 0 {
-			fmt.Printf("ℹ️  Nenhuma imagem foi aprovada pela triagem em '%s' (todas foram puladas).\n", docxPath)
-		} else {
-			fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi encontrada em '%s'.\n", minSizeStr, docxPath)
-		}
-		return nil
-	}
-
-	fmt.Printf("✅ Pipeline concluído com sucesso!\n")
-	fmt.Printf(" ├─ Total de imagens coloridas/substituídas: %d\n", res.TotalColorized)
-	if res.RebuiltDocxPath != "" {
-		fmt.Printf(" ├─ Novo arquivo reconstruído: %s\n", res.RebuiltDocxPath)
-	}
-	fmt.Printf(" └─ Imagens individuais salvas no diretório: %s\n", res.OutputDir)
-
-	return nil
+	return renderDocxPipelineResult(renderer, res, false)
 }
 
-// printTriageSummary exibe o resumo das imagens puladas pela triagem de economia, se houver
-func printTriageSummary(res *pipeline.PipelineResult) {
+func renderDocxPipelineResult(renderer *output.Renderer, res *pipeline.PipelineResult, selected bool) error {
 	if res == nil {
-		return
+		return fmt.Errorf("pipeline DOCX não retornou resultado")
+	}
+	warnings := make([]string, 0, 3)
+	if len(res.Warnings) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d item(ns) não puderam ser processado(s)", len(res.Warnings)))
+	}
+	if res.TotalSkipped > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d imagem(ns) ignorada(s) pelo filtro de tamanho", res.TotalSkipped))
 	}
 	if res.TotalFormatSkipped > 0 {
-		fmt.Printf(" ├─ Imagens puladas (formato não colorível): %d\n", res.TotalFormatSkipped)
-		for _, skipped := range res.FormatSkipped {
-			fmt.Printf(" │   └─ %s (%s)\n", skipped.OriginalName, skipped.Format)
-		}
+		warnings = append(warnings, fmt.Sprintf("%d imagem(ns) ignorada(s) por formato não colorível", res.TotalFormatSkipped))
 	}
-	if res.TotalTriageSkipped == 0 {
-		return
+	if res.TotalTriageSkipped > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d imagem(ns) ignorada(s) pela triagem", res.TotalTriageSkipped))
+	}
+	if renderer.Options().Verbose {
+		for _, warning := range res.Warnings {
+			renderer.Diagnostic("⚠️ %s\n", warning)
+		}
+		for _, skipped := range res.SkippedImages {
+			renderer.Diagnostic("⏭️ filtro: %s\n", skipped.OriginalName)
+		}
+		for _, skipped := range res.TriageSkipped {
+			renderer.Diagnostic("⏭️ triagem: %s [%s] %s\n", skipped.Name, skipped.Stage, skipped.Reason)
+		}
 	}
 
-	fmt.Printf(" ├─ Imagens puladas pela triagem (economia de API): %d\n", res.TotalTriageSkipped)
-	for _, skipped := range res.TriageSkipped {
-		stage := "LLM"
-		if skipped.Stage == "local" {
-			stage = "análise local"
+	status := output.StateSuccess
+	summary := fmt.Sprintf("Pipeline concluído: %d imagem(ns) colorida(s).", res.TotalColorized)
+	if res.TotalColorized == 0 {
+		status = output.StateWarning
+		switch {
+		case res.TotalExtracted == 0 && res.TotalSkipped > 0:
+			summary = "Nenhuma imagem atende ao filtro de tamanho."
+		case res.TotalExtracted == 0:
+			summary = "Nenhuma imagem foi encontrada no documento."
+		case res.TotalTriageSkipped == res.TotalExtracted:
+			summary = "Nenhuma imagem foi aprovada pela triagem."
+		default:
+			summary = "Nenhuma imagem foi colorida; consulte os avisos para entender o motivo."
 		}
-		fmt.Printf(" │   └─ %s [%s]: %s\n", skipped.Name, stage, skipped.Reason)
 	}
+	if selected && res.TotalColorized > 0 {
+		summary = fmt.Sprintf("Processamento concluído: %d imagem(ns) colorida(s).", res.TotalColorized)
+	}
+	outputs := []string{}
+	rebuiltDocxPath := res.RebuiltDocxPath
+	if rebuiltDocxPath != "" {
+		if _, err := os.Stat(rebuiltDocxPath); err != nil {
+			rebuiltDocxPath = ""
+		}
+	}
+	if rebuiltDocxPath != "" {
+		outputs = append(outputs, rebuiltDocxPath)
+	}
+	if res.OutputDir != "" {
+		outputs = append(outputs, res.OutputDir)
+	}
+	return renderer.Result(output.Result{Status: status, Summary: summary, Count: res.TotalColorized, Outputs: outputs, Warnings: warnings})
 }

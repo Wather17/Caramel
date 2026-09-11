@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,17 +25,29 @@ type PipelineResult struct {
 	SkippedImages      []docx.ExtractedImage
 	TriageSkipped      []ai.TriageSkipInfo
 	FormatSkipped      []docx.ExtractedImage
+	Warnings           []string
+}
+
+// PipelineOptions controla os diagnósticos do pipeline sem acoplar a ferramenta à CLI.
+type PipelineOptions struct {
+	Verbose          bool
+	DiagnosticWriter io.Writer
 }
 
 // RunDocxPipeline executa o fluxo completo:
-// 1. Extração automática de todas as imagens contidas no .docx (filtrando por tamanho mínimo)
-// 2. Sanitização automática do nome do diretório de destino
-// 3. Triagem de economia por imagem (análise local de saturação + LLM de visão barata),
-//    pulando imagens que não precisam de coloração (fail-open em caso de erro)
-// 4. Coloração de cada imagem aprovada via IA (OpenRouter / Nano Banana 2)
-// 5. Redimensionamento para o tamanho original das imagens
-// 6. Reconstrução de um novo arquivo .docx com as imagens substituídas
+//  1. Extração automática de todas as imagens contidas no .docx (filtrando por tamanho mínimo)
+//  2. Sanitização automática do nome do diretório de destino
+//  3. Triagem de economia por imagem (análise local de saturação + LLM de visão barata),
+//     pulando imagens que não precisam de coloração (fail-open em caso de erro)
+//  4. Coloração de cada imagem aprovada via IA (OpenRouter / Nano Banana 2)
+//  5. Redimensionamento para o tamanho original das imagens
+//  6. Reconstrução de um novo arquivo .docx com as imagens substituídas
 func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model string, minSizeBytes int64, verbose bool, triageModel string, noTriage bool) (*PipelineResult, error) {
+	return RunDocxPipelineWithOptions(docxPath, outputDir, apiKey, model, minSizeBytes, PipelineOptions{Verbose: verbose}, triageModel, noTriage)
+}
+
+// RunDocxPipelineWithOptions executa o pipeline com diagnóstico direcionável.
+func RunDocxPipelineWithOptions(docxPath string, outputDir string, apiKey string, model string, minSizeBytes int64, options PipelineOptions, triageModel string, noTriage bool) (*PipelineResult, error) {
 	targetDir := outputDir
 	if targetDir == "" {
 		targetDir = docx.SanitizeFolderName(docxPath)
@@ -59,23 +72,26 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 
 	// 2. Colora cada imagem mantida e redimensiona para a dimensão original
 	colorizeOpts := ai.ColorizeOptions{
-		OutputDir:     targetDir,
-		APIKey:        apiKey,
-		Model:         model,
-		TriageModel:   triageModel,
-		DisableTriage: noTriage,
-		Verbose:       verbose,
+		OutputDir:        targetDir,
+		APIKey:           apiKey,
+		Model:            model,
+		TriageModel:      triageModel,
+		DisableTriage:    noTriage,
+		Verbose:          options.Verbose,
+		DiagnosticWriter: options.DiagnosticWriter,
 	}
 
 	var colorizedResults []ai.ColorizeResult
 	var triageSkipped []ai.TriageSkipInfo
 	var formatSkipped []docx.ExtractedImage
+	var warnings []string
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
 		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
 		if !docx.IsColorableFormat(img.Format) {
-			fmt.Printf("⏭️  Pulada (formato não colorível): %s (%s)\n", img.OriginalName, img.Format)
+			warning := fmt.Sprintf("%s: formato não colorível (%s)", img.OriginalName, img.Format)
+			diagnosticf(options, "⏭️  Pulada: %s\n", warning)
 			formatSkipped = append(formatSkipped, img)
 			continue
 		}
@@ -83,13 +99,15 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
 		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
-			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
+			warning := fmt.Sprintf("não foi possível colorir '%s': %v", img.OriginalName, err)
+			warnings = append(warnings, warning)
+			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
 			continue
 		}
 
 		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
 		if res.Skipped {
-			fmt.Printf("⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
+			diagnosticf(options, "⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
 			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
 				Name:   img.OriginalName,
 				Stage:  res.SkipStage,
@@ -101,7 +119,9 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		// Redimensiona a imagem gerada para ter exatamente os mesmos pixels da original
 		resizedBytes, err := docx.ResizeToMatch(imgPath, res.ColorizedPath)
 		if err != nil {
-			fmt.Printf("⚠️ Aviso: Falha ao ajustar tamanho da imagem colorida '%s': %v\n", img.OriginalName, err)
+			warning := fmt.Sprintf("falha ao ajustar tamanho da imagem colorida '%s': %v", img.OriginalName, err)
+			warnings = append(warnings, warning)
+			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
 			continue
 		}
 
@@ -121,7 +141,7 @@ func RunDocxPipeline(docxPath string, outputDir string, apiKey string, model str
 		}
 	}
 
-return &PipelineResult{
+	return &PipelineResult{
 		DocxPath:           docxPath,
 		OutputDir:          targetDir,
 		RebuiltDocxPath:    rebuiltDocxPath,
@@ -133,11 +153,17 @@ return &PipelineResult{
 		Results:            colorizedResults,
 		TriageSkipped:      triageSkipped,
 		FormatSkipped:      formatSkipped,
+		Warnings:           warnings,
 	}, nil
 }
 
 // RunDocxPipelineSelected executa o pipeline apenas nas imagens pré-selecionadas pelo usuário
 func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, model string, selectedImages []docx.ExtractedImage, verbose bool, triageModel string, noTriage bool) (*PipelineResult, error) {
+	return RunDocxPipelineSelectedWithOptions(docxPath, outputDir, apiKey, model, selectedImages, PipelineOptions{Verbose: verbose}, triageModel, noTriage)
+}
+
+// RunDocxPipelineSelectedWithOptions executa o pipeline interativo com diagnóstico direcionável.
+func RunDocxPipelineSelectedWithOptions(docxPath string, outputDir string, apiKey string, model string, selectedImages []docx.ExtractedImage, options PipelineOptions, triageModel string, noTriage bool) (*PipelineResult, error) {
 	targetDir := outputDir
 	if targetDir == "" {
 		targetDir = docx.SanitizeFolderName(docxPath)
@@ -160,23 +186,26 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 
 	// 2. Colora cada imagem selecionada e redimensiona para a dimensão original
 	colorizeOpts := ai.ColorizeOptions{
-		OutputDir:     targetDir,
-		APIKey:        apiKey,
-		Model:         model,
-		TriageModel:   triageModel,
-		DisableTriage: noTriage,
-		Verbose:       verbose,
+		OutputDir:        targetDir,
+		APIKey:           apiKey,
+		Model:            model,
+		TriageModel:      triageModel,
+		DisableTriage:    noTriage,
+		Verbose:          options.Verbose,
+		DiagnosticWriter: options.DiagnosticWriter,
 	}
 
 	var colorizedResults []ai.ColorizeResult
 	var triageSkipped []ai.TriageSkipInfo
 	var formatSkipped []docx.ExtractedImage
+	var warnings []string
 	replacements := make(map[string][]byte)
 
 	for _, img := range extractRes.Images {
 		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
 		if !docx.IsColorableFormat(img.Format) {
-			fmt.Printf("⏭️  Pulada (formato não colorível): %s (%s)\n", img.OriginalName, img.Format)
+			warning := fmt.Sprintf("%s: formato não colorível (%s)", img.OriginalName, img.Format)
+			diagnosticf(options, "⏭️  Pulada: %s\n", warning)
 			formatSkipped = append(formatSkipped, img)
 			continue
 		}
@@ -184,13 +213,15 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
 		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
 		if err != nil {
-			fmt.Printf("⚠️ Aviso: Não foi possível colorir '%s': %v\n", img.OriginalName, err)
+			warning := fmt.Sprintf("não foi possível colorir '%s': %v", img.OriginalName, err)
+			warnings = append(warnings, warning)
+			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
 			continue
 		}
 
 		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
 		if res.Skipped {
-			fmt.Printf("⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
+			diagnosticf(options, "⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
 			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
 				Name:   img.OriginalName,
 				Stage:  res.SkipStage,
@@ -202,7 +233,9 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 		// Redimensiona a imagem gerada para ter exatamente os mesmos pixels da original
 		resizedBytes, err := docx.ResizeToMatch(imgPath, res.ColorizedPath)
 		if err != nil {
-			fmt.Printf("⚠️ Aviso: Falha ao ajustar tamanho da imagem colorida '%s': %v\n", img.OriginalName, err)
+			warning := fmt.Sprintf("falha ao ajustar tamanho da imagem colorida '%s': %v", img.OriginalName, err)
+			warnings = append(warnings, warning)
+			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
 			continue
 		}
 
@@ -232,5 +265,13 @@ func RunDocxPipelineSelected(docxPath string, outputDir string, apiKey string, m
 		Results:            colorizedResults,
 		TriageSkipped:      triageSkipped,
 		FormatSkipped:      formatSkipped,
+		Warnings:           warnings,
 	}, nil
+}
+
+func diagnosticf(options PipelineOptions, format string, args ...interface{}) {
+	if !options.Verbose || options.DiagnosticWriter == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(options.DiagnosticWriter, format, args...)
 }

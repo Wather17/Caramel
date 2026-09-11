@@ -65,12 +65,13 @@ type Event struct {
 
 // Result contém o resumo serializável de uma operação.
 type Result struct {
-	Status   State    `json:"status"`
-	Summary  string   `json:"summary,omitempty"`
-	Count    int      `json:"count,omitempty"`
-	Outputs  []string `json:"outputs,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
-	Errors   []string `json:"errors,omitempty"`
+	Status   State       `json:"status"`
+	Summary  string      `json:"summary,omitempty"`
+	Count    int         `json:"count,omitempty"`
+	Data     interface{} `json:"data,omitempty"`
+	Outputs  []string    `json:"outputs,omitempty"`
+	Warnings []string    `json:"warnings,omitempty"`
+	Errors   []string    `json:"errors,omitempty"`
 }
 
 // Renderer separa resultado, progresso e diagnóstico nos canais apropriados.
@@ -118,6 +119,18 @@ func (r *Renderer) Diagnostic(format string, args ...interface{}) {
 		return
 	}
 	_, _ = fmt.Fprintf(r.err, format, args...)
+}
+
+// Text escreve texto humano opcional. Em quiet e JSON, o stdout permanece reservado.
+func (r *Renderer) Text(format string, args ...interface{}) error {
+	if r == nil {
+		return fmt.Errorf("renderer de output não inicializado")
+	}
+	if r.options.Quiet || r.options.JSON {
+		return nil
+	}
+	_, err := fmt.Fprintf(r.out, format, args...)
+	return err
 }
 
 // Result escreve o resumo no formato selecionado.
