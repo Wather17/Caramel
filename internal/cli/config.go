@@ -3,10 +3,10 @@ package cli
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strings"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/ui"
 
@@ -21,10 +21,8 @@ var configCmd = &cobra.Command{
 📚 QUANDO USAR:
 Use no primeiro uso do Caramel para cadastrar sua chave de API do OpenRouter (necessária para os
 comandos com IA: generate, colorize, process, docx extract e routine). As credenciais ficam
-salvas com segurança em ~/.config/caramel/.env (ou %APPDATA% no Windows).
-
-EXEMPLOS:
-# Assistente interativo de configuração
+salvas com segurança em ~/.config/caramel/.env (ou %APPDATA% no Windows).`,
+	Example: `# Assistente interativo de configuração
 caramel config setup
 
 # Definir a chave manualmente
@@ -46,6 +44,10 @@ Use para cadastrar ou trocar a chave de API do OpenRouter de forma direta e auto
 caramel config set openrouter_key sk-or-v1-suachaveaqui`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		key := strings.ToUpper(strings.ReplaceAll(args[0], "-", "_"))
 		val := args[1]
 
@@ -65,8 +67,7 @@ caramel config set openrouter_key sk-or-v1-suachaveaqui`,
 		}
 
 		envPath, _ := config.GetEnvFilePath()
-		fmt.Printf("✅ Configuração '%s' salva com sucesso em: %s\n", key, envPath)
-		return nil
+		return renderer.Result(output.Result{Status: output.StateSuccess, Summary: fmt.Sprintf("Configuração %s salva.", key), Outputs: []string{envPath}})
 	},
 }
 
@@ -81,6 +82,10 @@ salvo no seu sistema — útil para diagnóstico antes de usar comandos com IA.`
 	Example: `# Verificar o status atual das configurações
 caramel config show`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		envPath, err := config.GetEnvFilePath()
 		if err != nil {
 			return err
@@ -91,18 +96,35 @@ caramel config show`,
 			return err
 		}
 
-		fmt.Printf("⚙️  Arquivo de Configuração: %s\n", envPath)
-		if cfg.OpenRouterAPIKey == "" {
-			fmt.Println(" └─ OPENROUTER_API_KEY: ❌ Não configurada (use 'caramel config setup' ou 'caramel config set openrouter_key <chave>')")
-		} else {
-			fmt.Printf(" └─ OPENROUTER_API_KEY: ✅ Configurada (%s)\n", obfuscateKey(cfg.OpenRouterAPIKey))
+		apiConfigured := cfg.OpenRouterAPIKey != ""
+		modelSummary := fmt.Sprintf("image=%s, text=%s, triage=%s", orDefault(cfg.ModelImage, ai.DefaultModel), orDefault(cfg.ModelText, ai.DefaultTextModel), orDefault(cfg.ModelTriage, ai.DefaultTriageModel))
+		status := output.StateSuccess
+		summary := fmt.Sprintf("Configuração pronta: chave de API configurada; modelos: %s.", modelSummary)
+		warnings := []string{}
+		if !apiConfigured {
+			status = output.StateWarning
+			summary = fmt.Sprintf("Configuração incompleta: chave de API ausente; modelos: %s.", modelSummary)
+			warnings = append(warnings, "use caramel config setup ou caramel config set openrouter_key <chave>")
 		}
-
-		fmt.Println(" 🤖 Modelos de IA (configuráveis com 'caramel config models'):")
-		fmt.Printf("    ├─ MODEL_IMAGE:  %s\n", describeModel(cfg.ModelImage, ai.DefaultModel))
-		fmt.Printf("    ├─ MODEL_TEXT:   %s\n", describeModel(cfg.ModelText, ai.DefaultTextModel))
-		fmt.Printf("    └─ MODEL_TRIAGE: %s\n", describeModel(cfg.ModelTriage, ai.DefaultTriageModel))
-		return nil
+		return renderer.Result(output.Result{
+			Status:  status,
+			Summary: summary,
+			Data: struct {
+				APIKeyConfigured bool   `json:"api_key_configured"`
+				APIKeyMasked     string `json:"api_key_masked,omitempty"`
+				ModelImage       string `json:"model_image"`
+				ModelText        string `json:"model_text"`
+				ModelTriage      string `json:"model_triage"`
+			}{
+				APIKeyConfigured: apiConfigured,
+				APIKeyMasked:     maskedKeyOrEmpty(cfg.OpenRouterAPIKey),
+				ModelImage:       orDefault(cfg.ModelImage, ai.DefaultModel),
+				ModelText:        orDefault(cfg.ModelText, ai.DefaultTextModel),
+				ModelTriage:      orDefault(cfg.ModelTriage, ai.DefaultTriageModel),
+			},
+			Outputs:  []string{envPath},
+			Warnings: warnings,
+		})
 	},
 }
 
@@ -118,10 +140,20 @@ sem precisar editar arquivos manualmente.`,
 	Example: `# Iniciar o assistente guiado de configuração
 caramel config setup`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Println("🍬 Assistente de Configuração do Caramel CLI")
-		fmt.Println("============================================")
-		fmt.Print("Informe a sua chave de API do OpenRouter (ou Pressione Enter para ignorar): ")
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
+		if renderer.Options().JSON || renderer.Options().Quiet {
+			return fmt.Errorf("config setup requer interação no terminal e não aceita --json ou --quiet")
+		}
+		reader := bufio.NewReader(cmd.InOrStdin())
+		if err := renderer.Text("🍬 Assistente de Configuração do Caramel CLI\n"); err != nil {
+			return err
+		}
+		if err := renderer.Text("Informe a sua chave de API do OpenRouter (ou pressione Enter para ignorar): "); err != nil {
+			return err
+		}
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
@@ -133,13 +165,22 @@ caramel config setup`,
 			if err := config.SaveConfigValue("OPENROUTER_API_KEY", key); err != nil {
 				return err
 			}
-			fmt.Println("✅ Chave OPENROUTER_API_KEY salva com sucesso!")
+			return renderer.Result(output.Result{Status: output.StateSuccess, Summary: "Chave de API salva. Os comandos com IA já podem ser usados."})
 		} else {
-			fmt.Println("ℹ️  Nenhuma chave foi informada.")
+			return renderer.Result(output.Result{
+				Status:   output.StateWarning,
+				Summary:  "Nenhuma chave foi informada; a configuração permanece incompleta.",
+				Warnings: []string{"use caramel config setup novamente ou caramel config set openrouter_key <chave>"},
+			})
 		}
-
-		return nil
 	},
+}
+
+func maskedKeyOrEmpty(key string) string {
+	if key == "" {
+		return ""
+	}
+	return obfuscateKey(key)
 }
 
 // obfuscateKey oculta parte da chave de API para exibição segura no terminal
@@ -185,16 +226,24 @@ caramel config models select
 # Listar modelos de imagem em texto puro
 caramel config models list --role image --limit 10
 
-# Listar modelos de texto que contenham 'deepseek'
+	# Listar modelos de texto que contenham 'deepseek'
 caramel config models list --role text --search deepseek`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
+		if !configModelsList && (renderer.Options().JSON || renderer.Options().Quiet) {
+			return fmt.Errorf("config models select requer interação no terminal e não aceita --json ou --quiet")
+		}
+
 		models, err := ai.ListModels()
 		if err != nil {
 			return fmt.Errorf("não foi possível consultar os modelos da OpenRouter: %w", err)
 		}
 
 		if configModelsList {
-			return listModelsPlain(models)
+			return listModelsPlain(renderer, models)
 		}
 
 		cfg, err := config.LoadConfig()
@@ -247,15 +296,11 @@ caramel config models list --role text --search deepseek`,
 		}
 
 		if saved == 0 {
-			fmt.Println("ℹ️  Nenhuma alteração de modelo foi feita.")
+			return renderer.Result(output.Result{Status: output.StateWarning, Summary: "Nenhuma alteração de modelo foi feita."})
 		} else {
 			envPath, _ := config.GetEnvFilePath()
-			fmt.Printf("✅ %d modelo(s) atualizado(s) e salvo(s) em: %s\n", saved, envPath)
-			fmt.Printf("    ├─ MODEL_IMAGE:  %s\n", orDefault(sel.ImageModel, ai.DefaultModel))
-			fmt.Printf("    ├─ MODEL_TEXT:   %s\n", orDefault(sel.TextModel, ai.DefaultTextModel))
-			fmt.Printf("    └─ MODEL_TRIAGE: %s\n", orDefault(sel.TriageModel, ai.DefaultTriageModel))
+			return renderer.Result(output.Result{Status: output.StateSuccess, Summary: fmt.Sprintf("%d modelo(s) atualizado(s).", saved), Outputs: []string{envPath}})
 		}
-		return nil
 	},
 }
 
@@ -303,7 +348,7 @@ func addConfigModelsListFlags(cmd *cobra.Command) {
 }
 
 // listModelsPlain imprime os modelos do catálogo em texto puro, sem TUI
-func listModelsPlain(models []ai.Model) error {
+func listModelsPlain(renderer *output.Renderer, models []ai.Model) error {
 	role := configModelsRole
 	if role == "" {
 		role = ai.RoleImage
@@ -326,10 +371,23 @@ func listModelsPlain(models []ai.Model) error {
 		ai.RoleTriage: "🔍 Modelos de Triagem (Visão)",
 		ai.RoleText:   "🧠 Modelos de Texto",
 	}
-	fmt.Printf("%s (%d encontrados, exibindo %d):\n", titles[role], len(filtered), limit)
+	visible := filtered[:limit]
+	if renderer.Options().JSON {
+		return renderer.Result(output.Result{
+			Status:  output.StateSuccess,
+			Summary: fmt.Sprintf("%d modelo(s) encontrado(s); %d exibido(s).", len(filtered), len(visible)),
+			Count:   len(visible),
+			Data:    visible,
+		})
+	}
 
-	for i, m := range filtered[:limit] {
-		fmt.Printf("  %2d. %-55s · %-45s · $%.2f/M\n", i+1, m.ID, truncateModelName(m.Name, 45), m.PromptPrice*1e6)
+	if err := renderer.Text("%s (%d encontrados, exibindo %d):\n", titles[role], len(filtered), limit); err != nil {
+		return err
+	}
+	for i, m := range visible {
+		if err := renderer.Text("  %2d. %-55s · %-45s · $%.2f/M\n", i+1, m.ID, truncateModelName(m.Name, 45), m.PromptPrice*1e6); err != nil {
+			return err
+		}
 	}
 	return nil
 }

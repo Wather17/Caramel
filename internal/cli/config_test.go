@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 )
 
@@ -72,11 +74,15 @@ func TestListModelsPlain(t *testing.T) {
 	configModelsLimit = 1
 	defer func() { configModelsRole, configModelsQuery, configModelsLimit = "", "", 0 }()
 
-	out := captureStdout(t, func() {
-		if err := listModelsPlain(models); err != nil {
-			t.Errorf("listModelsPlain falhou: %v", err)
-		}
-	})
+	var stdout bytes.Buffer
+	renderer, err := output.New(output.Options{}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("output.New falhou: %v", err)
+	}
+	if err := listModelsPlain(renderer, models); err != nil {
+		t.Fatalf("listModelsPlain falhou: %v", err)
+	}
+	out := stdout.String()
 
 	if !strings.Contains(out, "🎨 Modelos de Imagem") {
 		t.Errorf("saída deveria ter título de modelos de imagem, obtido: %s", out)

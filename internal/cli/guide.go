@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"caramel/internal/output"
 	"caramel/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -27,13 +28,27 @@ caramel guide
 caramel guide triagem
 caramel guide 2up`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		if len(args) > 0 {
 			query := strings.Join(args, " ")
-			fmt.Print(ui.RenderSearchHelp(query))
-			return nil
+			results := ui.SearchCommandDocs(query)
+			if renderer.Options().JSON {
+				status := output.StateSuccess
+				if len(results) == 0 {
+					status = output.StateWarning
+				}
+				return renderer.Result(output.Result{Status: status, Summary: fmt.Sprintf("%d comando(s) encontrado(s).", len(results)), Count: len(results), Data: results})
+			}
+			return renderer.Text("%s", ui.RenderSearchHelp(query))
 		}
-		fmt.Print(ui.RenderGuideOverview())
-		return nil
+		if renderer.Options().JSON {
+			docs := ui.GetAllCommandDocs()
+			return renderer.Result(output.Result{Status: output.StateSuccess, Summary: fmt.Sprintf("%d comando(s) disponível(is).", len(docs)), Count: len(docs), Data: docs})
+		}
+		return renderer.Text("%s", ui.RenderGuideOverview())
 	},
 }
 
