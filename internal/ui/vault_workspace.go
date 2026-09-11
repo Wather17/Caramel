@@ -113,31 +113,19 @@ func (m VaultWorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.runCancel = nil
 			m.reload()
 			if m.returnToConsole {
-				if typed.err != nil {
-					m.appendConsoleOutput(fmt.Sprintf("❌ %v", typed.err))
-				} else {
-					m.appendConsoleOutput(fmt.Sprintf("✅ %d material(is) criado(s)", len(typed.materials)))
-				}
+				m.appendConsoleOutput(formatWorkflowCompletion(len(typed.materials), typed.err))
 				m.returnToConsole = false
 				m.screen = vaultConsole
 				m.consoleInput.Focus()
 			} else {
-				if typed.err != nil {
-					m.status = fmt.Sprintf("❌ %v", typed.err)
-				} else {
-					m.status = fmt.Sprintf("✅ %d material(is) criado(s)", len(typed.materials))
-				}
+				m.status = formatWorkflowCompletion(len(typed.materials), typed.err)
 				m.screen = vaultInbox
 			}
 			return m, nil
 		}
 		m.runEvents = append(m.runEvents, typed.event)
-		if m.returnToConsole && typed.event.Message != "" {
-			line := typed.event.Message
-			if typed.event.Total > 0 {
-				line = fmt.Sprintf("[%d/%d] %s", typed.event.Current, typed.event.Total, line)
-			}
-			m.appendConsoleOutput(line)
+		if m.returnToConsole && typed.event.Message != "" && typed.event.Step != "done" {
+			m.appendConsoleOutput(formatWorkflowEvent(typed.event))
 		}
 		if len(m.runEvents) > 10 {
 			m.runEvents = m.runEvents[len(m.runEvents)-10:]
@@ -477,11 +465,8 @@ func (m VaultWorkspaceModel) View() string {
 		b.WriteString(HelpSectionTitleStyle.Render("Executando no vault"))
 		b.WriteString("\n\n")
 		for _, event := range m.runEvents {
-			progress := ""
-			if event.Total > 0 {
-				progress = fmt.Sprintf(" [%d/%d]", event.Current, event.Total)
-			}
-			b.WriteString(fmt.Sprintf("%s%s %s\n", TagStyle.Render(event.Step), progress, event.Message))
+			b.WriteString(formatWorkflowEvent(event))
+			b.WriteString("\n")
 		}
 		if len(m.runEvents) == 0 {
 			b.WriteString("Preparando operação...\n")

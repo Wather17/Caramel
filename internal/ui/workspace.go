@@ -81,13 +81,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case workspaceRunMessage:
 		if typed.done {
 			m.runCancel = nil
-			if typed.err != nil {
-				m.status = fmt.Sprintf("❌ %v", typed.err)
-			} else if len(typed.artifacts) > 0 {
-				m.status = fmt.Sprintf("✅ %d resultado(s) criado(s)", len(typed.artifacts))
-			} else {
-				m.status = "✅ Operação concluída"
-			}
+			m.status = formatWorkflowCompletion(len(typed.artifacts), typed.err)
 			if m.project != nil {
 				if refreshed, err := workspace.OpenProject(m.project.ID); err == nil {
 					m.project = refreshed
@@ -533,11 +527,8 @@ func (m WorkspaceModel) View() string {
 			b.WriteString("Preparando operação...\n")
 		} else {
 			for _, event := range m.runEvents {
-				progress := ""
-				if event.Total > 0 {
-					progress = fmt.Sprintf(" [%d/%d]", event.Current, event.Total)
-				}
-				b.WriteString(fmt.Sprintf("%s%s %s\n", TagStyle.Render(event.Step), progress, event.Message))
+				b.WriteString(formatWorkflowEvent(event))
+				b.WriteString("\n")
 			}
 		}
 		b.WriteString("\n")
