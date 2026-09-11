@@ -80,6 +80,9 @@ caramel colorize atividade.docx -i`,
 				Verbose:     verboseFlag,
 				TriageModel: triageModel,
 				NoTriage:    imgNoTriage,
+				Output:      outputOptions(),
+				Out:         cmd.OutOrStdout(),
+				Err:         cmd.ErrOrStderr(),
 			})
 		}
 

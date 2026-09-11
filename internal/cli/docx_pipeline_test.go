@@ -15,65 +15,63 @@ import (
 	"strings"
 	"testing"
 
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
 	"caramel/internal/tools/pipeline"
 )
 
-func TestPrintTriageSummaryNil(t *testing.T) {
-	out := captureStdout(t, func() { printTriageSummary(nil) })
-	if out != "" {
-		t.Errorf("resumo nulo não deveria imprimir nada, obtido: %q", out)
+func TestRenderDocxExtractionResultResumoEWarnings(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	renderer, err := output.New(output.Options{Verbose: true}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("output.New falhou: %v", err)
+	}
+
+	res := &docx.ExtractionResult{
+		OutputDir:      "/tmp/imagens",
+		TotalExtracted: 1,
+		Images:         []docx.ExtractedImage{{OriginalName: "image1.png"}},
+	}
+	skipped := []docx.ExtractedImage{{OriginalName: "image2.png", Size: 512}}
+	if err := renderDocxExtractionResult(renderer, res, skipped, "20KB"); err != nil {
+		t.Fatalf("renderDocxExtractionResult falhou: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "1 imagem(ns) salva(s)") || !strings.Contains(stdout.String(), "/tmp/imagens") {
+		t.Fatalf("resumo deveria conter contagem e diretório, obtido: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "image2.png") {
+		t.Fatalf("verbose deveria detalhar a imagem filtrada, obtido: %q", stderr.String())
 	}
 }
 
-func TestPrintTriageSummarySemPulos(t *testing.T) {
-	out := captureStdout(t, func() {
-		printTriageSummary(&pipeline.PipelineResult{TotalColorized: 3})
-	})
-	if out != "" {
-		t.Errorf("sem pulos não deveria imprimir nada, obtido: %q", out)
+func TestRenderDocxPipelineResultExplicaTriagemSemAprovados(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	renderer, err := output.New(output.Options{}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("output.New falhou: %v", err)
 	}
-}
 
-func TestPrintTriageSummaryFormatoNaoColorivel(t *testing.T) {
 	res := &pipeline.PipelineResult{
-		TotalFormatSkipped: 2,
-		FormatSkipped: []docx.ExtractedImage{
-			{OriginalName: "image1.emf", Format: "emf"},
-			{OriginalName: "image2.wmf", Format: "wmf"},
-		},
-	}
-
-	out := captureStdout(t, func() { printTriageSummary(res) })
-
-	if !strings.Contains(out, "(formato não colorível): 2") {
-		t.Errorf("deveria anunciar o total de formatos pulados, obtido: %q", out)
-	}
-	if !strings.Contains(out, "image1.emf (emf)") || !strings.Contains(out, "image2.wmf (wmf)") {
-		t.Errorf("deveria listar nome e formato de cada imagem pulada, obtido: %q", out)
-	}
-}
-
-func TestPrintTriageSummaryTriagemLLMELocal(t *testing.T) {
-	res := &pipeline.PipelineResult{
+		OutputDir:          "/tmp/imagens",
+		TotalExtracted:     2,
 		TotalTriageSkipped: 2,
 		TriageSkipped: []ai.TriageSkipInfo{
-			{Name: "image3.png", Stage: "local", Reason: "já parece colorida"},
-			{Name: "image4.png", Stage: "llm", Reason: "foto do mundo real"},
+			{Name: "image1.png", Stage: "local", Reason: "já parece colorida"},
+			{Name: "image2.png", Stage: "llm", Reason: "foto"},
 		},
 	}
-
-	out := captureStdout(t, func() { printTriageSummary(res) })
-
-	if !strings.Contains(out, "economia de API): 2") {
-		t.Errorf("deveria anunciar o total pulado pela triagem, obtido: %q", out)
+	if err := renderDocxPipelineResult(renderer, res, false); err != nil {
+		t.Fatalf("renderDocxPipelineResult falhou: %v", err)
 	}
-	if !strings.Contains(out, "[análise local]: já parece colorida") {
-		t.Errorf("stage 'local' deveria ser exibido como 'análise local', obtido: %q", out)
+	if !strings.Contains(stdout.String(), "Nenhuma imagem foi aprovada pela triagem") {
+		t.Fatalf("resultado vazio deveria explicar a triagem, obtido: %q", stdout.String())
 	}
-	if !strings.Contains(out, "[LLM]: foto do mundo real") {
-		t.Errorf("stage llm deveria ser exibido como LLM, obtido: %q", out)
+	if !strings.Contains(stderr.String(), "2 imagem(ns) ignorada(s) pela triagem") {
+		t.Fatalf("resultado deveria agregar o motivo, obtido: %q", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "image1.png") || strings.Contains(stdout.String(), "image2.png") {
+		t.Fatalf("detalhes por item não deveriam aparecer no modo normal, obtido: %q", stdout.String())
 	}
 }
 
