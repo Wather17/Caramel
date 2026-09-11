@@ -80,9 +80,7 @@ func (c *Client) TriageImage(imagePath string, promptText string, modelOverride 
 		return nil, fmt.Errorf("falha ao ler resposta da triagem: %w", err)
 	}
 
-	if c.Verbose {
-		fmt.Printf("🔍 [DEBUG] Resposta Raw da Triagem (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
-	}
+	c.debugf("🔍 [DEBUG] Resposta Raw da Triagem (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, statusError(resp.StatusCode, bodyBytes)

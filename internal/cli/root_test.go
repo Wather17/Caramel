@@ -57,3 +57,12 @@ func TestVersionVariablesAreSet(t *testing.T) {
 		t.Errorf("variáveis de versão devem ter valores padrão, obtido Version=%q Commit=%q Date=%q", Version, Commit, Date)
 	}
 }
+
+func TestRootOutputFlagsArePersistent(t *testing.T) {
+	for _, name := range []string{"verbose", "quiet", "json"} {
+		flag := RootCmd.PersistentFlags().Lookup(name)
+		if flag == nil {
+			t.Errorf("flag global --%s deveria estar registrada", name)
+		}
+	}
+}

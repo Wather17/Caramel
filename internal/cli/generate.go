@@ -28,7 +28,6 @@ var (
 	genPreview     bool
 	genCards       bool
 	gen2UpPDF      bool
-	genVerbose     bool
 	genModelName   string
 	genTextModel   string
 	genAspect      string
@@ -153,7 +152,7 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 		if err != nil {
 			return err
 		}
-		client.Verbose = genVerbose
+		client.Verbose = verboseFlag
 
 		harnessCfg := ai.HarnessConfig{
 			Items:       rawItems,
@@ -166,7 +165,7 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			TextModel:   textModel,
 			ImageModel:  imageModel,
 			Aspect:      genAspect,
-			Verbose:     genVerbose,
+			Verbose:     verboseFlag,
 		}
 
 		// Estágio 1: Síntese de prompts
@@ -314,7 +313,6 @@ func init() {
 	imageGenerateCmd.Flags().BoolVar(&genPreview, "preview", true, "Renderiza miniaturas ANSI TrueColor no terminal conforme cada imagem é gerada")
 	imageGenerateCmd.Flags().BoolVar(&genCards, "cards", true, "Gera layout HTML A4 de fichas com legendas pronto para impressão")
 	imageGenerateCmd.Flags().BoolVar(&gen2UpPDF, "2up", false, "Compila automaticamente todas as imagens geradas em um PDF 2-up A4")
-	imageGenerateCmd.Flags().BoolVarP(&genVerbose, "verbose", "v", false, "Exibe logs detalhados de depuração da API")
 	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens (config: model_image)")
 	imageGenerateCmd.Flags().StringVar(&genTextModel, "text-model", ai.DefaultTextModel, "Modelo de IA para síntese de prompts (config: model_text)")
 

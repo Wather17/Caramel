@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,12 +12,13 @@ import (
 
 // ColorizeOptions contém todos os parâmetros para o processo de coloração de uma imagem
 type ColorizeOptions struct {
-	OutputDir     string // Diretório onde a imagem colorida será salva
-	APIKey        string // Chave da API do OpenRouter
-	Model         string // Modelo de geração de imagem (padrão: DefaultModel)
-	TriageModel   string // Modelo de visão para a triagem (padrão: DefaultTriageModel)
-	DisableTriage bool   // true desativa as duas camadas de triagem (coloração forçada)
-	Verbose       bool   // Exibe logs detalhados de depuração
+	OutputDir        string    // Diretório onde a imagem colorida será salva
+	APIKey           string    // Chave da API do OpenRouter
+	Model            string    // Modelo de geração de imagem (padrão: DefaultModel)
+	TriageModel      string    // Modelo de visão para a triagem (padrão: DefaultTriageModel)
+	DisableTriage    bool      // true desativa as duas camadas de triagem (coloração forçada)
+	Verbose          bool      // Exibe logs detalhados de depuração
+	DiagnosticWriter io.Writer // Canal para diagnóstico verbose
 }
 
 // ColorizeResult contém o relatório do processo de coloração
@@ -43,6 +45,9 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 		return nil, err
 	}
 	client.Verbose = opts.Verbose
+	if opts.DiagnosticWriter != nil {
+		client.DiagnosticWriter = opts.DiagnosticWriter
+	}
 
 	// Triagem de economia: evita gastar a API de geração com imagens que não precisam de cor
 	if !opts.DisableTriage {
@@ -99,9 +104,7 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 	colored, ratio, err := IsLikelyAlreadyColored(imagePath)
 	if err != nil {
 		// Falha na decodificação local (ex: SVG): segue para a camada LLM decidir
-		if opts.Verbose {
-			fmt.Printf("⚠️ [TRIAGE] Análise local indisponível para '%s': %v (seguindo para LLM)\n", baseName, err)
-		}
+		client.debugf("⚠️ [TRIAGE] Análise local indisponível para '%s': %v (seguindo para LLM)\n", baseName, err)
 	} else if colored {
 		return true, &ColorizeResult{
 			OriginalPath: imagePath,
@@ -117,9 +120,7 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 		triageModel = DefaultTriageModel
 	}
 
-	if opts.Verbose {
-		fmt.Printf("🔎 [TRIAGE] Analisando '%s' com o modelo '%s'...\n", baseName, triageModel)
-	}
+	client.debugf("🔎 [TRIAGE] Analisando '%s' com o modelo '%s'...\n", baseName, triageModel)
 
 	var triageRes *TriageResult
 	triageErr := retryWithBackoff(2, func() error {
@@ -129,9 +130,7 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 	})
 	if triageErr != nil {
 		// Fail-open: em caso de erro (rate limit, API fora, parse), colore mesmo assim
-		if opts.Verbose {
-			fmt.Printf("⚠️ [TRIAGE] Falha na triagem de '%s': %v (fail-open: colorindo mesmo assim)\n", baseName, triageErr)
-		}
+		client.debugf("⚠️ [TRIAGE] Falha na triagem de '%s': %v (fail-open: colorindo mesmo assim)\n", baseName, triageErr)
 		return false, nil
 	}
 

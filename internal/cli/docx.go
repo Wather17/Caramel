@@ -20,7 +20,6 @@ var (
 	colorize        bool
 	modelName       string
 	minSizeStr      string
-	docxVerbose     bool
 	docxInteractive bool
 	docxTriageModel string
 	docxNoTriage    bool
@@ -139,12 +138,12 @@ caramel docx extract mapa_biologia.docx -c`,
 				}
 
 				fmt.Printf("🎨 Processando %d imagem(ns) selecionada(s) com IA...\n", len(selectedImages))
-				pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, docxVerbose, triageModel, docxNoTriage)
-			if err != nil {
-				return err
-			}
+				pipeRes, err := pipeline.RunDocxPipelineSelected(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, verboseFlag, triageModel, docxNoTriage)
+				if err != nil {
+					return err
+				}
 
-			printTriageSummary(pipeRes)
+				printTriageSummary(pipeRes)
 
 				fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
 				for _, res := range pipeRes.Results {
@@ -177,25 +176,25 @@ caramel docx extract mapa_biologia.docx -c`,
 			}
 
 			fmt.Printf("🎨 Extraindo e colorindo imagens de '%s' usando o modelo '%s'...\n", filepath.Base(docxPath), modelName)
-			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, docxVerbose, triageModel, docxNoTriage)
-		if err != nil {
-			return err
-		}
-
-		if pipeRes.TotalSkipped > 0 {
-			fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, pipeRes.TotalSkipped)
-		}
-
-		printTriageSummary(pipeRes)
-
-if pipeRes.TotalColorized == 0 {
-			if pipeRes.TotalTriageSkipped > 0 {
-				fmt.Printf("ℹ️  Nenhuma imagem foi aprovada pela triagem do arquivo '%s' (todas foram puladas).\n", docxPath)
-			} else {
-				fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi extraída/colorida do arquivo '%s'.\n", minSizeStr, docxPath)
+			pipeRes, err := pipeline.RunDocxPipeline(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, verboseFlag, triageModel, docxNoTriage)
+			if err != nil {
+				return err
 			}
-			return nil
-		}
+
+			if pipeRes.TotalSkipped > 0 {
+				fmt.Printf(" ├─ Imagens ignoradas (tamanho < %s): %d\n", minSizeStr, pipeRes.TotalSkipped)
+			}
+
+			printTriageSummary(pipeRes)
+
+			if pipeRes.TotalColorized == 0 {
+				if pipeRes.TotalTriageSkipped > 0 {
+					fmt.Printf("ℹ️  Nenhuma imagem foi aprovada pela triagem do arquivo '%s' (todas foram puladas).\n", docxPath)
+				} else {
+					fmt.Printf("ℹ️  Nenhuma imagem com tamanho >= %s foi extraída/colorida do arquivo '%s'.\n", minSizeStr, docxPath)
+				}
+				return nil
+			}
 
 			fmt.Printf("✅ Sucesso! %d imagem(ns) colorida(s) salvas em: %s\n", pipeRes.TotalColorized, pipeRes.OutputDir)
 			for _, res := range pipeRes.Results {
@@ -240,7 +239,6 @@ func init() {
 	docxExtractCmd.Flags().BoolVarP(&colorize, "colorize", "c", false, "Colora automaticamente as imagens extraídas via IA (OpenRouter)")
 	docxExtractCmd.Flags().StringVarP(&modelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (config: model_image)")
 	docxExtractCmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "0", "Tamanho mínimo da imagem para ser extraída (ex: '20KB', '50KB', '0' para todas)")
-	docxExtractCmd.Flags().BoolVarP(&docxVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	docxExtractCmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Exibe menu interativo para selecionar quais imagens extrair/processar")
 	docxExtractCmd.Flags().StringVar(&docxTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração (config: model_triage)")
 	docxExtractCmd.Flags().BoolVar(&docxNoTriage, "no-triage", false, "Desativa a triagem e colora todas as imagens elegíveis diretamente")

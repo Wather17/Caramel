@@ -21,7 +21,6 @@ var (
 	routineOutputDir string
 	routineModelName string
 	routinePromptDir string
-	routineVerbose   bool
 )
 
 var routineCmd = &cobra.Command{
@@ -31,8 +30,8 @@ var routineCmd = &cobra.Command{
 }
 
 var routineProcessCmd = &cobra.Command{
-	Use:     "process <pasta_ou_arquivo.docx>",
-	Short:   "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
+	Use:   "process <pasta_ou_arquivo.docx>",
+	Short: "Processa rotinas de aula (.docx), extrai dados via IA e gera o documento final consolidado",
 	Long: `Inspeciona arquivos .docx com as rotinas semanais de aula, extrai as informações de texto,
 envia ao OpenRouter para resumir e classificar os Campos de Experiência da BNCC,
 e compila tudo cronologicamente em um único arquivo .docx formatado em Paisagem.
@@ -113,7 +112,7 @@ caramel routine process rotina_semana_1.docx`,
 		if err != nil {
 			return err
 		}
-		aiClient.Verbose = routineVerbose
+		aiClient.Verbose = verboseFlag
 
 		var combinedRows []docx.RoutineRow
 
@@ -191,7 +190,6 @@ func init() {
 	routineProcessCmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino para salvar o arquivo consolidado")
 	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise (config: model_text)")
 	routineProcessCmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Caminho para arquivo contendo prompt customizado")
-	routineProcessCmd.Flags().BoolVarP(&routineVerbose, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 
 	routineCmd.AddCommand(routineProcessCmd)
 	RootCmd.AddCommand(routineCmd)
@@ -200,7 +198,7 @@ func init() {
 // parseResilientDate attempts to parse date strings in various formats, sanitizing "YY" placeholders
 func parseResilientDate(dateStr string) time.Time {
 	d := strings.TrimSpace(dateStr)
-	
+
 	// Normalize standard placeholder "YY" or "yy" to "26" (current school year)
 	d = strings.ReplaceAll(d, "/YY", "/26")
 	d = strings.ReplaceAll(d, "/yy", "/26")
@@ -223,4 +221,3 @@ func parseResilientDate(dateStr string) time.Time {
 	}
 	return time.Time{}
 }
-

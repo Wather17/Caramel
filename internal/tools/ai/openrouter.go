@@ -28,9 +28,10 @@ var urlRegex = regexp.MustCompile(`https?://[^\s\)"']+\.(png|jpg|jpeg|webp)`)
 
 // Client representa o cliente HTTP para a API do OpenRouter
 type Client struct {
-	APIKey     string
-	Verbose    bool
-	HTTPClient *http.Client
+	APIKey           string
+	Verbose          bool
+	DiagnosticWriter io.Writer
+	HTTPClient       *http.Client
 }
 
 // NewClient cria uma nova instância do cliente OpenRouter
@@ -39,11 +40,24 @@ func NewClient(apiKey string) (*Client, error) {
 		return nil, fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 	}
 	return &Client{
-		APIKey: apiKey,
+		APIKey:           apiKey,
+		DiagnosticWriter: os.Stderr,
 		HTTPClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
 	}, nil
+}
+
+// debugf envia diagnósticos somente para o canal configurado, nunca para stdout.
+func (c *Client) debugf(format string, args ...interface{}) {
+	if c == nil || !c.Verbose {
+		return
+	}
+	writer := c.DiagnosticWriter
+	if writer == nil {
+		writer = io.Discard
+	}
+	_, _ = fmt.Fprintf(writer, format, args...)
 }
 
 type ChatMessageContentPart struct {
@@ -153,9 +167,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
 
-	if c.Verbose {
-		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
-	}
+	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", statusError(resp.StatusCode, bodyBytes)
@@ -272,9 +284,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
 
-	if c.Verbose {
-		fmt.Printf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
-	}
+	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", statusError(resp.StatusCode, bodyBytes)
@@ -525,9 +535,7 @@ func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOver
 		return "", fmt.Errorf("failed to read API response: %w", err)
 	}
 
-	if c.Verbose {
-		fmt.Printf("🔍 [DEBUG] Raw OpenRouter response (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
-	}
+	c.debugf("🔍 [DEBUG] Raw OpenRouter response (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", statusError(resp.StatusCode, bodyBytes)
@@ -565,4 +573,3 @@ func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOver
 
 	return strings.TrimSpace(cleaned), nil
 }
-

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"caramel/internal/output"
+
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +14,10 @@ var (
 	Version = "0.3.1-dev"
 	Commit  = "none"
 	Date    = "unknown"
+
+	verboseFlag bool
+	quietFlag   bool
+	jsonFlag    bool
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -25,6 +31,9 @@ criação de atividades e utilitários de desenvolvimento pedagógico.
 
 Para mais informações sobre os comandos disponíveis, use:
   caramel --help`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return outputOptions().Validate()
+	},
 	// Uncomment the following line if your bare application has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
 }
@@ -39,5 +48,11 @@ func Execute() {
 }
 
 func init() {
-	// Root flags can be defined here if needed
+	RootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe detalhes de diagnóstico e progresso")
+	RootCmd.PersistentFlags().BoolVar(&quietFlag, "quiet", false, "Silencia mensagens de sucesso e progresso")
+	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Emite o resultado estruturado em JSON")
+}
+
+func outputOptions() output.Options {
+	return output.Options{Verbose: verboseFlag, Quiet: quietFlag, JSON: jsonFlag}
 }
