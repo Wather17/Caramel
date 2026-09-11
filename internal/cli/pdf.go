@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"caramel/internal/output"
 	"caramel/internal/tools/pdf"
 
 	"github.com/spf13/cobra"
@@ -54,6 +55,10 @@ caramel print 2up ./fichas_estudo -f cover
 caramel print 2up ./atividades --size small`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		inputArg := args[0]
 
 		realPath, stat, err := pdf.ResolveFuzzyPath(inputArg)
@@ -61,7 +66,7 @@ caramel print 2up ./atividades --size small`,
 			return err
 		}
 		if realPath != inputArg {
-			fmt.Printf("ℹ️ Caminho ajustado automaticamente para: '%s'\n", realPath)
+			renderer.Diagnostic("caminho ajustado automaticamente para: %s\n", realPath)
 		}
 		inputPath := realPath
 
@@ -129,17 +134,18 @@ caramel print 2up ./atividades --size small`,
 			Quality:         pdfQuality,
 		}
 
-		fmt.Printf("🚀 Gerando PDF 2-up a partir de %d imagem(ns)...\n", len(imagePaths))
-		for _, img := range imagePaths {
-			fmt.Printf(" ├─ %s\n", filepath.Base(img))
-		}
+		renderer.Diagnostic("processando %d imagem(ns) em modo 2-up\n", len(imagePaths))
 
 		if err := pdf.Generate2UpPDF(imagePaths, outputPath, opts); err != nil {
 			return fmt.Errorf("falha ao gerar PDF 2-up: %w", err)
 		}
 
-		fmt.Printf("✅ Sucesso! PDF de impressão gerado e salvo em:\n   👉 %s\n", outputPath)
-		return nil
+		return renderer.Result(output.Result{
+			Status:  output.StateSuccess,
+			Summary: fmt.Sprintf("PDF 2-up gerado: %d imagem(ns).", len(imagePaths)),
+			Count:   len(imagePaths),
+			Outputs: []string{outputPath},
+		})
 	},
 }
 

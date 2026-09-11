@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"caramel/internal/output"
 	"caramel/internal/tools/cards"
 	"caramel/internal/tools/pdf"
 
@@ -57,6 +58,10 @@ caramel print cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
 caramel print cards ./imagens_frutas/ --html`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		inputArg := args[0]
 
 		// Validação da grade de fichas (1 a 6 colunas/linhas)
@@ -139,25 +144,30 @@ caramel print cards ./imagens_frutas/ --html`,
 			Uppercase: cardsUppercase,
 		}
 
-		fmt.Printf("🖨️ Gerando layout A4 de fichas para %d imagem(ns)...\n", len(cardItems))
-		fmt.Printf(" ├─ Grade: %d colunas x %d linhas (%d fichas por folha)\n", opts.Columns, opts.Rows, opts.Columns*opts.Rows)
+		renderer.Diagnostic("grade: %d colunas x %d linhas (%d fichas por folha)\n", opts.Columns, opts.Rows, opts.Columns*opts.Rows)
 
 		if cardsHTMLMode {
 			if err := cards.GenerateCardsHTML(cardItems, outPath, opts); err != nil {
 				return fmt.Errorf("falha ao gerar fichas HTML: %w", err)
 			}
-			fmt.Printf("✅ Sucesso! Fichas A4 geradas em:\n   👉 %s\n", outPath)
-			fmt.Println("💡 Dica: Abra o arquivo no navegador e pressione Ctrl+P para imprimir ou salvar como PDF.")
-			return nil
+			return renderer.Result(output.Result{
+				Status:  output.StateSuccess,
+				Summary: fmt.Sprintf("Fichas geradas: %d imagem(ns) em HTML.", len(cardItems)),
+				Count:   len(cardItems),
+				Outputs: []string{outPath},
+			})
 		}
 
 		if err := cards.GenerateCardsPDF(cardItems, outPath, opts); err != nil {
 			return fmt.Errorf("falha ao gerar fichas PDF: %w", err)
 		}
 
-		fmt.Printf("✅ Sucesso! Fichas A4 geradas em:\n   👉 %s\n", outPath)
-		fmt.Println("💡 Dica: O PDF já está pronto para impressão direta (Ctrl+P no leitor ou envie para a impressora).")
-		return nil
+		return renderer.Result(output.Result{
+			Status:  output.StateSuccess,
+			Summary: fmt.Sprintf("Fichas geradas: %d imagem(ns) em PDF.", len(cardItems)),
+			Count:   len(cardItems),
+			Outputs: []string{outPath},
+		})
 	},
 }
 
