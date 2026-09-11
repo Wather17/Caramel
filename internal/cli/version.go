@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"caramel/internal/output"
+
 	"github.com/spf13/cobra"
 )
 
@@ -17,14 +19,27 @@ Use para verificar qual versão do Caramel está instalada — útil para confer
 está atualizada em relação às releases do GitHub.`,
 	Example: `# Exibir informações de versão
 caramel version`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("🍬 Caramel CLI v%s\n", Version)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
+		summary := fmt.Sprintf("Caramel CLI v%s.", Version)
 		if Commit != "none" {
-			fmt.Printf("   Commit: %s\n", Commit)
+			summary += fmt.Sprintf(" Commit: %s.", Commit)
 		}
 		if Date != "unknown" {
-			fmt.Printf("   Data de Build: %s\n", Date)
+			summary += fmt.Sprintf(" Build: %s.", Date)
 		}
+		return renderer.Result(output.Result{
+			Status:  output.StateSuccess,
+			Summary: summary,
+			Data: struct {
+				Version string `json:"version"`
+				Commit  string `json:"commit,omitempty"`
+				Date    string `json:"build_date,omitempty"`
+			}{Version: Version, Commit: Commit, Date: Date},
+		})
 	},
 }
 

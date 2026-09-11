@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 
+	"caramel/internal/output"
+
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +27,10 @@ diretório local do usuário e configura o PATH automaticamente, permitindo usar
 	Example: `# Executar o auto-instalador e configurar o PATH global
 caramel install`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		// 1. Obtém o caminho do executável atual
 		exePath, err := os.Executable()
 		if err != nil {
@@ -49,7 +55,7 @@ caramel install`,
 			targetPath = filepath.Join(installDir, binaryName)
 		}
 
-		fmt.Printf("🍬 Instalando Caramel CLI para %s...\n", runtime.GOOS)
+		renderer.Diagnostic("instalando Caramel CLI para %s\n", runtime.GOOS)
 
 		// 2. Cria a pasta de instalação caso ela não exista
 		if err := os.MkdirAll(installDir, 0755); err != nil {
@@ -68,32 +74,34 @@ caramel install`,
 			}
 		}
 
-		fmt.Printf(" ├─ Binário copiado para: %s\n", targetPath)
+		renderer.Diagnostic("binário copiado para: %s\n", targetPath)
+		warnings := []string{}
 
 		// 4. Configura o PATH com base no Sistema Operacional
 		if runtime.GOOS == "windows" {
 			err := addPathWindows(installDir)
 			if err != nil {
-				fmt.Printf(" ⚠️  Não foi possível configurar o PATH automaticamente: %v\n", err)
-				fmt.Println("    Por favor, adicione o caminho acima manualmente ao PATH do Windows.")
+				warnings = append(warnings, fmt.Sprintf("não foi possível atualizar o PATH automaticamente; adicione %s ao PATH do Windows", installDir))
+				renderer.Diagnostic("falha ao atualizar PATH: %v\n", err)
 			} else {
-				fmt.Println(" ├─ Diretório adicionado ao PATH de Usuário no Registro do Windows com sucesso!")
-				fmt.Println("    (Reinicie o terminal ou PowerShell para atualizar as variáveis de ambiente)")
+				warnings = append(warnings, "reinicie o terminal ou PowerShell para atualizar o PATH")
 			}
 		} else {
 			// Linux / macOS
 			pathEnv := os.Getenv("PATH")
 			if !strings.Contains(pathEnv, installDir) {
-				fmt.Printf("\n📢  Certifique-se de adicionar '%s' ao seu PATH!\n", installDir)
-				fmt.Println("    Adicione a seguinte linha ao seu ~/.bashrc ou ~/.zshrc:")
-				fmt.Printf("    👉 export PATH=\"$HOME/.local/bin:$PATH\"\n\n")
+				warnings = append(warnings, fmt.Sprintf("adicione %s ao PATH e reabra o terminal", installDir))
 			} else {
-				fmt.Println(" ├─ O diretório de instalação já está presente no seu PATH!")
+				renderer.Diagnostic("diretório de instalação já está no PATH\n")
 			}
 		}
 
-		fmt.Println("✅ Instalação do Caramel concluída com sucesso!")
-		return nil
+		return renderer.Result(output.Result{
+			Status:   output.StateSuccess,
+			Summary:  "Caramel instalado com sucesso.",
+			Outputs:  []string{targetPath},
+			Warnings: warnings,
+		})
 	},
 }
 
