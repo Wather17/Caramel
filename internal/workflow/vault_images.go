@@ -264,7 +264,7 @@ func (s *VaultImageService) validate() error {
 
 func (s *VaultImageService) emit(event ProgressEvent) {
 	if s.Progress != nil {
-		s.Progress(event)
+		s.Progress(normalizeProgressEvent(event))
 	}
 }
 

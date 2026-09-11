@@ -285,8 +285,25 @@ func (s *ImageService) validate() error {
 
 func (s *ImageService) emit(event ProgressEvent) {
 	if s.Progress != nil {
-		s.Progress(event)
+		s.Progress(normalizeProgressEvent(event))
 	}
+}
+
+func normalizeProgressEvent(event ProgressEvent) ProgressEvent {
+	if event.State != "" {
+		return event
+	}
+	switch event.Step {
+	case "skipped":
+		event.State = output.StateSkipped
+	case "done", "saved":
+		event.State = output.StateSuccess
+	case "error":
+		event.State = output.StateFailed
+	case "canceled", "cancelled":
+		event.State = output.StateCanceled
+	}
+	return event
 }
 
 func selectImageFiles(all []workspace.ImageFile, ids []string) []workspace.ImageFile {
