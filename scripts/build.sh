@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION=${1:-"0.1.0-dev"}
+VERSION=${1:-"0.3.1-dev"}
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
