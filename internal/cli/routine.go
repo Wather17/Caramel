@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/prompts"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
@@ -48,6 +49,10 @@ caramel routine process ./abril/
 caramel routine process rotina_semana_1.docx`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		targetPath := args[0]
 
 		cfg, err := config.LoadConfig()
@@ -91,11 +96,10 @@ caramel routine process rotina_semana_1.docx`,
 		}
 
 		if len(files) == 0 {
-			fmt.Println("ℹ️ Nenhuma rotina .docx encontrada para processar.")
-			return nil
+			return renderer.Result(output.Result{Status: output.StateWarning, Summary: "Nenhuma rotina .docx encontrada para processar."})
 		}
 
-		fmt.Printf("🚀 Iniciando processamento de %d rotina(s)...\n", len(files))
+		renderer.Diagnostic("processando %d rotina(s)\n", len(files))
 
 		// 2. Carrega o prompt de análise de rotinas
 		var prompt string
@@ -113,39 +117,50 @@ caramel routine process rotina_semana_1.docx`,
 		if err != nil {
 			return err
 		}
-		aiClient.Verbose = verboseFlag
+		aiClient.Verbose = outputOptions().Verbose
+		aiClient.DiagnosticWriter = cmd.ErrOrStderr()
 
 		var combinedRows []docx.RoutineRow
+		processed := 0
+		skipped := 0
+		failed := 0
 
 		// 3. Processa cada arquivo
 		for _, file := range files {
-			fmt.Printf(" ├─ Lendo texto de: %s\n", filepath.Base(file))
+			renderer.Diagnostic("lendo texto: %s\n", filepath.Base(file))
 			txt, err := docx.ExtractText(file)
 			if err != nil {
-				fmt.Printf(" ⚠️ Erro ao extrair texto de '%s': %v. Pulando...\n", filepath.Base(file), err)
+				failed++
+				renderer.Diagnostic("falha ao extrair '%s': %v\n", filepath.Base(file), err)
 				continue
 			}
 
-			fmt.Printf(" │  └─ Consultando IA para resumir atividades...\n")
+			renderer.Diagnostic("consultando IA: %s\n", filepath.Base(file))
 			jsonResponse, err := aiClient.AnalyzeRoutine(txt, prompt, routineModel)
 			if err != nil {
-				fmt.Printf(" ⚠️ Erro na análise de IA para '%s': %v. Pulando...\n", filepath.Base(file), err)
+				failed++
+				renderer.Diagnostic("falha na análise de '%s': %v\n", filepath.Base(file), err)
 				continue
 			}
 
 			// Parse do JSON parcial de cada arquivo
 			var fileRows []docx.RoutineRow
 			if err := json.Unmarshal([]byte(jsonResponse), &fileRows); err != nil {
-				// Tenta decodificar o erro ou printa resposta bruta
-				fmt.Printf(" ⚠️ Falha ao decodificar JSON retornado pela IA para '%s'. Resposta raw: %s\n", filepath.Base(file), jsonResponse)
+				failed++
+				renderer.Diagnostic("falha ao decodificar JSON de '%s': %v; resposta raw: %s\n", filepath.Base(file), err, jsonResponse)
 				continue
 			}
 
+			if len(fileRows) == 0 {
+				skipped++
+				continue
+			}
+			processed++
 			combinedRows = append(combinedRows, fileRows...)
 		}
 
 		if len(combinedRows) == 0 {
-			return fmt.Errorf("nenhum dado válido pôde ser extraído e compilado pela IA")
+			return fmt.Errorf("nenhum dado válido pôde ser extraído e compilado pela IA (processadas: %d; puladas: %d; falhas: %d)", processed, skipped, failed)
 		}
 
 		// 4. Ordena os registros cronologicamente por data usando parsing resiliente
@@ -172,7 +187,7 @@ caramel routine process rotina_semana_1.docx`,
 		finalDocxName := fmt.Sprintf("Campos_de_experiências_%s.docx", time.Now().Format("02-01-2006"))
 		finalDocxPath := filepath.Join(targetOutDir, finalDocxName)
 
-		fmt.Printf(" ├─ Gerando relatório final em Paisagem...\n")
+		renderer.Diagnostic("gerando relatório final em paisagem\n")
 		docxBytes, err := docx.GeneratePedagogicalReport(combinedRows)
 		if err != nil {
 			return fmt.Errorf("erro ao gerar documento Word consolidado: %w", err)
@@ -182,8 +197,23 @@ caramel routine process rotina_semana_1.docx`,
 			return fmt.Errorf("erro ao gravar arquivo final no disco: %w", err)
 		}
 
-		fmt.Printf("✅ Sucesso! Relatório pedagógico consolidado e salvo em:\n   👉 %s\n", finalDocxPath)
-		return nil
+		status := output.StateSuccess
+		warnings := []string{}
+		if skipped > 0 {
+			status = output.StateWarning
+			warnings = append(warnings, fmt.Sprintf("%d rotina(s) sem dados válidos", skipped))
+		}
+		if failed > 0 {
+			status = output.StateWarning
+			warnings = append(warnings, fmt.Sprintf("%d rotina(s) falharam durante o processamento", failed))
+		}
+		return renderer.Result(output.Result{
+			Status:   status,
+			Summary:  fmt.Sprintf("Rotinas consolidadas: %d processada(s); %d pulada(s); %d falha(s).", processed, skipped, failed),
+			Count:    processed,
+			Outputs:  []string{finalDocxPath},
+			Warnings: warnings,
+		})
 	},
 }
 
