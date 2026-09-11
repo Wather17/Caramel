@@ -1,69 +1,111 @@
 #!/usr/bin/env bash
 
-# Garante que o script pare em caso de erros simples
-set -e
+set -Eeuo pipefail
 
-# Define o diretório de destino
-ISSUES_DIR="issues"
+ISSUES_DIR="${ISSUES_DIR:-issues}"
+tmp_dir=""
 
-# Cria a pasta de issues se não existir
-mkdir -p "$ISSUES_DIR"
+cleanup() {
+  if [[ -n "$tmp_dir" && -d "$tmp_dir" ]]; then
+    rm -rf -- "$tmp_dir"
+  fi
+}
+trap cleanup EXIT
 
-# Limpa a pasta local para refletir apenas as issues ativas do repositório remoto
-rm -f "$ISSUES_DIR"/*.md
-
-echo "Sincronizando issues abertas do GitHub..."
-
-# Verifica se o gh CLI está instalado
-if ! command -v gh &> /dev/null; then
-  echo "Erro: GitHub CLI (gh) não está instalado ou não está no PATH."
+if ! command -v gh >/dev/null 2>&1; then
+  printf 'Erro: GitHub CLI (gh) não está instalado ou não está no PATH.\n' >&2
   exit 1
 fi
 
-# Obtém a lista de números das issues abertas
-issues=$(gh issue list --state open --json number --jq '.[].number' 2>/dev/null || true)
+mkdir -p -- "$ISSUES_DIR"
 
-if [ -z "$issues" ]; then
-  echo "Nenhuma issue aberta encontrada ou erro de autenticação/conexão com o GitHub."
-  exit 0
+printf 'Sincronizando issues abertas do GitHub...\n'
+
+# O cache atual só é substituído depois que a consulta e o processamento de
+# todas as issues terminarem com sucesso.
+tmp_dir=$(mktemp -d "${ISSUES_DIR}.tmp.XXXXXX")
+issue_data="$tmp_dir/issues.tsv"
+
+# Uma única consulta traz todos os dados necessários. Cada campo é codificado
+# individualmente para que tabs e quebras de linha do título, corpo ou
+# comentários não quebrem o protocolo TSV consumido pelo Bash abaixo.
+if ! gh issue list \
+  --state open \
+  --limit 1000 \
+  --json number,title,body,labels,comments \
+  --jq '.[] | [(.number | tostring), (.title // ""), (.labels | map(.name) | join(", ")), (.body // ""), (.comments | map("### Comentário por @\(.author.login):\n\(.body)\n") | join("\n"))] | map(@base64) | @tsv' \
+  > "$issue_data"; then
+  printf 'Erro: não foi possível consultar as issues abertas. Verifique a autenticação e a conexão.\n' >&2
+  exit 1
 fi
 
-for num in $issues; do
-  # Obtém o título da issue
-  title=$(gh issue view "$num" --json title --jq '.title' 2>/dev/null || echo "issue-$num")
+if printf '' | base64 --decode >/dev/null 2>&1; then
+  base64_decode=(base64 --decode)
+else
+  base64_decode=(base64 -D)
+fi
 
-  # Cria um slug simples e seguro para o nome do arquivo
-  slug=$(echo "$title" | tr '[:upper:]' '[:lower:]' \
-                    | sed 's/ /-/g' \
-                    | sed 's/[^a-z0-9-]//g' \
-                    | sed 's/-\+/-/g' \
-                    | cut -c1-40) # limita tamanho do slug
+decode_base64() {
+  printf '%s' "$1" | "${base64_decode[@]}"
+}
 
-  filename="${ISSUES_DIR}/${num}-${slug}.md"
+count=0
 
-  echo " -> Sincronizando: #${num} - $title"
+while IFS= read -r record || [[ -n "$record" ]]; do
+  # O registro é produzido pelo --jq acima, portanto deve sempre conter
+  # exatamente quatro tabs separando os cinco campos codificados.
+  record_without_tabs="${record//$'\t'/}"
+  tab_count=$((${#record} - ${#record_without_tabs}))
+  if ((tab_count != 4)); then
+    printf 'Erro: resposta inválida ao consultar as issues abertas.\n' >&2
+    exit 1
+  fi
 
-  # Obtém as labels associadas
-  labels=$(gh issue view "$num" --json labels --jq '[.labels[].name] | join(", ")' 2>/dev/null || echo "")
+  IFS=$'\t' read -r encoded_num encoded_title encoded_labels encoded_body encoded_comments <<< "$record"
+  if ! num=$(decode_base64 "$encoded_num") || ! title=$(decode_base64 "$encoded_title") \
+    || ! labels=$(decode_base64 "$encoded_labels") || ! body=$(decode_base64 "$encoded_body") \
+    || ! comments=$(decode_base64 "$encoded_comments"); then
+    printf 'Erro: resposta inválida ao consultar os dados das issues abertas.\n' >&2
+    exit 1
+  fi
 
-  # Gera o arquivo Markdown completo
+  slug=$(printf '%s' "$title" \
+    | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+    | tr ' ' '-' \
+    | LC_ALL=C sed -e 's/[^a-z0-9-]//g' -e 's/-\+/-/g' -e 's/^-*//' -e 's/-*$//' \
+    | cut -c1-40)
+  slug="${slug:-issue}"
+  filename="${num}-${slug}.md"
+
+  printf ' -> Sincronizando: #%s - %s\n' "$num" "$title"
+
   {
-    echo "# Issue #${num}: ${title}"
-    if [ -n "$labels" ]; then
-      echo "**Labels**: $labels"
+    printf '# Issue #%s: %s\n' "$num" "$title"
+    if [[ -n "$labels" ]]; then
+      printf '**Labels**: %s\n' "$labels"
     fi
-    echo ""
-    echo "## Descrição"
-    gh issue view "$num" --json body --jq '.body' 2>/dev/null
-    echo ""
+    printf '\n## Descrição\n'
+    printf '%s\n' "$body"
+    printf '\n'
 
-    # Obtém e formata comentários se existirem
-    comments=$(gh issue view "$num" --json comments --jq '.comments[] | "### Comentário por @\(.author.login):\n\(.body)\n"' 2>/dev/null || echo "")
-    if [ -n "$comments" ]; then
-      echo "## Discussão"
-      echo "$comments"
+    if [[ -n "$comments" ]]; then
+      printf '## Discussão\n'
+      printf '%s\n' "$comments"
     fi
-  } > "$filename"
-done
+  } > "$tmp_dir/$filename"
 
-echo "Sincronização concluída com sucesso! $(find "$ISSUES_DIR" -name "*.md" | wc -l) issues ativas salvas em ./${ISSUES_DIR}/"
+  count=$((count + 1))
+done < "$issue_data"
+
+shopt -s nullglob
+old_files=("$ISSUES_DIR"/*.md)
+if ((${#old_files[@]} > 0)); then
+  rm -f -- "${old_files[@]}"
+fi
+
+new_files=("$tmp_dir"/*.md)
+if ((${#new_files[@]} > 0)); then
+  mv -- "${new_files[@]}" "$ISSUES_DIR/"
+fi
+
+printf 'Sincronização concluída com sucesso! %d issues ativas salvas em ./%s/\n' "$count" "$ISSUES_DIR"

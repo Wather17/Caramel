@@ -9,20 +9,15 @@ import (
 	"time"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/cards"
 	"caramel/internal/tools/pdf"
 	"caramel/internal/workspace"
 )
 
-// ProgressEvent é uma atualização agnóstica de interface para uma execução.
-type ProgressEvent struct {
-	Step    string
-	Current int
-	Total   int
-	Message string
-	Path    string
-}
+// ProgressEvent preserva o nome histórico, usando o contrato compartilhado de output.
+type ProgressEvent = output.Event
 
 // ImageOptions concentra opções da primeira versão dos fluxos de imagem.
 type ImageOptions struct {

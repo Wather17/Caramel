@@ -20,7 +20,6 @@ var (
 	imgMinSize      string
 	imgTriageModel  string
 	imgNoTriage     bool
-	verboseFlag     bool
 	interactiveFlag bool
 	allFlag         bool
 )
@@ -192,7 +191,6 @@ func init() {
 	imageColorizeCmd.Flags().StringVarP(&imgOutputDir, "output", "o", "", "Diretório de destino (padrão: pasta da imagem original ou pasta do docx)")
 	imageColorizeCmd.Flags().StringVarP(&imgModelName, "model", "m", ai.DefaultModel, "Modelo de IA do OpenRouter para coloração (config: model_image)")
 	imageColorizeCmd.Flags().StringVarP(&imgMinSize, "min-size", "s", "0", "Tamanho mínimo da imagem ao processar .docx (ex: '20KB', '50KB', '0' para todas)")
-	imageColorizeCmd.Flags().BoolVarP(&verboseFlag, "verbose", "v", false, "Exibe informações detalhadas de depuração e resposta raw da API")
 	imageColorizeCmd.Flags().BoolVarP(&interactiveFlag, "interactive", "i", false, "Habilita seleção interativa e preview TUI no terminal")
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Processa todas as imagens automaticamente, sem abrir o formulário de seleção")
 	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração (config: model_triage)")

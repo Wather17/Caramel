@@ -32,6 +32,32 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
+func TestVerboseDiagnosticsUseConfiguredWriter(t *testing.T) {
+	previousURL := ai.OpenRouterAPIURL
+	defer func() { ai.OpenRouterAPIURL = previousURL }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer server.Close()
+	ai.OpenRouterAPIURL = server.URL
+
+	client, err := ai.NewClient("sk-test")
+	if err != nil {
+		t.Fatalf("NewClient falhou: %v", err)
+	}
+	client.Verbose = true
+	var diagnostics bytes.Buffer
+	client.DiagnosticWriter = &diagnostics
+
+	_, _, _ = client.GenerateImage("desenho simples", "modelo-teste", "1:1")
+
+	if !strings.Contains(diagnostics.String(), "Resposta Raw") {
+		t.Fatalf("diagnóstico verbose deveria usar o writer configurado, obtido: %q", diagnostics.String())
+	}
+}
+
 // setupGenerateImageMock redireciona a API para um servidor de teste e captura o corpo
 // da requisição para inspeção, devolvendo um PNG via message.images.
 func setupGenerateImageMock(t *testing.T, capture func(reqBody map[string]interface{})) {
