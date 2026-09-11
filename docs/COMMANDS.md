@@ -19,7 +19,8 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 ### 📄 Documentos Word (.docx)
 | Comando | Finalidade |
 | :--- | :--- |
-| `caramel docx extract` | Extrai, lista ou colore imagens contidas em um `.docx` |
+| `caramel docx images list` | Lista imagens contidas em um `.docx` |
+| `caramel docx images extract` | Extrai imagens contidas em um `.docx` |
 
 ### 🎨 Imagens
 | Comando | Finalidade |
@@ -36,7 +37,7 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 ### 📅 Rotinas de Aula
 | Comando | Finalidade |
 | :--- | :--- |
-| `caramel routine process` | Consolida rotinas semanais e classifica Campos de Experiência da BNCC |
+| `caramel routine consolidate` | Consolida rotinas semanais e classifica Campos de Experiência da BNCC |
 
 ### ⚙️ Configurações & IA
 | Comando | Finalidade |
@@ -44,7 +45,8 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 | `caramel config setup` | Assistente interativo de configuração de chaves |
 | `caramel config set` | Define o valor de uma chave diretamente |
 | `caramel config show` | Exibe local do arquivo e status das chaves/modelos |
-| `caramel config models` | TUI para escolher os modelos de IA (imagem, texto, triagem) |
+| `caramel config models select` | TUI para escolher os modelos de IA (imagem, texto, triagem) |
+| `caramel config models list` | Lista modelos de IA em texto para inspeção ou scripts |
 
 #### Chaves suportadas no `.env`
 
@@ -59,10 +61,10 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 
 ```bash
 # Escolher modelos via TUI (busca incremental por categoria)
-caramel config models
+caramel config models select
 
 # Listar modelos de imagem em texto puro
-caramel config models --list --role image --limit 10
+caramel config models list --role image --limit 10
 
 # Definir um modelo diretamente
 caramel config set model_image google/gemini-3.1-flash-image
@@ -90,6 +92,9 @@ embora o guia exiba apenas o caminho agrupado:
 | `caramel colorize` | `caramel image colorize` |
 | `caramel generate` | `caramel image generate` |
 | `caramel process` | `caramel image colorize` (aliases `process`, `pipeline`, `run`) |
+| `caramel docx extract` | `caramel docx images extract` |
+| `caramel routine process` | `caramel routine consolidate` |
+| `caramel config models` | `caramel config models select` |
 
 > O comando `caramel process` foi **absorvido** pelo `colorize`: ambos executavam exatamente o
 > mesmo pipeline (extrair → colorir → reconstruir o `.docx`). O `colorize` agora é o comando

@@ -34,8 +34,9 @@ var docxCmd = &cobra.Command{
 
 // docxExtractCmd representa o comando de extração de imagens
 var docxExtractCmd = &cobra.Command{
-	Use:   "extract <arquivo.docx>",
-	Short: "Extrai, lista ou colore imagens contidas em um arquivo .docx",
+	Use:    "extract <arquivo.docx>",
+	Hidden: true,
+	Short:  "Extrai, lista ou colore imagens contidas em um arquivo .docx",
 	Long: `Inspeciona a estrutura interna do arquivo .docx fornecido e extrai todas as imagens 
 (diagramas, fotos, gráficos) encontradas na pasta 'word/media/' para um diretório especificado.
 Com a flag --colorize (-c), as imagens em preto e branco são coloridas automaticamente via IA (OpenRouter).
@@ -232,6 +233,65 @@ caramel docx extract mapa_biologia.docx -c`,
 	},
 }
 
+var docxImagesCmd = &cobra.Command{
+	Use:   "images",
+	Short: "Lista e extrai imagens de documentos .docx",
+	Long: `Organiza as operações de inspeção e extração de imagens contidas em documentos Word.
+
+📚 QUANDO USAR:
+Use este grupo quando precisar localizar figuras em um .docx ou salvá-las para reutilização.
+Para colorir imagens, use o comando separado 'caramel image colorize'.`,
+}
+
+var docxImagesListCmd = &cobra.Command{
+	Use:   "list <arquivo.docx>",
+	Short: "Lista imagens contidas em um arquivo .docx",
+	Long: `Inspeciona o arquivo .docx e lista as imagens encontradas em 'word/media/'.
+
+📚 QUANDO USAR:
+Use antes da extração para conferir nomes, formatos e tamanhos das imagens do documento.`,
+	Example: `# Conferir as imagens de um documento Word
+caramel docx images list prova_geografia.docx`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runDocxExtractCompatibility(cmd, args, true)
+	},
+}
+
+var docxImagesExtractCmd = &cobra.Command{
+	Use:   "extract <arquivo.docx>",
+	Short: "Extrai imagens contidas em um arquivo .docx",
+	Long: `Extrai as imagens encontradas em 'word/media/' para um diretório de destino.
+
+📚 QUANDO USAR:
+Use para reaproveitar figuras de um documento Word em apresentações, provas ou atividades.
+Use --output para escolher a pasta de destino e --min-size para filtrar imagens pequenas.`,
+	Example: `# Extrair imagens para uma pasta específica
+caramel docx images extract atividade.docx --output ./imagens_atividade`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runDocxExtractCompatibility(cmd, args, false)
+	},
+}
+
+// runDocxExtractCompatibility mantém a implementação legada como compatibilidade
+// enquanto os caminhos específicos da árvore canônica reutilizam o mesmo handler.
+func runDocxExtractCompatibility(cmd *cobra.Command, args []string, list bool) error {
+	previousList, previousColorize := listOnly, colorize
+	defer func() {
+		listOnly, colorize = previousList, previousColorize
+	}()
+	listOnly = list
+	colorize = false
+	return docxExtractCmd.RunE(cmd, args)
+}
+
+func addDocxImagesExtractFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas")
+	cmd.Flags().StringVarP(&minSizeStr, "min-size", "s", "0", "Tamanho mínimo da imagem para ser extraída")
+	cmd.Flags().BoolVarP(&docxInteractive, "interactive", "i", false, "Habilita seleção interativa das imagens")
+}
+
 func init() {
 	// Flags do comando extract
 	docxExtractCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Diretório onde as imagens serão salvas (padrão: imagens <nome_do_arquivo>)")
@@ -245,5 +305,9 @@ func init() {
 
 	// Registra subcomandos
 	docxCmd.AddCommand(docxExtractCmd)
+	addDocxImagesExtractFlags(docxImagesExtractCmd)
+	docxImagesCmd.AddCommand(docxImagesListCmd)
+	docxImagesCmd.AddCommand(docxImagesExtractCmd)
+	docxCmd.AddCommand(docxImagesCmd)
 	RootCmd.AddCommand(docxCmd)
 }

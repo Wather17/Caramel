@@ -32,12 +32,12 @@ Toda a documentação técnica e guias de uso/desenvolvimento estão disponívei
 
 ### Extrair imagens de um arquivo `.docx`
 ```bash
-go run ./cmd/caramel docx extract atividade.docx -o ./imagens_extraidas
+go run ./cmd/caramel docx images extract atividade.docx -o ./imagens_extraidas
 ```
 
 ### Apenas listar imagens sem salvar no disco
 ```bash
-go run ./cmd/caramel docx extract prova.docx --list
+go run ./cmd/caramel docx images list prova.docx
 ```
 
 ### Compilar para Linux e Windows
