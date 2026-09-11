@@ -163,10 +163,12 @@ func init() {
 	pdf2UpCmd.Flags().IntVarP(&pdfQuality, "quality", "q", 85, "Qualidade de compressão JPEG de 1 a 100 (padrão: 85)")
 
 	// Off-switches: permitem desligar comportamentos ligados por padrão
+	pdf2UpCmd.Flags().BoolVar(&pdfDrawCutLine, "no-cut-line", false, "Não desenha a linha tracejada central de corte")
 	pdf2UpCmd.Flags().BoolVar(&pdfAutoRotate, "no-auto-rotate", false, "Desativa a rotação automática de imagens landscape")
 	pdf2UpCmd.Flags().BoolVar(&pdfDuplicateSingle, "no-duplicate", false, "Não duplica imagens ímpares ou isoladas no segundo slot")
 	pdf2UpCmd.Flags().BoolVar(&pdfOptimize, "no-optimize", false, "Desativa a compactação/redimensionamento das imagens no PDF")
 	// Restaura os padrões (pflag sobrescreve a variável ao registrar a negativa)
+	pdfDrawCutLine = true
 	pdfAutoRotate = true
 	pdfDuplicateSingle = true
 	pdfOptimize = true

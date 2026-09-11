@@ -3,7 +3,62 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+const pedagogicalContextMarker = "📚 QUANDO USAR:"
+
+func publicLeafCommands(root *cobra.Command) []*cobra.Command {
+	seen := make(map[*cobra.Command]bool)
+	var leaves []*cobra.Command
+	var walk func(*cobra.Command)
+	walk = func(parent *cobra.Command) {
+		for _, cmd := range parent.Commands() {
+			if cmd == nil || seen[cmd] || !cmd.IsAvailableCommand() || cmd.Name() == "completion" {
+				continue
+			}
+			seen[cmd] = true
+			if cmd.Runnable() && !cmd.HasSubCommands() {
+				leaves = append(leaves, cmd)
+			}
+			walk(cmd)
+		}
+	}
+	walk(root)
+	return leaves
+}
+
+func aliasViolations(root *cobra.Command) []string {
+	var violations []string
+	var walk func(*cobra.Command)
+	walk = func(parent *cobra.Command) {
+		owners := make(map[string]string)
+		for _, cmd := range parent.Commands() {
+			if cmd == nil || cmd.Name() == "completion" {
+				continue
+			}
+			if previous, ok := owners[cmd.Name()]; ok {
+				violations = append(violations, parent.CommandPath()+": nome "+cmd.Name()+" conflita com "+previous)
+			}
+			owners[cmd.Name()] = cmd.CommandPath()
+			for _, alias := range cmd.Aliases {
+				if previous, ok := owners[alias]; ok {
+					violations = append(violations, parent.CommandPath()+": alias "+alias+" conflita com "+previous)
+				}
+				owners[alias] = cmd.CommandPath()
+			}
+		}
+		for _, cmd := range parent.Commands() {
+			if cmd != nil && cmd.Name() != "completion" {
+				walk(cmd)
+			}
+		}
+	}
+	walk(root)
+	return violations
+}
 
 func TestRootCommandTree(t *testing.T) {
 	wantGroups := []string{"docx", "image", "print", "routine", "config", "workspace", "guide", "version"}
@@ -64,5 +119,49 @@ func TestRootOutputFlagsArePersistent(t *testing.T) {
 		if flag == nil {
 			t.Errorf("flag global --%s deveria estar registrada", name)
 		}
+	}
+}
+
+func TestPublicCommandsFollowDocumentationPolicy(t *testing.T) {
+	for _, cmd := range publicLeafCommands(RootCmd) {
+		cmd := cmd
+		t.Run(cmd.CommandPath(), func(t *testing.T) {
+			if strings.TrimSpace(cmd.Short) == "" {
+				t.Error("comando público precisa de Short")
+			}
+			if !strings.Contains(cmd.Long, pedagogicalContextMarker) {
+				t.Errorf("comando público precisa da seção %q", pedagogicalContextMarker)
+			}
+			if strings.TrimSpace(cmd.Example) == "" || !strings.Contains(cmd.Example, "caramel ") {
+				t.Error("comando público precisa de exemplos executáveis com o prefixo caramel")
+			}
+		})
+	}
+}
+
+func TestCommandAliasesDoNotCollideWithSiblings(t *testing.T) {
+	if violations := aliasViolations(RootCmd); len(violations) > 0 {
+		t.Fatalf("aliases ou nomes de comandos em conflito:\n- %s", strings.Join(violations, "\n- "))
+	}
+
+	root := &cobra.Command{Use: "caramel"}
+	root.AddCommand(&cobra.Command{Use: "one", Aliases: []string{"same"}})
+	root.AddCommand(&cobra.Command{Use: "two", Aliases: []string{"same"}})
+	if violations := aliasViolations(root); len(violations) == 0 {
+		t.Fatal("a verificação deveria detectar aliases duplicados entre irmãos")
+	}
+}
+
+func TestBooleanFlagsWithTrueDefaultsHaveOffSwitch(t *testing.T) {
+	for _, cmd := range publicLeafCommands(RootCmd) {
+		cmd := cmd
+		cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
+			if flag.Value.Type() != "bool" || flag.DefValue != "true" {
+				return
+			}
+			if off := cmd.LocalNonPersistentFlags().Lookup("no-" + flag.Name); off == nil || off.Value.Type() != "bool" {
+				t.Errorf("%s: bool --%s usa true por padrão, mas não possui --no-%s", cmd.CommandPath(), flag.Name, flag.Name)
+			}
+		})
 	}
 }
