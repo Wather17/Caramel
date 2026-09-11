@@ -117,7 +117,7 @@ func SynthesizePrompts(cfg HarnessConfig, client *Client) ([]GenerationItem, err
 
 	var items []GenerationItem
 	if err := json.Unmarshal([]byte(cleanedJSON), &items); err != nil {
-		return nil, fmt.Errorf("falha ao interpretar lista JSON gerada pela IA: %w (conteúdo recebido: %s)", err, responseJSON)
+		return nil, fmt.Errorf("falha ao interpretar lista JSON gerada pela IA: %w", err)
 	}
 
 	// Normaliza índices e slugs

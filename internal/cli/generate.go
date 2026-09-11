@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/cards"
 	"caramel/internal/tools/pdf"
@@ -71,8 +72,12 @@ caramel image generate --theme "animais da fazenda" -n 10 --2up
 caramel image generate -f ./itens.txt -s coloring
 
 # Gerar imagens em formato widescreen 16:9 (slides/apresentações)
-caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
+	caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		var rawItems []string
 
 		// 1. Prioridade para argumentos posicionais diretos
@@ -152,7 +157,8 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 		if err != nil {
 			return err
 		}
-		client.Verbose = verboseFlag
+		client.Verbose = renderer.Options().Verbose
+		client.DiagnosticWriter = cmd.ErrOrStderr()
 
 		harnessCfg := ai.HarnessConfig{
 			Items:       rawItems,
@@ -165,14 +171,14 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			TextModel:   textModel,
 			ImageModel:  imageModel,
 			Aspect:      genAspect,
-			Verbose:     verboseFlag,
+			Verbose:     renderer.Options().Verbose,
 		}
 
 		// Estágio 1: Síntese de prompts
 		if genTheme != "" && len(rawItems) == 0 {
-			fmt.Printf("🧠 Sintetizando %d itens e prompts para o tema '%s' (estilo: %s)...\n", genCount, genTheme, genStyle)
+			renderer.Diagnostic("sintetizando %d itens para o tema %s (estilo: %s)\n", genCount, genTheme, genStyle)
 		} else {
-			fmt.Printf("🧠 Sintetizando prompts padronizados para %d item(ns) (estilo: %s)...\n", len(rawItems), genStyle)
+			renderer.Diagnostic("sintetizando prompts para %d item(ns) (estilo: %s)\n", len(rawItems), genStyle)
 		}
 
 		items, err := ai.SynthesizePrompts(harnessCfg, client)
@@ -180,9 +186,8 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			return err
 		}
 
-		fmt.Printf("📋 Lista sintetizada com sucesso (%d itens):\n", len(items))
 		for _, it := range items {
-			fmt.Printf("  %02d. %s (%s)\n", it.Index, it.Name, it.Slug)
+			renderer.Diagnostic("item %02d: %s (%s)\n", it.Index, it.Name, it.Slug)
 		}
 
 		// Define pasta final de destino
@@ -200,20 +205,20 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 
 		// Estágio 2: Execução com concorrência adaptativa
 		workers, delay := ai.CalculateConcurrencyDecision(len(items), genWorkers)
-		fmt.Printf("\n🚀 Iniciando motor de geração (Workers: %d, Delay: %v)...\n", workers, delay)
-		fmt.Printf("📁 Pasta de saída: %s\n\n", targetDir)
+		renderer.Diagnostic("motor de geração: %d worker(s), intervalo %s, saída %s\n", workers, delay, targetDir)
 
 		progressFunc := func(ev ai.HarnessProgressEvent) {
 			if ev.CurrentStep == "saved" {
-				fmt.Printf("[%d/%d] ✅ Gerado: %s -> %s\n", ev.Completed, ev.Total, ev.Item.Name, filepath.Base(ev.Item.ImagePath))
-				if genPreview && ev.Item.ImagePath != "" {
+				renderer.Text("[%d/%d] gerado: %s\n", ev.Completed, ev.Total, ev.Item.Name)
+				if genPreview && ev.Item.ImagePath != "" && !renderer.Options().JSON && !renderer.Options().Quiet {
 					ansiArt, err := ui.RenderImageFileToANSI(ev.Item.ImagePath, 40, 20)
 					if err == nil && ansiArt != "" {
-						fmt.Println(ansiArt)
+						renderer.Text("%s\n", ansiArt)
 					}
 				}
 			} else if ev.CurrentStep == "error" {
-				fmt.Printf("[%d/%d] ❌ Erro ao gerar %s: %s\n", ev.Completed, ev.Total, ev.Item.Name, ev.Item.Error)
+				renderer.Text("[%d/%d] falha na geração\n", ev.Completed, ev.Total)
+				renderer.Diagnostic("falha ao gerar %s: %s\n", ev.Item.Name, ev.Item.Error)
 			}
 		}
 
@@ -235,12 +240,11 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 			}
 		}
 
-		fmt.Printf("\n🏁 Geração concluída!\n")
-		fmt.Printf(" ├─ Total de imagens geradas com sucesso: %d/%d\n", successCount, len(results))
+		artifacts := []string{targetDir}
+		warnings := []string{}
 		if failCount > 0 {
-			fmt.Printf(" ├─ Falhas: %d\n", failCount)
+			warnings = append(warnings, fmt.Sprintf("%d imagem(ns) falharam durante a geração", failCount))
 		}
-		fmt.Printf(" └─ Diretório: %s\n", targetDir)
 
 		// Estágio 3: Geração automática de Fichas Pedagógicas A4 (HTML/Tailwind)
 		if genCards && len(results) > 0 {
@@ -264,9 +268,10 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 				cardOpts.Title = title
 
 				if err := cards.GenerateCardsHTML(cardItems, htmlOutPath, cardOpts); err != nil {
-					fmt.Printf("⚠️ Aviso: Falha ao gerar fichas A4: %v\n", err)
+					warnings = append(warnings, "falha ao gerar fichas HTML")
+					renderer.Diagnostic("falha ao gerar fichas HTML: %v\n", err)
 				} else {
-					fmt.Printf("🖨️ Layout de Fichas A4 gerado para impressão:\n   👉 %s\n", htmlOutPath)
+					artifacts = append(artifacts, htmlOutPath)
 				}
 			}
 		}
@@ -288,15 +293,26 @@ caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
 				Quality:         85,
 			}
 
-			fmt.Printf("\n📄 Compilando %d imagens em PDF 2-up para impressão...\n", len(successfulPaths))
 			if err := pdf.Generate2UpPDF(successfulPaths, pdfOutPath, pdfOpts); err != nil {
-				fmt.Printf("⚠️ Aviso: Falha ao compilar PDF 2-up: %v\n", err)
+				warnings = append(warnings, "falha ao compilar PDF 2-up")
+				renderer.Diagnostic("falha ao compilar PDF 2-up: %v\n", err)
 			} else {
-				fmt.Printf("✅ PDF 2-up gerado com sucesso:\n   👉 %s\n", pdfOutPath)
+				artifacts = append(artifacts, pdfOutPath)
 			}
 		}
 
-		return nil
+		status := output.StateSuccess
+		if len(warnings) > 0 || successCount == 0 {
+			status = output.StateWarning
+		}
+		return renderer.Result(output.Result{
+			Status:   status,
+			Summary:  fmt.Sprintf("Geração concluída: %d gerada(s); %d falha(s).", successCount, failCount),
+			Count:    successCount,
+			Data:     results,
+			Outputs:  artifacts,
+			Warnings: warnings,
+		})
 	},
 }
 

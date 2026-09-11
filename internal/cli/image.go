@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"caramel/internal/config"
+	"caramel/internal/output"
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/pdf"
 	"caramel/internal/ui"
@@ -58,6 +59,10 @@ caramel colorize avaliacao.docx
 caramel colorize atividade.docx -i`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
 		inputPath := args[0]
 
 		cfg, err := config.LoadConfig()
@@ -134,14 +139,16 @@ caramel colorize atividade.docx -i`,
 		var selectedImages []string
 		if allFlag || imgNoTriage {
 			selectedImages = candidateImages
-		} else if interactiveFlag || len(candidateImages) > 1 {
+		} else if interactiveFlag || (len(candidateImages) > 1 && !renderer.Options().JSON && !renderer.Options().Quiet) {
+			if renderer.Options().JSON || renderer.Options().Quiet {
+				return fmt.Errorf("os modos --json e --quiet não podem ser combinados com --interactive")
+			}
 			selected, err := ui.SelectImageFilesWithPreviewInteractive(candidateImages)
 			if err != nil {
 				return err
 			}
 			if len(selected) == 0 {
-				fmt.Println("Nenhuma imagem selecionada para coloração.")
-				return nil
+				return renderer.Result(output.Result{Status: output.StateCanceled, Summary: "Nenhuma imagem foi selecionada."})
 			}
 			selectedImages = selected
 		} else {
@@ -151,37 +158,58 @@ caramel colorize atividade.docx -i`,
 		// Determina diretório final de saída para imagens coloridas
 		defaultOutputDir := filepath.Dir(inputPath)
 
-		fmt.Printf("🎨 Processando %d imagem(ns) com o modelo '%s'...\n", len(selectedImages), modelName)
+		targetDir := imgOutputDir
+		if !cmd.Flags().Changed("output") || targetDir == "" {
+			targetDir = defaultOutputDir
+		}
+		renderer.Diagnostic("colorizando %d imagem(ns) com o modelo %s\n", len(selectedImages), modelName)
+
+		var colorized []ai.ColorizeResult
+		warnings := []string{}
+		successCount := 0
+		skipCount := 0
+		failCount := 0
 
 		for i, imgPath := range selectedImages {
-			targetDir := imgOutputDir
-			if !cmd.Flags().Changed("output") || targetDir == "" {
-				targetDir = defaultOutputDir
-			}
-
-			fmt.Printf("  [%d/%d] Colorindo '%s'...\n", i+1, len(selectedImages), filepath.Base(imgPath))
+			renderer.Text("[%d/%d] colorizando %s\n", i+1, len(selectedImages), filepath.Base(imgPath))
 			res, err := ai.ColorizeSingleImage(imgPath, ai.ColorizeOptions{
-				OutputDir:     targetDir,
-				APIKey:        cfg.OpenRouterAPIKey,
-				Model:         modelName,
-				TriageModel:   triageModel,
-				DisableTriage: imgNoTriage,
-				Verbose:       verboseFlag,
+				OutputDir:        targetDir,
+				APIKey:           cfg.OpenRouterAPIKey,
+				Model:            modelName,
+				TriageModel:      triageModel,
+				DisableTriage:    imgNoTriage,
+				Verbose:          renderer.Options().Verbose,
+				DiagnosticWriter: cmd.ErrOrStderr(),
 			})
 			if err != nil {
-				fmt.Printf("❌ Falha ao colorir '%s': %v\n", filepath.Base(imgPath), err)
+				failCount++
+				warnings = append(warnings, fmt.Sprintf("falha ao colorir %s", filepath.Base(imgPath)))
+				renderer.Diagnostic("falha ao colorir '%s': %v\n", filepath.Base(imgPath), err)
 				continue
 			}
 
 			if res.Skipped {
-				fmt.Printf("  ⏭️  Pulada pela triagem: %s\n", res.SkipReason)
+				skipCount++
+				renderer.Diagnostic("pulada pela triagem: %s (%s)\n", filepath.Base(imgPath), res.SkipReason)
 				continue
 			}
 
-			fmt.Printf("  ✅ Salvo em: %s\n", res.ColorizedPath)
+			successCount++
+			colorized = append(colorized, *res)
 		}
 
-		return nil
+		status := output.StateSuccess
+		if failCount > 0 || skipCount > 0 {
+			status = output.StateWarning
+		}
+		return renderer.Result(output.Result{
+			Status:   status,
+			Summary:  fmt.Sprintf("Colorização concluída: %d colorizada(s); %d pulada(s); %d falha(s).", successCount, skipCount, failCount),
+			Count:    successCount,
+			Data:     colorized,
+			Outputs:  []string{targetDir},
+			Warnings: warnings,
+		})
 	},
 }
 
