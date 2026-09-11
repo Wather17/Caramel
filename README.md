@@ -50,6 +50,8 @@ go run ./cmd/caramel docx images list prova.docx
 go run ./cmd/caramel workspace
 ```
 
+Após instalar o binário, `mel` também pode ser usado como nome curto equivalente a `caramel`.
+
 O vault global fica no diretório de dados do usuário e pode ser redirecionado com
 `CARAMEL_VAULT_DIR`. A área de trabalho preserva materiais, registra a proveniência das
 operações e migra automaticamente projetos antigos do MVP.

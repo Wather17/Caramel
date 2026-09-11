@@ -66,12 +66,21 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
+A instalação cria também o alias curto `mel`, apontando para o mesmo executável:
+
+```bash
+mel --help
+mel version
+```
+
 ### No Windows (PowerShell):
 #### Opção A: Via Script Local
 Execute o script de instalação em PowerShell:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
+O instalador disponibiliza `mel.cmd` junto com `caramel.exe`; ambos aceitam a mesma árvore
+de comandos, flags, entrada e saída.
 *(Nota: O script compila o binário automaticamente com `go build` caso a pasta `dist/` ainda não tenha sido gerada.)*
 
 #### Opção B: Via Scoop (Recomendado)
@@ -79,3 +88,4 @@ Se você utiliza o **Scoop**, pode instalar o Caramel diretamente com o comando:
 ```powershell
 scoop install https://raw.githubusercontent.com/Wather17/Caramel/main/bucket/caramel.json
 ```
+O manifesto do Scoop cria os shims `caramel` e `mel` para o mesmo executável.
