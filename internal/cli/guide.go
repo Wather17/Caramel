@@ -20,7 +20,11 @@ var guideCmd = &cobra.Command{
 Lista todos os comandos disponíveis agrupados por categoria, ou busca por qualquer termo
 (ex: 'caramel guide colorir', 'caramel guide caça-palavras', 'caramel guide figma').
 
-A documentação é gerada ao vivo a partir dos próprios comandos — sempre atualizada.`,
+A documentação é gerada ao vivo a partir dos próprios comandos — sempre atualizada.
+
+📚 QUANDO USAR:
+Use para descobrir comandos por categoria ou encontrar o fluxo adequado a partir de uma
+palavra-chave, como 'colorir', 'figma' ou 'caça-palavras'.`,
 	Example: `# Listar todos os comandos
 caramel guide
 
