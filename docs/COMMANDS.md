@@ -10,6 +10,9 @@
 > Este documento descreve apenas a **organização** e as **compatibilidades** — não precisa
 > ser mantido sincronizado com a árvore de comandos.
 
+Para o contrato de saída, modos (`--verbose`, `--quiet`, `--json`) e critérios de revisão,
+consulte [`docs/OUTPUT_UX.md`](OUTPUT_UX.md) e a [matriz de saída](OUTPUT_UX_MATRIX.md).
+
 ---
 
 ## 🗂️ Organização por Fluxo Pedagógico

@@ -8,6 +8,10 @@ nomenclatura, flags, documentação e estrutura de código.
 > manual. Siga as políticas abaixo para que o guia, o `--help` e a busca continuem consistentes
 > automaticamente.
 
+O contrato de saída e feedback está em [`docs/OUTPUT_UX.md`](OUTPUT_UX.md), com a matriz
+de cenários em [`docs/OUTPUT_UX_MATRIX.md`](OUTPUT_UX_MATRIX.md). Consulte esses documentos
+ao definir resumos, avisos, diagnósticos e formatos estruturados de um novo comando.
+
 ---
 
 ## 🏗️ Estrutura de um Novo Comando
