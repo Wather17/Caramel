@@ -13,6 +13,10 @@
     [
       "caramel-windows-amd64.exe",
       "caramel"
+    ],
+    [
+      "caramel-windows-amd64.exe",
+      "mel"
     ]
   ],
   "checkver": "github",

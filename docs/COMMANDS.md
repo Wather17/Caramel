@@ -103,6 +103,9 @@ embora o guia exiba apenas o caminho agrupado:
 > mesmo pipeline (extrair → colorir → reconstruir o `.docx`). O `colorize` agora é o comando
 > canônico e os nomes antigos seguem funcionando como aliases.
 
+Após a instalação, `mel` é um nome curto equivalente a `caramel`: aceita a mesma árvore,
+flags, entrada, saída e códigos de retorno. `caramel` continua sendo o nome oficial do produto.
+
 ---
 
 ## ✨ Exemplo de Fluxo Completo

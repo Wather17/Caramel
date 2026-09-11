@@ -3,7 +3,9 @@ $ErrorActionPreference = "Stop"
 
 $InstallDir = "$env:USERPROFILE\.caramel\bin"
 $BinaryName = "caramel.exe"
+$AliasName = "mel.cmd"
 $TargetPath = Join-Path $InstallDir $BinaryName
+$AliasPath = Join-Path $InstallDir $AliasName
 $SourcePath = "dist\caramel-windows-amd64.exe"
 
 Write-Host "🍬 Instalando Caramel CLI para Windows..." -ForegroundColor Cyan
@@ -39,5 +41,25 @@ If ($env:Path -notlike "*$InstallDir*") {
     $env:Path = "$env:Path;$InstallDir"
 }
 
+# Cria um launcher CMD gerenciado, sem substituir arquivos existentes.
+$LauncherMarker = "REM Caramel managed launcher for mel"
+$LauncherContent = "@echo off`r`n$LauncherMarker`r`n`"%~dp0caramel.exe`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+If (Test-Path $AliasPath) {
+    If (Test-Path $AliasPath -PathType Container) {
+        Write-Host " ⚠️  O caminho '$AliasPath' já existe como diretório; mantido sem alteração." -ForegroundColor Yellow
+    } Else {
+        $ExistingContent = Get-Content -Path $AliasPath -Raw -ErrorAction SilentlyContinue
+        If ($ExistingContent -like "*$LauncherMarker*") {
+            Set-Content -Path $AliasPath -Value $LauncherContent -Encoding ascii
+            Write-Host " └─ Alias '$AliasName' já estava configurado." -ForegroundColor Green
+        } Else {
+            Write-Host " ⚠️  Arquivo '$AliasPath' já existe e não é gerenciado pelo Caramel; mantido sem alteração." -ForegroundColor Yellow
+        }
+    }
+} Else {
+    Set-Content -Path $AliasPath -Value $LauncherContent -Encoding ascii
+    Write-Host " └─ Alias '$AliasName' criado para '$BinaryName'." -ForegroundColor Green
+}
+
 Write-Host "✅ Instalacao concluida com sucesso!" -ForegroundColor Green
-Write-Host " Use 'caramel --help' para comecar." -ForegroundColor Cyan
+Write-Host " Use 'caramel --help' ou 'mel --help' para comecar." -ForegroundColor Cyan
