@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -110,6 +112,21 @@ func TestUnknownCommandReturnsError(t *testing.T) {
 func TestVersionVariablesAreSet(t *testing.T) {
 	if Version == "" || Commit == "" || Date == "" {
 		t.Errorf("variáveis de versão devem ter valores padrão, obtido Version=%q Commit=%q Date=%q", Version, Commit, Date)
+	}
+}
+
+func TestBuildScriptUsesDevelopmentVersionFromRoot(t *testing.T) {
+	contents, err := os.ReadFile("../../scripts/build.sh")
+	if err != nil {
+		t.Fatalf("não foi possível ler scripts/build.sh: %v", err)
+	}
+
+	match := regexp.MustCompile(`VERSION=\$\{1:-"([^"]+)"\}`).FindSubmatch(contents)
+	if len(match) != 2 {
+		t.Fatal("scripts/build.sh deveria declarar um fallback VERSION explícito")
+	}
+	if got := string(match[1]); got != Version {
+		t.Errorf("fallback do build (%q) diverge da versão de desenvolvimento do root (%q)", got, Version)
 	}
 }
 
