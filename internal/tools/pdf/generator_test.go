@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 )
 
 func TestPrepareImagePairs(t *testing.T) {
@@ -502,5 +507,164 @@ func TestGenerate2UpPDF_WebPSemOtimizacao(t *testing.T) {
 	}
 	if stat.Size() == 0 {
 		t.Errorf("PDF de webp está com 0 bytes")
+	}
+}
+
+func writeRasterFixture(t *testing.T, path, format string) {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, 32, 48))
+	for y := 0; y < 48; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.RGBA{R: 220, G: 80, B: 30, A: 255})
+		}
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("falha ao criar fixture %s: %v", path, err)
+	}
+	defer f.Close()
+
+	switch format {
+	case "jpeg":
+		err = jpeg.Encode(f, img, &jpeg.Options{Quality: 100})
+	case "png":
+		err = png.Encode(f, img)
+	case "gif":
+		err = gif.Encode(f, img, nil)
+	case "bmp":
+		err = bmp.Encode(f, img)
+	case "tiff":
+		err = tiff.Encode(f, img, nil)
+	default:
+		t.Fatalf("formato de fixture não suportado: %s", format)
+	}
+	if err != nil {
+		t.Fatalf("falha ao codificar fixture %s: %v", path, err)
+	}
+}
+
+func TestGenerate2UpPDF_FormatosRasterAceitosSemOtimizacao(t *testing.T) {
+	cases := []struct {
+		ext    string
+		format string
+	}{
+		{ext: ".jpe", format: "jpeg"},
+		{ext: ".JFIF", format: "jpeg"},
+		{ext: ".jif", format: "jpeg"},
+		{ext: ".GIF", format: "gif"},
+		{ext: ".bmp", format: "bmp"},
+		{ext: ".TIF", format: "tiff"},
+		{ext: ".tiff", format: "tiff"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.ext, func(t *testing.T) {
+			tempDir := t.TempDir()
+			imgPath := filepath.Join(tempDir, "atividade"+tc.ext)
+			outPath := filepath.Join(tempDir, "atividade.pdf")
+			writeRasterFixture(t, imgPath, tc.format)
+
+			opts := DefaultOptions()
+			opts.Optimize = false
+			if err := Generate2UpPDF([]string{imgPath}, outPath, opts); err != nil {
+				t.Fatalf("Generate2UpPDF para %s falhou: %v", tc.ext, err)
+			}
+			stat, err := os.Stat(outPath)
+			if err != nil {
+				t.Fatalf("PDF para %s não foi criado: %v", tc.ext, err)
+			}
+			if stat.Size() == 0 {
+				t.Fatalf("PDF para %s está vazio", tc.ext)
+			}
+		})
+	}
+}
+
+func TestGenerate2UpPDF_TIFFComOtimizacao(t *testing.T) {
+	tempDir := t.TempDir()
+	imgPath := filepath.Join(tempDir, "atividade.tiff")
+	outPath := filepath.Join(tempDir, "atividade_otimizada.pdf")
+	writeRasterFixture(t, imgPath, "tiff")
+
+	opts := DefaultOptions()
+	opts.Optimize = true
+	if err := Generate2UpPDF([]string{imgPath}, outPath, opts); err != nil {
+		t.Fatalf("Generate2UpPDF para TIFF com otimização falhou: %v", err)
+	}
+	stat, err := os.Stat(outPath)
+	if err != nil {
+		t.Fatalf("PDF TIFF otimizado não foi criado: %v", err)
+	}
+	if stat.Size() == 0 {
+		t.Fatal("PDF TIFF otimizado está vazio")
+	}
+}
+
+func TestOptimizeImageInMemory_GIFAnimadoUsaPrimeiroFrame(t *testing.T) {
+	tempDir := t.TempDir()
+	imgPath := filepath.Join(tempDir, "animado.gif")
+
+	palette := color.Palette{color.RGBA{R: 240, A: 255}, color.RGBA{B: 240, A: 255}}
+	first := image.NewPaletted(image.Rect(0, 0, 12, 12), palette)
+	second := image.NewPaletted(image.Rect(0, 0, 12, 12), palette)
+	for y := 0; y < 12; y++ {
+		for x := 0; x < 12; x++ {
+			first.SetColorIndex(x, y, 0)
+			second.SetColorIndex(x, y, 1)
+		}
+	}
+
+	f, err := os.Create(imgPath)
+	if err != nil {
+		t.Fatalf("falha ao criar GIF animado: %v", err)
+	}
+	if err := gif.EncodeAll(f, &gif.GIF{Image: []*image.Paletted{first, second}, Delay: []int{0, 0}}); err != nil {
+		f.Close()
+		t.Fatalf("falha ao codificar GIF animado: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("falha ao fechar GIF animado: %v", err)
+	}
+
+	opts := DefaultOptions()
+	opts.Quality = 100
+	reader, format, err := optimizeImageInMemory(imgPath, 20, 20, opts)
+	if err != nil {
+		t.Fatalf("optimizeImageInMemory falhou: %v", err)
+	}
+	if format != "JPG" {
+		t.Fatalf("formato otimizado inesperado: %s", format)
+	}
+	decoded, _, err := image.Decode(reader)
+	if err != nil {
+		t.Fatalf("falha ao decodificar JPEG do primeiro frame: %v", err)
+	}
+	r, _, b, _ := decoded.At(5, 5).RGBA()
+	if r <= b {
+		t.Fatalf("GIF deveria usar o primeiro frame vermelho, obtido RGB=%d,%d", r, b)
+	}
+}
+
+func TestGenerate2UpPDF_FormatoAceitoComConteudoInvalido(t *testing.T) {
+	tempDir := t.TempDir()
+	imgPath := filepath.Join(tempDir, "invalida.tiff")
+	outPath := filepath.Join(tempDir, "invalida.pdf")
+	if err := os.WriteFile(imgPath, []byte("não é uma imagem TIFF"), 0644); err != nil {
+		t.Fatalf("falha ao criar fixture inválida: %v", err)
+	}
+
+	opts := DefaultOptions()
+	opts.Optimize = false
+	err := Generate2UpPDF([]string{imgPath}, outPath, opts)
+	if err == nil {
+		t.Fatal("conteúdo inválido deveria retornar erro")
+	}
+	if !strings.Contains(err.Error(), "falha ao ler dimensões") {
+		t.Fatalf("erro deveria indicar falha de decodificação, obtido: %v", err)
+	}
+	if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+		t.Fatalf("PDF não deveria ser criado para imagem inválida, stat err=%v", statErr)
 	}
 }

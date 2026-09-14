@@ -66,3 +66,29 @@ func TestResolveFuzzyPath(t *testing.T) {
 		}
 	})
 }
+
+func TestIsSupportedImageFile(t *testing.T) {
+	for _, path := range []string{
+		"atividade.png",
+		"atividade.JPG",
+		"atividade.jpeg",
+		"atividade.JPE",
+		"atividade.JFIF",
+		"atividade.jif",
+		"atividade.webp",
+		"atividade.GIF",
+		"atividade.bmp",
+		"atividade.TIF",
+		"atividade.tiff",
+	} {
+		if !IsSupportedImageFile(path) {
+			t.Errorf("%q deveria ser uma extensão aceita", path)
+		}
+	}
+
+	for _, path := range []string{"atividade.svg", "atividade.avif", "atividade.pdf", "atividade", "atividade.txt"} {
+		if IsSupportedImageFile(path) {
+			t.Errorf("%q não deveria ser uma extensão aceita", path)
+		}
+	}
+}

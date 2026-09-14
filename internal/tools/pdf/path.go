@@ -13,6 +13,33 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+var supportedImageExtensions = map[string]struct{}{
+	".png":  {},
+	".jpg":  {},
+	".jpeg": {},
+	".jpe":  {},
+	".jfif": {},
+	".jif":  {},
+	".webp": {},
+	".gif":  {},
+	".bmp":  {},
+	".tif":  {},
+	".tiff": {},
+}
+
+// IsSupportedImageFile reports whether path has an extension accepted by the
+// print 2-up command. The comparison is case-insensitive.
+func IsSupportedImageFile(path string) bool {
+	_, ok := supportedImageExtensions[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+// SupportedImageExtensionsDescription returns the user-facing list used by
+// 2-up validation errors and help text.
+func SupportedImageExtensionsDescription() string {
+	return "PNG, JPG/JPEG/JPE/JFIF/JIF, WEBP, GIF, BMP, TIF/TIFF"
+}
+
 // ResolveFuzzyPath tenta localizar um arquivo ou diretório no sistema de arquivos.
 // Se a busca exata falhar, realiza uma busca insensível a maiúsculas/minúsculas,
 // convertendo travessões (–, —) para hífen (-) e tratando caracteres ordinais (º, ª).

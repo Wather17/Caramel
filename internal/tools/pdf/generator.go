@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
 	"io"
@@ -15,7 +16,9 @@ import (
 	"unicode"
 
 	"github.com/phpdave11/gofpdf"
+	_ "golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
+	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 )
 
@@ -125,7 +128,7 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 			pdf.SetLineWidth(0.3)
 			pdf.SetDashPattern([]float64{2, 2}, 0) // Linha tracejada suave
 			pdf.Line(midX, opts.MarginMM, midX, pageHeight-opts.MarginMM)
-			pdf.SetDashPattern([]float64{}, 0)     // Restaura linha contínua
+			pdf.SetDashPattern([]float64{}, 0) // Restaura linha contínua
 		}
 	}
 
@@ -274,14 +277,18 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 	imageTarget := imgPath
 	var imageType string
 
-	// WebP não é suportado nativamente pelo gofpdf — sempre converte em memória
-	// (para JPG), mesmo com a otimização desativada.
-	forceConvert := strings.EqualFold(filepath.Ext(imgPath), ".webp")
+	// Apenas PNG e JPEG são suportados diretamente pelo gofpdf. Os demais
+	// formatos aceitos são convertidos em memória, mesmo com a otimização
+	// desativada.
+	forceConvert := !isNativeGofpdfImage(imgPath)
 
 	// Otimização em memória se habilitada (usa as dimensões visuais reais do encaixe)
 	if opts.Optimize || forceConvert {
 		reader, optFormat, optErr := optimizeImageInMemory(imgPath, layout.RW, layout.RH, opts)
-		if optErr == nil && reader != nil {
+		if optErr != nil {
+			return optErr
+		}
+		if reader != nil {
 			imageKey := fmt.Sprintf("opt_%s", filepath.Base(imgPath))
 			imageType = optFormat
 			pdf.RegisterImageOptionsReader(imageKey, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, reader)
@@ -294,10 +301,8 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 		switch ext {
 		case ".PNG":
 			imageType = "PNG"
-		case ".JPG", ".JPEG":
+		case ".JPG", ".JPEG", ".JPE", ".JFIF", ".JIF":
 			imageType = "JPG"
-		default:
-			imageType = ""
 		}
 	}
 
@@ -320,6 +325,11 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 	}
 
 	return nil
+}
+
+func isNativeGofpdfImage(imgPath string) bool {
+	ext := strings.ToLower(filepath.Ext(imgPath))
+	return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".jpe" || ext == ".jfif" || ext == ".jif"
 }
 
 // optimizeImageInMemory lê a imagem, reduz (se necessário) para a resolução máxima
