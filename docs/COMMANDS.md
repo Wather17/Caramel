@@ -37,6 +37,11 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 | `caramel print 2up` | Monta PDF A4 Paisagem com 2 atividades por folha |
 | `caramel print cards` | Gera fichas pedagógicas A4 (PDF ou HTML) |
 
+O comando `caramel print 2up` aceita imagens PNG, JPEG (`.jpg`, `.jpeg`, `.jpe`, `.jfif`,
+`.jif`), WEBP, GIF, BMP e TIFF (`.tif`, `.tiff`), sem diferenciação entre maiúsculas e
+minúsculas. GIFs animados usam somente o primeiro frame; formatos não nativos do PDF são
+convertidos em memória para JPEG.
+
 ### 📅 Rotinas de Aula
 | Comando | Finalidade |
 | :--- | :--- |

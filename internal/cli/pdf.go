@@ -30,7 +30,7 @@ var pdf2UpCmd = &cobra.Command{
 	Use:     "2up <imagem_ou_pasta>",
 	Aliases: []string{"layout"},
 	Short:   "Gera um PDF A4 Paisagem com 2 atividades lado a lado na mesma folha (economiza papel)",
-	Long: `Lê uma imagem isolada ou uma pasta de imagens (PNG, JPG, WEBP) e monta um PDF em orientação Paisagem 
+	Long: fmt.Sprintf(`Lê uma imagem isolada ou uma pasta de imagens (%s) e monta um PDF em orientação Paisagem
 com 2 páginas/atividades por folha, incluindo margens ajustáveis e linha de corte central orientativa.
 
 📚 QUANDO USAR:
@@ -39,9 +39,12 @@ atividades lado a lado em uma única folha A4 — economiza papel e tinta. Image
 (landscape) são rotacionadas automaticamente para aproveitar a área útil, e imagens pesadas do
 Figma são comprimidas em memória para gerar PDFs leves (~500KB).
 
-O preset --size controla o tamanho da atividade dentro do slot: large (100% da área útil),
-medium (80%, sobra espaço para nome/data/anotações) ou small (60%, ideal para recortar e
-colar no caderno). A atividade permanece centralizada no slot em qualquer preset.`,
+GIFs animados usam somente o primeiro frame. Formatos não renderizados nativamente pelo PDF são
+convertidos em memória para JPEG, inclusive com --no-optimize.
+
+O preset --size controla o tamanho da atividade dentro do slot: large (100%% da área útil),
+medium (80%%, sobra espaço para nome/data/anotações) ou small (60%%, ideal para recortar e
+colar no caderno). A atividade permanece centralizada no slot em qualquer preset.`, pdf.SupportedImageExtensionsDescription()),
 	Example: `# Gerar PDF 2-up de uma pasta de atividades exportadas do Figma
 caramel print 2up ./atividades_figma
 
@@ -84,14 +87,13 @@ caramel print 2up ./atividades --size small`,
 				if entry.IsDir() {
 					continue
 				}
-				ext := strings.ToLower(filepath.Ext(entry.Name()))
-				if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" {
+				if pdf.IsSupportedImageFile(entry.Name()) {
 					imagePaths = append(imagePaths, filepath.Join(inputPath, entry.Name()))
 				}
 			}
 
 			if len(imagePaths) == 0 {
-				return fmt.Errorf("nenhuma imagem (PNG, JPG, WEBP) encontrada na pasta '%s'", inputPath)
+				return fmt.Errorf("nenhuma imagem (%s) encontrada na pasta '%s'", pdf.SupportedImageExtensionsDescription(), inputPath)
 			}
 
 			pdf.SortNatural(imagePaths)
@@ -99,9 +101,8 @@ caramel print 2up ./atividades --size small`,
 			defaultPdfName = filepath.Join(inputPath, fmt.Sprintf("%s_2up.pdf", folderName))
 		} else {
 			// Arquivo único
-			ext := strings.ToLower(filepath.Ext(inputPath))
-			if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
-				return fmt.Errorf("o arquivo fornecido precisa ser uma imagem (PNG, JPG, WEBP)")
+			if !pdf.IsSupportedImageFile(inputPath) {
+				return fmt.Errorf("o arquivo fornecido precisa ser uma imagem (%s)", pdf.SupportedImageExtensionsDescription())
 			}
 
 			imagePaths = []string{inputPath}
