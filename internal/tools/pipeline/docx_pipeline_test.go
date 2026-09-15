@@ -3,6 +3,7 @@ package pipeline
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"image"
@@ -13,7 +14,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"caramel/internal/tools/ai"
 	"caramel/internal/tools/docx"
@@ -351,5 +354,60 @@ func TestRunDocxPipelineSelectedPulaFormatoNaoColorivel(t *testing.T) {
 	}
 	if hits != 1 || res.TotalColorized != 1 {
 		t.Errorf("apenas o PNG deveria ser colorido (coloridas=%d, chamadas=%d)", res.TotalColorized, hits)
+	}
+}
+
+func TestRunDocxPipelineWithOptionsProcessaImagensEmParaleloEConservaOrdem(t *testing.T) {
+	dir := t.TempDir()
+	media := []struct {
+		name string
+		data []byte
+	}{
+		{name: "image1.png", data: pngBytes(t, 8, corCinza)},
+		{name: "image2.png", data: pngBytes(t, 8, corCinza)},
+		{name: "image3.png", data: pngBytes(t, 8, corCinza)},
+	}
+	docxPath := buildTestDocx(t, dir, media)
+
+	var inFlight int32
+	var maxInFlight int32
+	payload := fmt.Sprintf(`{"choices":[{"message":{"role":"assistant","images":[{"type":"image_url","image_url":{"url":"data:image/png;base64,%s"}}]}}]}`, base64.StdEncoding.EncodeToString(pngBytes(t, 4, corVermelhoVivo)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		current := atomic.AddInt32(&inFlight, 1)
+		for {
+			previous := atomic.LoadInt32(&maxInFlight)
+			if current <= previous || atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+				break
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer server.Close()
+
+	oldURL := ai.OpenRouterAPIURL
+	ai.OpenRouterAPIURL = server.URL
+	t.Cleanup(func() { ai.OpenRouterAPIURL = oldURL })
+
+	res, err := RunDocxPipelineWithOptions(docxPath, dir, "sk-test", "m/imagem", 0, PipelineOptions{
+		Context:    context.Background(),
+		MaxWorkers: 3,
+	}, "", true)
+	if err != nil {
+		t.Fatalf("RunDocxPipelineWithOptions falhou: %v", err)
+	}
+	if res.TotalColorized != len(media) {
+		t.Fatalf("esperava %d imagens coloridas, obtido %d", len(media), res.TotalColorized)
+	}
+	for i, result := range res.Results {
+		want := media[i].name
+		if got := filepath.Base(result.OriginalPath); got != want {
+			t.Errorf("resultado %d fora de ordem: esperado %s, obtido %s", i, want, got)
+		}
+	}
+	if atomic.LoadInt32(&maxInFlight) < 2 {
+		t.Fatalf("esperava chamadas concorrentes, máximo observado: %d", maxInFlight)
 	}
 }

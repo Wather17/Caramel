@@ -18,6 +18,7 @@ type ColorizeOptions struct {
 	Model            string    // Modelo de geração de imagem (padrão: DefaultModel)
 	TriageModel      string    // Modelo de visão para a triagem (padrão: DefaultTriageModel)
 	DisableTriage    bool      // true desativa as duas camadas de triagem (coloração forçada)
+	MaxWorkers       int       // Número máximo de imagens processadas em paralelo (0 = adaptativo)
 	Verbose          bool      // Exibe logs detalhados de depuração
 	DiagnosticWriter io.Writer // Canal para diagnóstico verbose
 }
@@ -31,6 +32,39 @@ type ColorizeResult struct {
 	Skipped    bool   // true se a imagem foi rejeitada pela triagem (não foi colorida)
 	SkipStage  string // "local" (análise de saturação) ou "triage" (LLM de visão)
 	SkipReason string // Motivo legível da rejeição
+}
+
+// ColorizeBatchResult guarda o resultado indexado de uma imagem processada em lote.
+type ColorizeBatchResult struct {
+	Path   string
+	Result *ColorizeResult
+	Err    error
+}
+
+// ColorizeImages executa colorização em lote usando um contexto de fundo.
+func ColorizeImages(imagePaths []string, opts ColorizeOptions, onProgress BatchProgressFunc) ([]ColorizeBatchResult, error) {
+	return ColorizeImagesContext(context.Background(), imagePaths, opts, onProgress)
+}
+
+// ColorizeImagesContext processa cada imagem completa dentro de um worker e
+// preserva os resultados na ordem original dos caminhos recebidos.
+func ColorizeImagesContext(ctx context.Context, imagePaths []string, opts ColorizeOptions, onProgress BatchProgressFunc) ([]ColorizeBatchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	results := make([]ColorizeBatchResult, len(imagePaths))
+	itemErrors, batchErr := ExecuteBatchContext(ctx, len(imagePaths), opts.MaxWorkers, func(workCtx context.Context, index int) error {
+		path := imagePaths[index]
+		result, err := ColorizeSingleImageContext(workCtx, path, opts)
+		results[index] = ColorizeBatchResult{Path: path, Result: result, Err: err}
+		return err
+	}, onProgress)
+	for index, err := range itemErrors {
+		if results[index].Err == nil && err != nil {
+			results[index].Err = err
+		}
+	}
+	return results, batchErr
 }
 
 // ColorizeSingleImage recebe o caminho de uma imagem, executa a triagem de economia
@@ -48,6 +82,9 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 func ColorizeSingleImageContext(ctx context.Context, imagePath string, opts ColorizeOptions) (*ColorizeResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	client, err := NewClient(opts.APIKey)
 	if err != nil {

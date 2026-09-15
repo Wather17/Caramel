@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 // ProcessDocxOptions contém os parâmetros para execução do pipeline de processamento e reconstrução de .docx
 type ProcessDocxOptions struct {
+	Context     context.Context
 	DocxPath    string
 	OutputDir   string
 	ModelName   string
@@ -26,6 +28,7 @@ type ProcessDocxOptions struct {
 	Verbose     bool
 	TriageModel string // Modelo de visão usado na triagem (vazio = padrão gratuito)
 	NoTriage    bool   // true desativa a triagem e colora todas as imagens elegíveis
+	MaxWorkers  int    // Número máximo de imagens processadas em paralelo (0 = adaptativo)
 	Output      output.Options
 	Out         io.Writer
 	Err         io.Writer
@@ -33,6 +36,9 @@ type ProcessDocxOptions struct {
 
 // RunProcessDocx executa o fluxo completo do pipeline DOCX (interativo ou automatizado)
 func RunProcessDocx(opts ProcessDocxOptions) error {
+	if opts.Context == nil {
+		opts.Context = context.Background()
+	}
 	if opts.Verbose {
 		opts.Output.Verbose = true
 	}
@@ -133,7 +139,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 			}
 		}
 
-		res, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
+		res, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 		if err != nil {
 			return err
 		}
@@ -141,7 +147,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 	}
 
 	// Execução Automatizada Padrão (Colora todas as imagens mantidas pelo filtro minSize)
-	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
+	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 	if err != nil {
 		return err
 	}

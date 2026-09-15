@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"caramel/internal/config"
@@ -109,6 +110,9 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 
 // Colorize transforma materiais selecionados em novos materiais derivados.
 func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts ImageOptions) ([]vault.Material, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -140,33 +144,65 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 	}
 	defer os.RemoveAll(tempDir)
 	var materials []vault.Material
-	for i, parent := range parents {
-		if err := ctx.Err(); err != nil {
-			_ = s.Vault.FinishRun(ctx, run.ID, "canceled", materialIDs(materials), err)
-			return materials, err
+	paths := make([]string, 0, len(parents))
+	for _, parent := range parents {
+		paths = append(paths, s.Vault.ObjectPath(parent))
+	}
+	batchResults, batchErr := ai.ColorizeImagesContext(ctx, paths, ai.ColorizeOptions{
+		OutputDir: tempDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
+		TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+	}, func(event ai.BatchProgressEvent) {
+		if event.State == "started" && event.Index >= 0 && event.Index < len(parents) {
+			parent := parents[event.Index]
+			s.emit(ProgressEvent{Step: "colorizing", Current: event.Index, Total: event.Total, Message: parent.Title, Path: paths[event.Index]})
 		}
-		path := s.Vault.ObjectPath(parent)
-		s.emit(ProgressEvent{Step: "colorizing", Current: i, Total: len(parents), Message: parent.Title, Path: path})
-		result, colorErr := ai.ColorizeSingleImage(path, ai.ColorizeOptions{OutputDir: tempDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel, TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage})
-		if colorErr != nil {
-			_ = s.Vault.FinishRun(ctx, run.ID, "failed", materialIDs(materials), colorErr)
-			return materials, colorErr
-		}
-		if result.Skipped {
-			s.emit(ProgressEvent{Step: "skipped", Current: i + 1, Total: len(parents), Message: fmt.Sprintf("%s: %s", parent.Title, result.SkipReason)})
+	})
+	var failures []string
+	for i, batch := range batchResults {
+		parent := parents[i]
+		if batch.Err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", parent.Title, batch.Err))
 			continue
 		}
-		imported, importErr := s.Vault.ImportFile(ctx, result.ColorizedPath, parent.Title+" colorida", []string{"colorido"})
+		if batch.Result == nil {
+			failures = append(failures, fmt.Sprintf("%s: resultado vazio", parent.Title))
+			continue
+		}
+		if batch.Result.Skipped {
+			s.emit(ProgressEvent{Step: "skipped", Current: i + 1, Total: len(parents), Message: fmt.Sprintf("%s: %s", parent.Title, batch.Result.SkipReason)})
+			continue
+		}
+
+		imported, importErr := s.Vault.ImportFile(ctx, batch.Result.ColorizedPath, parent.Title+" colorida", []string{"colorido"})
 		if importErr != nil {
-			_ = s.Vault.FinishRun(ctx, run.ID, "failed", materialIDs(materials), importErr)
-			return materials, importErr
+			failures = append(failures, fmt.Sprintf("%s: falha ao importar resultado: %v", parent.Title, importErr))
+			continue
 		}
 		materials = append(materials, imported.Material)
-		_ = s.Vault.AddDerivation(ctx, run.ID, []string{parent.ID}, []string{imported.Material.ID})
+		if err := s.Vault.AddDerivation(ctx, run.ID, []string{parent.ID}, []string{imported.Material.ID}); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: falha ao registrar derivação: %v", parent.Title, err))
+			continue
+		}
 		if s.CollectionID != "" {
-			_ = s.Vault.AddToCollection(ctx, s.CollectionID, imported.Material.ID)
+			if err := s.Vault.AddToCollection(ctx, s.CollectionID, imported.Material.ID); err != nil {
+				failures = append(failures, fmt.Sprintf("%s: falha ao adicionar à coleção: %v", parent.Title, err))
+				continue
+			}
 		}
 		s.emit(ProgressEvent{Step: "saved", Current: i + 1, Total: len(parents), Message: imported.Material.Title})
+	}
+	if batchErr != nil {
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Vault.FinishRun(ctx, run.ID, status, materialIDs(materials), batchErr)
+		return materials, batchErr
+	}
+	if len(failures) > 0 {
+		batchErr = fmt.Errorf("%d material(is) falharam: %s", len(failures), strings.Join(failures, "; "))
+		_ = s.Vault.FinishRun(ctx, run.ID, "failed", materialIDs(materials), batchErr)
+		return materials, batchErr
 	}
 	if err := s.Vault.FinishRun(ctx, run.ID, "completed", materialIDs(materials), nil); err != nil {
 		return materials, err

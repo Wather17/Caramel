@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -30,8 +31,109 @@ type PipelineResult struct {
 
 // PipelineOptions controla os diagnósticos do pipeline sem acoplar a ferramenta à CLI.
 type PipelineOptions struct {
+	Context          context.Context
+	MaxWorkers       int
 	Verbose          bool
 	DiagnosticWriter io.Writer
+}
+
+type imageBatchProcessingResult struct {
+	colorizedResults []ai.ColorizeResult
+	triageSkipped    []ai.TriageSkipInfo
+	formatSkipped    []docx.ExtractedImage
+	warnings         []string
+	replacements     map[string][]byte
+}
+
+type imagePipelineItemResult struct {
+	result       *ai.ColorizeResult
+	resizedBytes []byte
+	err          error
+}
+
+func processExtractedImages(ctx context.Context, tempExtractDir, targetDir, apiKey, model string, images []docx.ExtractedImage, options PipelineOptions, triageModel string, noTriage bool) (imageBatchProcessingResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	processed := imageBatchProcessingResult{replacements: make(map[string][]byte)}
+	eligible := make([]docx.ExtractedImage, 0, len(images))
+	paths := make([]string, 0, len(images))
+	for _, img := range images {
+		if !docx.IsColorableFormat(img.Format) {
+			warning := fmt.Sprintf("%s: formato não colorível (%s)", img.OriginalName, img.Format)
+			diagnosticf(options, "⏭️  Pulada: %s\n", warning)
+			processed.formatSkipped = append(processed.formatSkipped, img)
+			continue
+		}
+		eligible = append(eligible, img)
+		paths = append(paths, filepath.Join(tempExtractDir, img.OriginalName))
+	}
+
+	colorizeOpts := ai.ColorizeOptions{
+		OutputDir:        targetDir,
+		APIKey:           apiKey,
+		Model:            model,
+		TriageModel:      triageModel,
+		DisableTriage:    noTriage,
+		Verbose:          options.Verbose,
+		DiagnosticWriter: options.DiagnosticWriter,
+	}
+	itemResults := make([]imagePipelineItemResult, len(eligible))
+	itemErrors, batchErr := ai.ExecuteBatchContext(ctx, len(eligible), options.MaxWorkers, func(workCtx context.Context, index int) error {
+		imgPath := paths[index]
+		result, err := ai.ColorizeSingleImageContext(workCtx, imgPath, colorizeOpts)
+		if err != nil {
+			itemResults[index].err = err
+			return err
+		}
+		itemResults[index].result = result
+		if result.Skipped {
+			return nil
+		}
+
+		resizedBytes, err := docx.ResizeToMatch(imgPath, result.ColorizedPath)
+		if err != nil {
+			itemResults[index].err = err
+			return err
+		}
+		itemResults[index].resizedBytes = resizedBytes
+		return nil
+	}, nil)
+	for index, err := range itemErrors {
+		if itemResults[index].err == nil && err != nil {
+			itemResults[index].err = err
+		}
+	}
+
+	for index, item := range itemResults {
+		if item.err != nil {
+			img := eligible[index]
+			warning := fmt.Sprintf("não foi possível colorir '%s': %v", img.OriginalName, item.err)
+			processed.warnings = append(processed.warnings, warning)
+			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
+			continue
+		}
+		if item.result == nil {
+			continue
+		}
+		img := eligible[index]
+		if item.result.Skipped {
+			diagnosticf(options, "⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, item.result.SkipReason)
+			processed.triageSkipped = append(processed.triageSkipped, ai.TriageSkipInfo{
+				Name:   img.OriginalName,
+				Stage:  item.result.SkipStage,
+				Reason: item.result.SkipReason,
+			})
+			continue
+		}
+		processed.replacements[img.PathInZip] = item.resizedBytes
+		processed.colorizedResults = append(processed.colorizedResults, *item.result)
+	}
+
+	if batchErr != nil {
+		return processed, batchErr
+	}
+	return processed, nil
 }
 
 // RunDocxPipeline executa o fluxo completo:
@@ -70,64 +172,11 @@ func RunDocxPipelineWithOptions(docxPath string, outputDir string, apiKey string
 		}, nil
 	}
 
-	// 2. Colora cada imagem mantida e redimensiona para a dimensão original
-	colorizeOpts := ai.ColorizeOptions{
-		OutputDir:        targetDir,
-		APIKey:           apiKey,
-		Model:            model,
-		TriageModel:      triageModel,
-		DisableTriage:    noTriage,
-		Verbose:          options.Verbose,
-		DiagnosticWriter: options.DiagnosticWriter,
-	}
-
-	var colorizedResults []ai.ColorizeResult
-	var triageSkipped []ai.TriageSkipInfo
-	var formatSkipped []docx.ExtractedImage
-	var warnings []string
-	replacements := make(map[string][]byte)
-
-	for _, img := range extractRes.Images {
-		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
-		if !docx.IsColorableFormat(img.Format) {
-			warning := fmt.Sprintf("%s: formato não colorível (%s)", img.OriginalName, img.Format)
-			diagnosticf(options, "⏭️  Pulada: %s\n", warning)
-			formatSkipped = append(formatSkipped, img)
-			continue
-		}
-
-		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
-		if err != nil {
-			warning := fmt.Sprintf("não foi possível colorir '%s': %v", img.OriginalName, err)
-			warnings = append(warnings, warning)
-			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
-			continue
-		}
-
-		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
-		if res.Skipped {
-			diagnosticf(options, "⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
-			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
-				Name:   img.OriginalName,
-				Stage:  res.SkipStage,
-				Reason: res.SkipReason,
-			})
-			continue
-		}
-
-		// Redimensiona a imagem gerada para ter exatamente os mesmos pixels da original
-		resizedBytes, err := docx.ResizeToMatch(imgPath, res.ColorizedPath)
-		if err != nil {
-			warning := fmt.Sprintf("falha ao ajustar tamanho da imagem colorida '%s': %v", img.OriginalName, err)
-			warnings = append(warnings, warning)
-			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
-			continue
-		}
-
-		// Adiciona a imagem redimensionada ao mapa de substituição do zip
-		replacements[img.PathInZip] = resizedBytes
-		colorizedResults = append(colorizedResults, *res)
+	// 2. Colora cada imagem mantida, redimensiona para a dimensão original e
+	// preserva os resultados na ordem do documento.
+	processed, err := processExtractedImages(options.Context, tempExtractDir, targetDir, apiKey, model, extractRes.Images, options, triageModel, noTriage)
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Reconstrói um novo arquivo .docx com as imagens substituídas
@@ -135,8 +184,8 @@ func RunDocxPipelineWithOptions(docxPath string, outputDir string, apiKey string
 	rebuiltDocxName := fmt.Sprintf("%s colorida.docx", baseName)
 	rebuiltDocxPath := filepath.Join(targetDir, rebuiltDocxName)
 
-	if len(replacements) > 0 {
-		if err := docx.RebuildDocx(docxPath, rebuiltDocxPath, replacements); err != nil {
+	if len(processed.replacements) > 0 {
+		if err := docx.RebuildDocx(docxPath, rebuiltDocxPath, processed.replacements); err != nil {
 			return nil, fmt.Errorf("erro ao reconstruir arquivo docx colorida: %w", err)
 		}
 	}
@@ -147,13 +196,13 @@ func RunDocxPipelineWithOptions(docxPath string, outputDir string, apiKey string
 		RebuiltDocxPath:    rebuiltDocxPath,
 		TotalExtracted:     extractRes.TotalExtracted,
 		TotalSkipped:       extractRes.TotalSkipped,
-		TotalColorized:     len(colorizedResults),
-		TotalTriageSkipped: len(triageSkipped),
-		TotalFormatSkipped: len(formatSkipped),
-		Results:            colorizedResults,
-		TriageSkipped:      triageSkipped,
-		FormatSkipped:      formatSkipped,
-		Warnings:           warnings,
+		TotalColorized:     len(processed.colorizedResults),
+		TotalTriageSkipped: len(processed.triageSkipped),
+		TotalFormatSkipped: len(processed.formatSkipped),
+		Results:            processed.colorizedResults,
+		TriageSkipped:      processed.triageSkipped,
+		FormatSkipped:      processed.formatSkipped,
+		Warnings:           processed.warnings,
 	}, nil
 }
 
@@ -184,63 +233,11 @@ func RunDocxPipelineSelectedWithOptions(docxPath string, outputDir string, apiKe
 	}
 	defer os.RemoveAll(tempExtractDir)
 
-	// 2. Colora cada imagem selecionada e redimensiona para a dimensão original
-	colorizeOpts := ai.ColorizeOptions{
-		OutputDir:        targetDir,
-		APIKey:           apiKey,
-		Model:            model,
-		TriageModel:      triageModel,
-		DisableTriage:    noTriage,
-		Verbose:          options.Verbose,
-		DiagnosticWriter: options.DiagnosticWriter,
-	}
-
-	var colorizedResults []ai.ColorizeResult
-	var triageSkipped []ai.TriageSkipInfo
-	var formatSkipped []docx.ExtractedImage
-	var warnings []string
-	replacements := make(map[string][]byte)
-
-	for _, img := range extractRes.Images {
-		// Pula formatos não coloríveis (emf, wmf, bin, svg...) sem gastar a API
-		if !docx.IsColorableFormat(img.Format) {
-			warning := fmt.Sprintf("%s: formato não colorível (%s)", img.OriginalName, img.Format)
-			diagnosticf(options, "⏭️  Pulada: %s\n", warning)
-			formatSkipped = append(formatSkipped, img)
-			continue
-		}
-
-		imgPath := filepath.Join(tempExtractDir, img.OriginalName)
-		res, err := ai.ColorizeSingleImage(imgPath, colorizeOpts)
-		if err != nil {
-			warning := fmt.Sprintf("não foi possível colorir '%s': %v", img.OriginalName, err)
-			warnings = append(warnings, warning)
-			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
-			continue
-		}
-
-		// Imagem rejeitada pela triagem de economia: não colorida nem substituída no docx
-		if res.Skipped {
-			diagnosticf(options, "⏭️  Pulada pela triagem: %s (%s)\n", img.OriginalName, res.SkipReason)
-			triageSkipped = append(triageSkipped, ai.TriageSkipInfo{
-				Name:   img.OriginalName,
-				Stage:  res.SkipStage,
-				Reason: res.SkipReason,
-			})
-			continue
-		}
-
-		// Redimensiona a imagem gerada para ter exatamente os mesmos pixels da original
-		resizedBytes, err := docx.ResizeToMatch(imgPath, res.ColorizedPath)
-		if err != nil {
-			warning := fmt.Sprintf("falha ao ajustar tamanho da imagem colorida '%s': %v", img.OriginalName, err)
-			warnings = append(warnings, warning)
-			diagnosticf(options, "⚠️ Aviso: %s\n", warning)
-			continue
-		}
-
-		replacements[img.PathInZip] = resizedBytes
-		colorizedResults = append(colorizedResults, *res)
+	// 2. Colora cada imagem selecionada, redimensiona para a dimensão original
+	// e preserva os resultados na ordem recebida.
+	processed, err := processExtractedImages(options.Context, tempExtractDir, targetDir, apiKey, model, extractRes.Images, options, triageModel, noTriage)
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Reconstrói o arquivo .docx com as imagens substituídas
@@ -248,8 +245,8 @@ func RunDocxPipelineSelectedWithOptions(docxPath string, outputDir string, apiKe
 	rebuiltDocxName := fmt.Sprintf("%s colorida.docx", baseName)
 	rebuiltDocxPath := filepath.Join(targetDir, rebuiltDocxName)
 
-	if len(replacements) > 0 {
-		if err := docx.RebuildDocx(docxPath, rebuiltDocxPath, replacements); err != nil {
+	if len(processed.replacements) > 0 {
+		if err := docx.RebuildDocx(docxPath, rebuiltDocxPath, processed.replacements); err != nil {
 			return nil, fmt.Errorf("erro ao reconstruir arquivo docx colorida: %w", err)
 		}
 	}
@@ -259,13 +256,13 @@ func RunDocxPipelineSelectedWithOptions(docxPath string, outputDir string, apiKe
 		OutputDir:          targetDir,
 		RebuiltDocxPath:    rebuiltDocxPath,
 		TotalExtracted:     extractRes.TotalExtracted,
-		TotalColorized:     len(colorizedResults),
-		TotalTriageSkipped: len(triageSkipped),
-		TotalFormatSkipped: len(formatSkipped),
-		Results:            colorizedResults,
-		TriageSkipped:      triageSkipped,
-		FormatSkipped:      formatSkipped,
-		Warnings:           warnings,
+		TotalColorized:     len(processed.colorizedResults),
+		TotalTriageSkipped: len(processed.triageSkipped),
+		TotalFormatSkipped: len(processed.formatSkipped),
+		Results:            processed.colorizedResults,
+		TriageSkipped:      processed.triageSkipped,
+		FormatSkipped:      processed.formatSkipped,
+		Warnings:           processed.warnings,
 	}, nil
 }
 
