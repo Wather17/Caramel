@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,7 +23,15 @@ var (
 	routineOutputDir string
 	routineModelName string
 	routinePromptDir string
+	routineWorkers   int
 )
+
+type routineFileResult struct {
+	rows    []docx.RoutineRow
+	skipped bool
+	err     error
+	detail  string
+}
 
 var routineCmd = &cobra.Command{
 	Use:   "routine",
@@ -125,38 +134,69 @@ caramel routine process rotina_semana_1.docx`,
 		skipped := 0
 		failed := 0
 
-		// 3. Processa cada arquivo
-		for _, file := range files {
-			renderer.Diagnostic("lendo texto: %s\n", filepath.Base(file))
+		// 3. Processa cada arquivo como uma unidade independente. A coleta dos
+		// resultados permanece indexada para que a saída e os diagnósticos sigam
+		// a ordem determinística dos arquivos, mesmo com workers concorrentes.
+		sort.Strings(files)
+		fileResults := make([]routineFileResult, len(files))
+		itemErrors, batchErr := ai.ExecuteBatchContext(cmd.Context(), len(files), routineWorkers, func(workCtx context.Context, index int) error {
+			file := files[index]
+			result := &fileResults[index]
 			txt, err := docx.ExtractText(file)
 			if err != nil {
-				failed++
-				renderer.Diagnostic("falha ao extrair '%s': %v\n", filepath.Base(file), err)
-				continue
+				result.err = err
+				result.detail = fmt.Sprintf("falha ao extrair '%s': %v", filepath.Base(file), err)
+				return err
+			}
+			if err := workCtx.Err(); err != nil {
+				result.err = err
+				result.detail = fmt.Sprintf("análise cancelada para '%s': %v", filepath.Base(file), err)
+				return err
 			}
 
-			renderer.Diagnostic("consultando IA: %s\n", filepath.Base(file))
-			jsonResponse, err := aiClient.AnalyzeRoutine(txt, prompt, routineModel)
+			jsonResponse, err := aiClient.AnalyzeRoutineContext(workCtx, txt, prompt, routineModel)
 			if err != nil {
-				failed++
-				renderer.Diagnostic("falha na análise de '%s': %v\n", filepath.Base(file), err)
-				continue
+				result.err = err
+				result.detail = fmt.Sprintf("falha na análise de '%s': %v", filepath.Base(file), err)
+				return err
 			}
 
-			// Parse do JSON parcial de cada arquivo
 			var fileRows []docx.RoutineRow
 			if err := json.Unmarshal([]byte(jsonResponse), &fileRows); err != nil {
+				result.err = err
+				result.detail = fmt.Sprintf("falha ao decodificar JSON de '%s': %v; resposta raw: %s", filepath.Base(file), err, jsonResponse)
+				return err
+			}
+			if len(fileRows) == 0 {
+				result.skipped = true
+				return nil
+			}
+			result.rows = fileRows
+			return nil
+		}, nil)
+		if batchErr != nil {
+			return batchErr
+		}
+		for index, err := range itemErrors {
+			if fileResults[index].err == nil && err != nil {
+				fileResults[index].err = err
+				fileResults[index].detail = fmt.Sprintf("falha ao processar '%s': %v", filepath.Base(files[index]), err)
+			}
+		}
+		for index, result := range fileResults {
+			file := files[index]
+			if result.err != nil {
 				failed++
-				renderer.Diagnostic("falha ao decodificar JSON de '%s': %v; resposta raw: %s\n", filepath.Base(file), err, jsonResponse)
+				renderer.Diagnostic("%s\n", result.detail)
 				continue
 			}
-
-			if len(fileRows) == 0 {
+			if result.skipped {
 				skipped++
 				continue
 			}
 			processed++
-			combinedRows = append(combinedRows, fileRows...)
+			combinedRows = append(combinedRows, result.rows...)
+			renderer.Diagnostic("rotina processada: %s\n", filepath.Base(file))
 		}
 
 		if len(combinedRows) == 0 {
@@ -164,7 +204,7 @@ caramel routine process rotina_semana_1.docx`,
 		}
 
 		// 4. Ordena os registros cronologicamente por data usando parsing resiliente
-		sort.Slice(combinedRows, func(i, j int) bool {
+		sort.SliceStable(combinedRows, func(i, j int) bool {
 			t1 := parseResilientDate(combinedRows[i].Data)
 			t2 := parseResilientDate(combinedRows[j].Data)
 			if !t1.IsZero() && !t2.IsZero() {
@@ -237,12 +277,14 @@ func addRoutineFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino do relatório consolidado")
 	cmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA para análise")
 	cmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Arquivo com prompt personalizado")
+	cmd.Flags().IntVarP(&routineWorkers, "workers", "w", 0, "Número de workers simultâneos (padrão: 0 para adaptativo)")
 }
 
 func init() {
 	routineProcessCmd.Flags().StringVarP(&routineOutputDir, "output", "o", "", "Diretório de destino para salvar o arquivo consolidado")
 	routineProcessCmd.Flags().StringVarP(&routineModelName, "model", "m", ai.DefaultTextModel, "Modelo de IA do OpenRouter para a análise (config: model_text)")
 	routineProcessCmd.Flags().StringVarP(&routinePromptDir, "prompt", "p", "", "Caminho para arquivo contendo prompt customizado")
+	routineProcessCmd.Flags().IntVarP(&routineWorkers, "workers", "w", 0, "Número de workers simultâneos (padrão: 0 para adaptativo)")
 	addRoutineFlags(routineConsolidateCmd)
 
 	routineCmd.AddCommand(routineProcessCmd)
