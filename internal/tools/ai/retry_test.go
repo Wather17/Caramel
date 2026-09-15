@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -82,6 +83,33 @@ func TestRetryWithBackoff_OnlyRetriesTransient(t *testing.T) {
 	}
 	if permanentCalls != 1 {
 		t.Errorf("erro permanente não deveria ser retentado: %d chamadas", permanentCalls)
+	}
+}
+
+func TestRetryWithBackoffContextCancellationInterruptsWait(t *testing.T) {
+	old := retryBackoffBase
+	retryBackoffBase = time.Second
+	defer func() { retryBackoffBase = old }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+
+	go func() {
+		<-started
+		cancel()
+	}()
+
+	startedAt := time.Now()
+	err := retryWithBackoffContext(ctx, 3, func() error {
+		close(started)
+		return &retryableError{err: fmt.Errorf("temporário")}
+	})
+	if err != context.Canceled {
+		t.Fatalf("esperava context.Canceled, obtido: %v", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 200*time.Millisecond {
+		t.Fatalf("cancelamento deveria interromper o backoff rapidamente, levou %v", elapsed)
 	}
 }
 

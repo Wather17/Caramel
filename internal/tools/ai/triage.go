@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,14 @@ type TriageResult struct {
 // Qualquer falha (rede, parse, status) retorna erro — o chamador decide o comportamento
 // (no fluxo de coloração o padrão é fail-open: colorir mesmo assim).
 func (c *Client) TriageImage(imagePath string, promptText string, modelOverride string) (*TriageResult, error) {
+	return c.TriageImageContext(context.Background(), imagePath, promptText, modelOverride)
+}
+
+// TriageImageContext é a variante cancelável de TriageImage.
+func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promptText string, modelOverride string) (*TriageResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	model := DefaultTriageModel
 	if modelOverride != "" {
 		model = modelOverride
@@ -59,7 +68,7 @@ func (c *Client) TriageImage(imagePath string, promptText string, modelOverride 
 		return nil, fmt.Errorf("falha ao serializar requisição de triagem: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("falha ao criar requisição HTTP de triagem: %w", err)
 	}

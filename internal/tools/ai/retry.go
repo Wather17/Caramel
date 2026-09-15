@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -47,8 +48,22 @@ var retryBackoffBase = 1200 * time.Millisecond
 // retentando apenas erros transitórios (isRetryable) com backoff exponencial
 // + jitter para evitar rajadas sincronizadas.
 func retryWithBackoff(maxRetries int, fn func() error) error {
+	return retryWithBackoffContext(context.Background(), maxRetries, fn)
+}
+
+// retryWithBackoffContext is the context-aware variant of retryWithBackoff.
+// Cancellation interrupts the backoff immediately and is returned to the caller.
+func retryWithBackoffContext(ctx context.Context, maxRetries int, fn func() error) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var err error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		err = fn()
 		if err == nil {
 			return nil
@@ -59,7 +74,15 @@ func retryWithBackoff(maxRetries int, fn func() error) error {
 
 		backoff := time.Duration(attempt) * retryBackoffBase
 		jitter := time.Duration(rand.Intn(400)) * time.Millisecond
-		time.Sleep(backoff + jitter)
+		timer := time.NewTimer(backoff + jitter)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	return err
 }

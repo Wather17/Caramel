@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -107,8 +108,16 @@ type ChatCompletionResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// ColorizeImage envia uma imagem local (PNG/JPEG/SVG) para a API do OpenRouter e retorna a imagem colorida em bytes
+// ColorizeImage envia uma imagem local usando um contexto de fundo.
 func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverride string) ([]byte, string, error) {
+	return c.ColorizeImageContext(context.Background(), imagePath, promptText, modelOverride)
+}
+
+// ColorizeImageContext envia uma imagem local (PNG/JPEG/SVG) para a API do OpenRouter.
+func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, promptText string, modelOverride string) ([]byte, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	model := DefaultModel
 	if modelOverride != "" {
 		model = modelOverride
@@ -146,7 +155,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 		return nil, "", fmt.Errorf("falha ao serializar requisição JSON: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao criar requisição HTTP: %w", err)
 	}
@@ -192,7 +201,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	if len(choice.Message.Images) > 0 {
 		for _, imgItem := range choice.Message.Images {
 			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
-				bytes, ext, err := c.extractImageBytesFromResponse(imgItem.ImageURL.URL)
+				bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, imgItem.ImageURL.URL)
 				if err == nil {
 					return bytes, ext, nil
 				}
@@ -206,7 +215,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 			if partMap, ok := part.(map[string]interface{}); ok {
 				if imgURLObj, ok := partMap["image_url"].(map[string]interface{}); ok {
 					if urlStr, ok := imgURLObj["url"].(string); ok {
-						bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
+						bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, urlStr)
 						if err == nil {
 							return bytes, ext, nil
 						}
@@ -218,7 +227,7 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 
 	// 3. Fallback para string simples ou Markdown
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
-	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
+	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err)
 	}
@@ -226,10 +235,18 @@ func (c *Client) ColorizeImage(imagePath string, promptText string, modelOverrid
 	return outBytes, outExt, nil
 }
 
-// GenerateImage envia um prompt de texto diretamente para a API do OpenRouter e retorna os bytes da imagem gerada e sua extensão
+// GenerateImage envia um prompt de texto usando um contexto de fundo.
+func (c *Client) GenerateImage(promptText string, modelOverride string, aspect string) ([]byte, string, error) {
+	return c.GenerateImageContext(context.Background(), promptText, modelOverride, aspect)
+}
+
+// GenerateImageContext envia um prompt de texto diretamente para a API do OpenRouter.
 // aspect define a proporção da imagem gerada via image_config (ex: "1:1", "16:9", "auto").
 // Se vazio, assume "1:1" — o formato padrão do Caramel.
-func (c *Client) GenerateImage(promptText string, modelOverride string, aspect string) ([]byte, string, error) {
+func (c *Client) GenerateImageContext(ctx context.Context, promptText string, modelOverride string, aspect string) ([]byte, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	model := DefaultModel
 	if modelOverride != "" {
 		model = modelOverride
@@ -263,7 +280,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 		return nil, "", fmt.Errorf("falha ao serializar requisição JSON: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao criar requisição HTTP: %w", err)
 	}
@@ -309,7 +326,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 	if len(choice.Message.Images) > 0 {
 		for _, imgItem := range choice.Message.Images {
 			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
-				bytes, ext, err := c.extractImageBytesFromResponse(imgItem.ImageURL.URL)
+				bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, imgItem.ImageURL.URL)
 				if err == nil {
 					return bytes, ext, nil
 				}
@@ -323,7 +340,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 			if partMap, ok := part.(map[string]interface{}); ok {
 				if imgURLObj, ok := partMap["image_url"].(map[string]interface{}); ok {
 					if urlStr, ok := imgURLObj["url"].(string); ok {
-						bytes, ext, err := c.extractImageBytesFromResponse(urlStr)
+						bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, urlStr)
 						if err == nil {
 							return bytes, ext, nil
 						}
@@ -335,7 +352,7 @@ func (c *Client) GenerateImage(promptText string, modelOverride string, aspect s
 
 	// 3. Fallback para string simples ou Markdown
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
-	outBytes, outExt, err := c.extractImageBytesFromResponse(rawContent)
+	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err)
 	}
@@ -368,6 +385,13 @@ func encodeImageAsDataURL(imagePath string) (string, error) {
 // extractImageBytesFromResponse extrai os bytes de imagem (Data URL, URL remota ou Base64 puro).
 // A validação é feita por magic bytes (PNG/JPEG/WEBP), não por heurística de tamanho.
 func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, error) {
+	return c.extractImageBytesFromResponseContext(context.Background(), content)
+}
+
+func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, content string) ([]byte, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// 1. Procura por todas as ocorrências de Data URL (data:image/png;base64,...),
 	//    tolerando case e aspas escapadas de JSON (\")
 	for {
@@ -406,7 +430,7 @@ func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, 
 
 	// 2. Procura por URLs de imagens HTTP/HTTPS retornadas pela IA
 	if match := urlRegex.FindString(content); match != "" {
-		imgBytes, ext, err := c.downloadImageFromURL(match)
+		imgBytes, ext, err := c.downloadImageFromURLContext(ctx, match)
 		if err == nil {
 			return imgBytes, ext, nil
 		}
@@ -419,7 +443,7 @@ func (c *Client) extractImageBytesFromResponse(content string) ([]byte, string, 
 		if endIdx := strings.IndexAny(urlStr, " \"')\n"); endIdx != -1 {
 			urlStr = urlStr[:endIdx]
 		}
-		imgBytes, ext, err := c.downloadImageFromURL(strings.TrimSpace(urlStr))
+		imgBytes, ext, err := c.downloadImageFromURLContext(ctx, strings.TrimSpace(urlStr))
 		if err == nil {
 			return imgBytes, ext, nil
 		}
@@ -459,7 +483,18 @@ func detectImageType(data []byte) (string, bool) {
 // downloadImageFromURL baixa os bytes de uma imagem via HTTP GET com limite de tamanho
 // e validação por magic bytes
 func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
-	resp, err := c.HTTPClient.Get(url)
+	return c.downloadImageFromURLContext(context.Background(), url)
+}
+
+func (c *Client) downloadImageFromURLContext(ctx context.Context, url string) ([]byte, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -487,8 +522,16 @@ func (c *Client) downloadImageFromURL(url string) ([]byte, string, error) {
 	return data, ext, nil
 }
 
-// AnalyzeRoutine sends plain text routine content to OpenRouter and returns the structured JSON response
+// AnalyzeRoutine sends plain text routine content using a context of background.
 func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOverride string) (string, error) {
+	return c.AnalyzeRoutineContext(context.Background(), routineText, promptText, modelOverride)
+}
+
+// AnalyzeRoutineContext sends plain text routine content to OpenRouter.
+func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, promptText string, modelOverride string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	model := DefaultTextModel
 	if modelOverride != "" {
 		model = modelOverride
@@ -514,7 +557,7 @@ func (c *Client) AnalyzeRoutine(routineText string, promptText string, modelOver
 		return "", fmt.Errorf("failed to serialize request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
