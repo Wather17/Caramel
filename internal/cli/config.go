@@ -237,7 +237,7 @@ caramel config models list --role text --search deepseek`,
 			return fmt.Errorf("config models select requer interação no terminal e não aceita --json ou --quiet")
 		}
 
-		models, err := ai.ListModels()
+		models, err := ai.ListModelsContext(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("não foi possível consultar os modelos da OpenRouter: %w", err)
 		}
@@ -315,7 +315,7 @@ Use para trocar os modelos padrão do Caramel sem editar o arquivo de configura�
 caramel config models select`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runConfigModelsCompatibility(false)
+		return runConfigModelsCompatibility(cmd, false)
 	},
 }
 
@@ -330,15 +330,15 @@ Use para descobrir IDs de modelos antes de configurar uma preferência ou automa
 caramel config models list --role image --limit 10`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runConfigModelsCompatibility(true)
+		return runConfigModelsCompatibility(cmd, true)
 	},
 }
 
-func runConfigModelsCompatibility(list bool) error {
+func runConfigModelsCompatibility(cmd *cobra.Command, list bool) error {
 	previous := configModelsList
 	defer func() { configModelsList = previous }()
 	configModelsList = list
-	return configModelsCmd.RunE(configModelsCmd, nil)
+	return configModelsCmd.RunE(cmd, nil)
 }
 
 func addConfigModelsListFlags(cmd *cobra.Command) {
