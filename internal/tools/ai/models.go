@@ -1,8 +1,10 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -25,12 +27,12 @@ var OpenRouterModelsURL = "https://openrouter.ai/api/v1/models"
 // Model representa um modelo disponível na OpenRouter, com os campos
 // relevantes para o Caramel (id, nome, preço, modalidades e contexto).
 type Model struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	ContextLength int      `json:"context_length"`
-	Architecture  Arch     `json:"architecture"`
-	Pricing       Pricing  `json:"pricing"`
-	PromptPrice   float64  `json:"-"`
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	ContextLength int     `json:"context_length"`
+	Architecture  Arch    `json:"architecture"`
+	Pricing       Pricing `json:"pricing"`
+	PromptPrice   float64 `json:"-"`
 }
 
 // Arch descreve as modalidades de entrada/saída suportadas pelo modelo
@@ -61,30 +63,60 @@ type modelsResponse struct {
 // O endpoint é público (não exige chave de API) e paginado; a função
 // percorre as páginas seguindo o campo 'links.next'.
 func ListModels() ([]Model, error) {
+	return ListModelsContext(context.Background())
+}
+
+// ListModelsContext obtém o catálogo completo respeitando o contexto de
+// cancelamento, retry de falhas transitórias e um limite de páginas.
+func ListModelsContext(ctx context.Context) ([]Model, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	client := &http.Client{Timeout: 60 * time.Second}
 	var all []Model
 
 	next := fmt.Sprintf("%s?limit=500", OpenRouterModelsURL)
+	const maxPages = 100
+	pages := 0
 	for next != "" {
-		resp, err := client.Get(next)
+		if pages >= maxPages {
+			return nil, fmt.Errorf("falha ao listar modelos da OpenRouter: paginação excedeu o limite de %d páginas", maxPages)
+		}
+		pages++
+
+		var page modelsResponse
+		err := retryWithBackoffContext(ctx, 3, func() error {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, next, nil)
+			if err != nil {
+				return err
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return &retryableError{err: fmt.Errorf("falha ao consultar modelos da OpenRouter: %w", err)}
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+				if readErr != nil {
+					return &retryableError{err: fmt.Errorf("falha ao ler erro da OpenRouter: %w", readErr)}
+				}
+				return statusError(resp.StatusCode, body)
+			}
+
+			var decoded modelsResponse
+			if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+				return fmt.Errorf("falha ao interpretar resposta de modelos: %w", err)
+			}
+			page = decoded
+			return nil
+		})
 		if err != nil {
-			return nil, fmt.Errorf("falha ao consultar modelos da OpenRouter: %w", err)
+			return nil, err
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("falha ao listar modelos da OpenRouter: status %d", resp.StatusCode)
-		}
-
-		var r modelsResponse
-		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-			resp.Body.Close()
-			return nil, fmt.Errorf("falha ao interpretar resposta de modelos: %w", err)
-		}
-		resp.Body.Close()
-
-		all = append(all, r.Data...)
-		next = resolveModelsNextURL(r.Links.Next)
+		all = append(all, page.Data...)
+		next = resolveModelsNextURL(page.Links.Next)
 	}
 
 	for i := range all {
