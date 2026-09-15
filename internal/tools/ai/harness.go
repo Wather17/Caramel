@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"caramel/internal/prompts"
@@ -71,6 +70,14 @@ func SanitizeSlug(index int, name string) string {
 
 // SynthesizePrompts utiliza a LLM de texto para gerar prompts consistentes e estruturados
 func SynthesizePrompts(cfg HarnessConfig, client *Client) ([]GenerationItem, error) {
+	return SynthesizePromptsContext(context.Background(), cfg, client)
+}
+
+// SynthesizePromptsContext is the cancelable variant of SynthesizePrompts.
+func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Client) ([]GenerationItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	effectiveStyle := cfg.Style
 	if cfg.CustomStyle != "" {
 		effectiveStyle = cfg.CustomStyle
@@ -102,7 +109,12 @@ func SynthesizePrompts(cfg HarnessConfig, client *Client) ([]GenerationItem, err
 		model = DefaultTextModel
 	}
 
-	responseJSON, err := client.AnalyzeRoutine(inputText, synthesizerPrompt, model)
+	var responseJSON string
+	err := retryWithBackoffContext(ctx, 3, func() error {
+		var analyzeErr error
+		responseJSON, analyzeErr = client.AnalyzeRoutineContext(ctx, inputText, synthesizerPrompt, model)
+		return analyzeErr
+	})
 	if err != nil {
 		return nil, fmt.Errorf("falha ao sintetizar prompts com a IA: %w", err)
 	}
@@ -179,134 +191,77 @@ func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem
 	}
 
 	total := len(items)
-	workers, dispatchDelay := CalculateConcurrencyDecision(total, cfg.MaxWorkers)
-
-	var mu sync.Mutex
-	completedCount := 0
-	successCount := 0
-	failedCount := 0
-
 	results := make([]GenerationItem, total)
 	copy(results, items)
-
-	jobs := make(chan int, total)
-	var wg sync.WaitGroup
-
-	// Inicia os workers
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				var idx int
-				var ok bool
-				select {
-				case <-ctx.Done():
-					return
-				case idx, ok = <-jobs:
-					if !ok {
-						return
-					}
-				}
-				item := results[idx]
-
-				mu.Lock()
-				results[idx].Status = "generating"
-				if onProgress != nil {
-					onProgress(HarnessProgressEvent{
-						Item:        results[idx],
-						Total:       total,
-						Completed:   completedCount,
-						Success:     successCount,
-						Failed:      failedCount,
-						CurrentStep: "generating",
-					})
-				}
-				mu.Unlock()
-
-				// Executa com retry seletivo (apenas falhas transitórias: 429, 5xx, rede)
-				var imgBytes []byte
-				var ext string
-				genErr := retryWithBackoff(3, func() error {
-					var e error
-					imgBytes, ext, e = client.GenerateImage(item.Prompt, cfg.ImageModel, cfg.Aspect)
-					return e
-				})
-
-				mu.Lock()
-				completedCount++
-				if genErr != nil {
-					failedCount++
-					results[idx].Status = "error"
-					results[idx].Error = genErr.Error()
-				} else {
-					if ext == "" {
-						ext = "png"
-					}
-					fileName := fmt.Sprintf("%s.%s", item.Slug, ext)
-					filePath := filepath.Join(targetDir, fileName)
-
-					if writeErr := os.WriteFile(filePath, imgBytes, 0644); writeErr != nil {
-						failedCount++
-						results[idx].Status = "error"
-						results[idx].Error = fmt.Sprintf("falha ao salvar arquivo: %v", writeErr)
-					} else {
-						successCount++
-						results[idx].Status = "done"
-						results[idx].ImagePath = filePath
-						results[idx].Format = ext
-					}
-				}
-
-				if onProgress != nil {
-					onProgress(HarnessProgressEvent{
-						Item:        results[idx],
-						Total:       total,
-						Completed:   completedCount,
-						Success:     successCount,
-						Failed:      failedCount,
-						CurrentStep: "saved",
-					})
-				}
-				mu.Unlock()
-			}
-		}()
-	}
-
-	// Despacha os itens com delay adaptativo
-	for i := 0; i < total; i++ {
-		select {
-		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			return results, ctx.Err()
-		case jobs <- i:
-		}
-		if dispatchDelay > 0 && i < total-1 {
-			timer := time.NewTimer(dispatchDelay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				close(jobs)
-				wg.Wait()
-				return results, ctx.Err()
-			case <-timer.C:
-			}
-		}
-	}
-	close(jobs)
-
-	wg.Wait()
-
-	if onProgress != nil {
-		onProgress(HarnessProgressEvent{
-			Total:       total,
-			Completed:   completedCount,
-			Success:     successCount,
-			Failed:      failedCount,
-			CurrentStep: "done",
+	_, batchErr := ExecuteBatchContext(ctx, total, cfg.MaxWorkers, func(workCtx context.Context, idx int) error {
+		item := results[idx]
+		var imgBytes []byte
+		var ext string
+		genErr := retryWithBackoffContext(workCtx, 3, func() error {
+			var e error
+			imgBytes, ext, e = client.GenerateImageContext(workCtx, item.Prompt, cfg.ImageModel, cfg.Aspect)
+			return e
 		})
-	}
+		if genErr != nil {
+			results[idx].Status = "error"
+			results[idx].Error = genErr.Error()
+			return genErr
+		}
 
+		if ext == "" {
+			ext = "png"
+		}
+		fileName := fmt.Sprintf("%s.%s", item.Slug, ext)
+		filePath := filepath.Join(targetDir, fileName)
+		if writeErr := os.WriteFile(filePath, imgBytes, 0644); writeErr != nil {
+			results[idx].Status = "error"
+			results[idx].Error = fmt.Sprintf("falha ao salvar arquivo: %v", writeErr)
+			return writeErr
+		}
+
+		results[idx].Status = "done"
+		results[idx].ImagePath = filePath
+		results[idx].Format = ext
+		return nil
+	}, func(event BatchProgressEvent) {
+		if onProgress == nil {
+			return
+		}
+		if event.State == "started" {
+			results[event.Index].Status = "generating"
+			onProgress(HarnessProgressEvent{
+				Item:        results[event.Index],
+				Total:       event.Total,
+				Completed:   event.Completed,
+				Success:     event.Succeeded,
+				Failed:      event.Failed,
+				CurrentStep: "generating",
+			})
+			return
+		}
+		if event.State == "completed" || event.State == "failed" {
+			onProgress(HarnessProgressEvent{
+				Item:        results[event.Index],
+				Total:       event.Total,
+				Completed:   event.Completed,
+				Success:     event.Succeeded,
+				Failed:      event.Failed,
+				CurrentStep: "saved",
+			})
+			return
+		}
+		if event.State == "done" {
+			onProgress(HarnessProgressEvent{
+				Total:       event.Total,
+				Completed:   event.Completed,
+				Success:     event.Succeeded,
+				Failed:      event.Failed,
+				CurrentStep: "done",
+			})
+		}
+	})
+	if batchErr != nil {
+		return results, batchErr
+	}
 	return results, nil
 }

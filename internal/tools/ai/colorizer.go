@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -40,6 +41,14 @@ type ColorizeResult struct {
 // faz a imagem seguir normalmente para a coloração, garantindo que nenhuma ilustração
 // legítima seja perdida por instabilidade da camada de economia.
 func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResult, error) {
+	return ColorizeSingleImageContext(context.Background(), imagePath, opts)
+}
+
+// ColorizeSingleImageContext é a variante cancelável de ColorizeSingleImage.
+func ColorizeSingleImageContext(ctx context.Context, imagePath string, opts ColorizeOptions) (*ColorizeResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	client, err := NewClient(opts.APIKey)
 	if err != nil {
 		return nil, err
@@ -51,7 +60,7 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 
 	// Triagem de economia: evita gastar a API de geração com imagens que não precisam de cor
 	if !opts.DisableTriage {
-		if skipped, result := checkTriage(imagePath, client, opts); skipped {
+		if skipped, result := checkTriageContext(ctx, imagePath, client, opts); skipped {
 			return result, nil
 		}
 	}
@@ -62,9 +71,9 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 	// com backoff para não perder a imagem no batch/docx.
 	var imgBytes []byte
 	var ext string
-	colorizeErr := retryWithBackoff(3, func() error {
+	colorizeErr := retryWithBackoffContext(ctx, 3, func() error {
 		var e error
-		imgBytes, ext, e = client.ColorizeImage(imagePath, prompt, opts.Model)
+		imgBytes, ext, e = client.ColorizeImageContext(ctx, imagePath, prompt, opts.Model)
 		return e
 	})
 	if colorizeErr != nil {
@@ -98,6 +107,13 @@ func ColorizeSingleImage(imagePath string, opts ColorizeOptions) (*ColorizeResul
 // Retorna skipped=true e um ColorizeResult preenchido quando a imagem deve ser pulada.
 // Em qualquer erro de análise, adota fail-open (skipped=false) e loga em modo verbose.
 func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, *ColorizeResult) {
+	return checkTriageContext(context.Background(), imagePath, client, opts)
+}
+
+func checkTriageContext(ctx context.Context, imagePath string, client *Client, opts ColorizeOptions) (bool, *ColorizeResult) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	baseName := filepath.Base(imagePath)
 
 	// Camada 1: análise local de saturação (sem custo de API)
@@ -123,9 +139,9 @@ func checkTriage(imagePath string, client *Client, opts ColorizeOptions) (bool, 
 	client.debugf("🔎 [TRIAGE] Analisando '%s' com o modelo '%s'...\n", baseName, triageModel)
 
 	var triageRes *TriageResult
-	triageErr := retryWithBackoff(2, func() error {
+	triageErr := retryWithBackoffContext(ctx, 2, func() error {
 		var e error
-		triageRes, e = client.TriageImage(imagePath, prompts.GetTriagePrompt(), triageModel)
+		triageRes, e = client.TriageImageContext(ctx, imagePath, prompts.GetTriagePrompt(), triageModel)
 		return e
 	})
 	if triageErr != nil {
