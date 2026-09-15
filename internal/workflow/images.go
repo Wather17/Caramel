@@ -30,6 +30,7 @@ type ImageOptions struct {
 	TextModel     string
 	TriageModel   string
 	DisableTriage bool
+	MaxWorkers    int
 }
 
 // ImageService executa operações no contexto de um projeto persistente.
@@ -129,6 +130,9 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 
 // Colorize colore os ativos escolhidos, preservando resultados parciais.
 func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts ImageOptions) ([]workspace.Artifact, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -157,31 +161,49 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 	}
 	outputDir := s.Project.OutputDir("colorized", run.ID)
 	artifacts := make([]workspace.Artifact, 0)
+	paths := make([]string, 0, len(selected))
+	for _, asset := range selected {
+		paths = append(paths, s.Project.Resolve(asset.Path))
+	}
+	batchResults, batchErr := ai.ColorizeImagesContext(ctx, paths, ai.ColorizeOptions{
+		OutputDir: outputDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
+		TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+	}, func(event ai.BatchProgressEvent) {
+		if event.State == "started" && event.Index >= 0 && event.Index < len(selected) {
+			asset := selected[event.Index]
+			s.emit(ProgressEvent{Step: "colorizing", Current: event.Completed, Total: event.Total, Message: asset.Name, Path: paths[event.Index]})
+		}
+	})
 	var failures []string
-	for i, asset := range selected {
-		if err := ctx.Err(); err != nil {
-			_ = s.Project.FinishRun(run.ID, "canceled", artifacts, err)
-			return artifacts, err
-		}
-		path := s.Project.Resolve(asset.Path)
-		s.emit(ProgressEvent{Step: "colorizing", Current: i, Total: len(selected), Message: asset.Name, Path: path})
-		result, colorErr := ai.ColorizeSingleImage(path, ai.ColorizeOptions{
-			OutputDir: outputDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
-			TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage,
-		})
-		if colorErr != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", asset.Name, colorErr))
+	for i, batch := range batchResults {
+		asset := selected[i]
+		if batch.Err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", asset.Name, batch.Err))
 			continue
 		}
-		if result.Skipped {
-			s.emit(ProgressEvent{Step: "skipped", Current: i + 1, Total: len(selected), Message: fmt.Sprintf("%s: %s", asset.Name, result.SkipReason)})
+		if batch.Result == nil {
+			failures = append(failures, fmt.Sprintf("%s: resultado vazio", asset.Name))
 			continue
 		}
-		artifact, artifactErr := s.artifactFromPath(result.ColorizedPath, "colorize")
-		if artifactErr == nil {
-			artifacts = append(artifacts, artifact)
+		if batch.Result.Skipped {
+			s.emit(ProgressEvent{Step: "skipped", Current: i + 1, Total: len(selected), Message: fmt.Sprintf("%s: %s", asset.Name, batch.Result.SkipReason)})
+			continue
 		}
-		s.emit(ProgressEvent{Step: "saved", Current: i + 1, Total: len(selected), Message: asset.Name, Path: result.ColorizedPath})
+		artifact, artifactErr := s.artifactFromPath(batch.Result.ColorizedPath, "colorize")
+		if artifactErr != nil {
+			failures = append(failures, fmt.Sprintf("%s: falha ao registrar resultado: %v", asset.Name, artifactErr))
+			continue
+		}
+		artifacts = append(artifacts, artifact)
+		s.emit(ProgressEvent{Step: "saved", Current: i + 1, Total: len(selected), Message: asset.Name, Path: batch.Result.ColorizedPath})
+	}
+	if batchErr != nil {
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Project.FinishRun(run.ID, status, artifacts, batchErr)
+		return artifacts, batchErr
 	}
 	if len(failures) > 0 {
 		err = fmt.Errorf("%d imagem(ns) falharam: %s", len(failures), strings.Join(failures, "; "))

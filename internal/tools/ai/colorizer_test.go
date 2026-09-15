@@ -1,6 +1,7 @@
 package ai_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"caramel/internal/tools/ai"
 )
@@ -252,5 +255,57 @@ func TestColorizeSingleImage_SemAPIKey(t *testing.T) {
 	_, err := ai.ColorizeSingleImage("qualquer.png", baseOptions("", t.TempDir()))
 	if err == nil {
 		t.Error("esperado erro ao executar sem chave de API")
+	}
+}
+
+func TestColorizeImagesContextProcessaEmParaleloEConservaOrdem(t *testing.T) {
+	var inFlight int32
+	var maxInFlight int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		current := atomic.AddInt32(&inFlight, 1)
+		for {
+			previous := atomic.LoadInt32(&maxInFlight)
+			if current <= previous || atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+				break
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","images":[{"type":"image_url","image_url":{"url":"data:image/png;base64,%s"}}]}}]}`, tinyColorizedPNG)
+	}))
+	defer server.Close()
+
+	originalURL := ai.OpenRouterAPIURL
+	ai.OpenRouterAPIURL = server.URL
+	t.Cleanup(func() { ai.OpenRouterAPIURL = originalURL })
+
+	paths := make([]string, 0, 6)
+	for i := 0; i < 6; i++ {
+		paths = append(paths, writeSolidPNG(t, fmt.Sprintf("image-%d.png", i), color.RGBA{R: 128, G: 128, B: 128, A: 255}))
+	}
+	results, err := ai.ColorizeImagesContext(context.Background(), paths, ai.ColorizeOptions{
+		OutputDir:     t.TempDir(),
+		APIKey:        "sk-test",
+		Model:         ai.DefaultModel,
+		DisableTriage: true,
+		MaxWorkers:    3,
+	}, nil)
+	if err != nil {
+		t.Fatalf("ColorizeImagesContext falhou: %v", err)
+	}
+	if len(results) != len(paths) {
+		t.Fatalf("esperava %d resultados, obtido %d", len(paths), len(results))
+	}
+	for i, result := range results {
+		if result.Path != paths[i] {
+			t.Errorf("resultado %d fora de ordem: %q", i, result.Path)
+		}
+		if result.Err != nil || result.Result == nil {
+			t.Errorf("resultado %d deveria ter sucesso, obtido %+v", i, result)
+		}
+	}
+	if atomic.LoadInt32(&maxInFlight) < 2 {
+		t.Fatalf("esperava chamadas concorrentes, máximo observado: %d", maxInFlight)
 	}
 }

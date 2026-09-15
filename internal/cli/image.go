@@ -21,6 +21,7 @@ var (
 	imgMinSize      string
 	imgTriageModel  string
 	imgNoTriage     bool
+	imgWorkers      int
 	interactiveFlag bool
 	allFlag         bool
 )
@@ -85,6 +86,8 @@ caramel colorize atividade.docx -i`,
 				Verbose:     verboseFlag,
 				TriageModel: triageModel,
 				NoTriage:    imgNoTriage,
+				MaxWorkers:  imgWorkers,
+				Context:     cmd.Context(),
 				Output:      outputOptions(),
 				Out:         cmd.OutOrStdout(),
 				Err:         cmd.ErrOrStderr(),
@@ -170,21 +173,38 @@ caramel colorize atividade.docx -i`,
 		skipCount := 0
 		failCount := 0
 
-		for i, imgPath := range selectedImages {
-			renderer.Text("[%d/%d] colorizando %s\n", i+1, len(selectedImages), filepath.Base(imgPath))
-			res, err := ai.ColorizeSingleImage(imgPath, ai.ColorizeOptions{
-				OutputDir:        targetDir,
-				APIKey:           cfg.OpenRouterAPIKey,
-				Model:            modelName,
-				TriageModel:      triageModel,
-				DisableTriage:    imgNoTriage,
-				Verbose:          renderer.Options().Verbose,
-				DiagnosticWriter: cmd.ErrOrStderr(),
-			})
+		batchResults, batchErr := ai.ColorizeImagesContext(cmd.Context(), selectedImages, ai.ColorizeOptions{
+			OutputDir:        targetDir,
+			APIKey:           cfg.OpenRouterAPIKey,
+			Model:            modelName,
+			TriageModel:      triageModel,
+			DisableTriage:    imgNoTriage,
+			MaxWorkers:       imgWorkers,
+			Verbose:          renderer.Options().Verbose,
+			DiagnosticWriter: cmd.ErrOrStderr(),
+		}, func(event ai.BatchProgressEvent) {
+			if event.State == "started" && event.Index >= 0 && event.Index < len(selectedImages) {
+				renderer.Text("[%d/%d] colorizando %s\n", event.Index+1, event.Total, filepath.Base(selectedImages[event.Index]))
+			}
+		})
+		if batchErr != nil {
+			return batchErr
+		}
+
+		for _, batch := range batchResults {
+			imgPath := batch.Path
+			res := batch.Result
+			err := batch.Err
 			if err != nil {
 				failCount++
 				warnings = append(warnings, fmt.Sprintf("falha ao colorir %s", filepath.Base(imgPath)))
 				renderer.Diagnostic("falha ao colorir '%s': %v\n", filepath.Base(imgPath), err)
+				continue
+			}
+
+			if res == nil {
+				failCount++
+				warnings = append(warnings, fmt.Sprintf("falha ao colorir %s", filepath.Base(imgPath)))
 				continue
 			}
 
@@ -226,6 +246,7 @@ func init() {
 	imageColorizeCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Processa todas as imagens automaticamente, sem abrir o formulário de seleção")
 	imageColorizeCmd.Flags().StringVar(&imgTriageModel, "triage-model", ai.DefaultTriageModel, "Modelo de IA de visão usado na triagem de economia antes da coloração (config: model_triage)")
 	imageColorizeCmd.Flags().BoolVar(&imgNoTriage, "no-triage", false, "Desativa a triagem de economia e processa todas as imagens automaticamente, sem seleção")
+	imageColorizeCmd.Flags().IntVarP(&imgWorkers, "workers", "w", 0, "Número de workers simultâneos (padrão: 0 para adaptativo)")
 
 	imageCmd.AddCommand(imageColorizeCmd)
 	RootCmd.AddCommand(imageCmd)
