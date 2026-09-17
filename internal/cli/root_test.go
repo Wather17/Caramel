@@ -63,7 +63,7 @@ func aliasViolations(root *cobra.Command) []string {
 }
 
 func TestRootCommandTree(t *testing.T) {
-	wantGroups := []string{"docx", "image", "print", "routine", "config", "workspace", "guide", "version"}
+	wantGroups := []string{"docx", "image", "print", "pdf", "routine", "config", "workspace", "guide", "version"}
 	registered := make(map[string]bool, len(RootCmd.Commands()))
 	for _, sub := range RootCmd.Commands() {
 		registered[strings.Fields(sub.Use)[0]] = true
@@ -77,7 +77,7 @@ func TestRootCommandTree(t *testing.T) {
 }
 
 func TestRootCommandGroupsHaveSubcommands(t *testing.T) {
-	for _, name := range []string{"docx", "image", "print", "routine", "config"} {
+	for _, name := range []string{"docx", "image", "print", "pdf", "routine", "config"} {
 		sub, _, err := RootCmd.Find([]string{name})
 		if err != nil || sub == nil || !sub.HasSubCommands() {
 			t.Errorf("grupo %q deveria existir e ter subcomandos", name)

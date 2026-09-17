@@ -42,6 +42,11 @@ O comando `caramel print 2up` aceita imagens PNG, JPEG (`.jpg`, `.jpeg`, `.jpe`,
 minúsculas. GIFs animados usam somente o primeiro frame; formatos não nativos do PDF são
 convertidos em memória para JPEG.
 
+### 📑 Arquivos PDF
+| Comando | Finalidade |
+| :--- | :--- |
+| `caramel pdf merge` | Junta PDFs na ordem dos argumentos e preserva o tamanho e a orientação das páginas |
+
 ### 📅 Rotinas de Aula
 | Comando | Finalidade |
 | :--- | :--- |
