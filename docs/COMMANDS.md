@@ -49,12 +49,17 @@ convertidos em memória para JPEG.
 | `caramel pdf merge` | Junta PDFs na ordem dos argumentos e preserva o tamanho e a orientação das páginas |
 | `caramel pdf split` | Divide PDFs em um arquivo por página ou por intervalos inclusivos |
 | `caramel pdf pages render` | Exporta cada página completa de um PDF como imagem |
+| `caramel pdf images extract` | Extrai imagens embutidas sem converter texto ou vetores |
 
 ```bash
 caramel pdf split documento.pdf
 caramel pdf split apostila.pdf --ranges 1-3,5,7-9 --output-dir ./capitulos
 caramel pdf pages render apostila.pdf --format jpg --dpi 300
+caramel pdf images extract apostila.pdf --output-dir ./imagens
 ```
+
+`pdf pages render` exporta a composição visual completa de cada página. `pdf images extract` recupera
+os objetos de imagem embutidos e avisa quando algum recurso não pode ser decodificado.
 
 ### 📅 Rotinas de Aula
 | Comando | Finalidade |

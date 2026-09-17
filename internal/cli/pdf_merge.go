@@ -51,7 +51,7 @@ caramel pdf merge parte-1.pdf parte-2.pdf -o documento-completo.pdf`,
 var pdfCmd = &cobra.Command{
 	Use:   "pdf",
 	Short: "Operações com arquivos PDF",
-	Long:  "Ferramentas locais para juntar, dividir e converter arquivos PDF.",
+	Long:  "Ferramentas locais para criar, juntar, dividir, renderizar e extrair conteúdo de arquivos PDF.",
 }
 
 func init() {
