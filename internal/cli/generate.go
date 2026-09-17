@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,25 +14,28 @@ import (
 	"caramel/internal/tools/cards"
 	"caramel/internal/tools/pdf"
 	"caramel/internal/ui"
+	"caramel/internal/vault"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	genItemsStr    string
-	genFilePath    string
-	genTheme       string
-	genCount       int
-	genStyle       string
-	genCustomStyle string
-	genOutputDir   string
-	genWorkers     int
-	genPreview     bool
-	genCards       bool
-	gen2UpPDF      bool
-	genModelName   string
-	genTextModel   string
-	genAspect      string
+	genItemsStr     string
+	genFilePath     string
+	genTheme        string
+	genCount        int
+	genStyle        string
+	genCustomStyle  string
+	genOutputDir    string
+	genWorkers      int
+	genPreview      bool
+	genCards        bool
+	gen2UpPDF       bool
+	genModelName    string
+	genTextModel    string
+	genAspect       string
+	genReuseCache   bool
+	genRefreshCache bool
 )
 
 // validAspects lista as proporções aceitas pela flag --aspect (valores normalizados do OpenRouter)
@@ -61,7 +65,8 @@ A IA sintetiza e padroniza os prompts automaticamente e um motor em Go com conco
 Use para criar coleções visuais inteiras (5, 10, 30+ itens) com fundo branco e estilo unificado
 (clipart, vector, 3d-cute, coloring ou realistic) para fichas, jogos de memória e atividades.
 As imagens são geradas em formato 1:1 por padrão — use --aspect para outras proporções
-(ex: 16:9 para slides). Compile tudo em um PDF 2-up com --2up, ou diagrame fichas A4 com 'caramel print cards'.`,
+(ex: 16:9 para slides). Compile tudo em um PDF 2-up com --2up, ou diagrame fichas A4 com 'caramel print cards'.
+Use --reuse-cache para consultar e preencher a biblioteca local; --refresh-cache gera imagens novas e atualiza a biblioteca.`,
 	Example: `# Gerar imagens de frutas tropicais em estilo 3D fofo
 caramel image generate --items "abacaxi, manga, maracujá, caju" -s 3d-cute
 
@@ -72,7 +77,10 @@ caramel image generate --theme "animais da fazenda" -n 10 --2up
 caramel image generate -f ./itens.txt -s coloring
 
 # Gerar imagens em formato widescreen 16:9 (slides/apresentações)
-	caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9`,
+	caramel image generate --items "sol, nuvem, arco-íris" --aspect 16:9
+
+# Reutilizar imagens salvas na biblioteca local
+caramel image generate --items "bolo, pão" --reuse-cache`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
@@ -145,20 +153,45 @@ caramel image generate -f ./itens.txt -s coloring
 			return err
 		}
 
-		if cfg.OpenRouterAPIKey == "" {
-			return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
-		}
-
 		// Resolve os modelos com prioridade: flag > config (.env) > default de fábrica
 		imageModel := resolveModel(genModelName, cmd.Flags().Changed("model"), cfg.ModelImage)
 		textModel := resolveModel(genTextModel, cmd.Flags().Changed("text-model"), cfg.ModelText)
 
-		client, err := ai.NewClient(cfg.OpenRouterAPIKey)
-		if err != nil {
-			return err
+		var client *ai.Client
+		if cfg.OpenRouterAPIKey != "" {
+			client, err = ai.NewClient(cfg.OpenRouterAPIKey)
+			if err != nil {
+				return err
+			}
+			client.Verbose = renderer.Options().Verbose
+			client.DiagnosticWriter = cmd.ErrOrStderr()
 		}
-		client.Verbose = renderer.Options().Verbose
-		client.DiagnosticWriter = cmd.ErrOrStderr()
+
+		// Define a pasta final antes da síntese para que acertos locais possam ser copiados
+		// para a saída sem depender de uma chamada ao modelo de texto.
+		targetDir := genOutputDir
+		if targetDir == "" {
+			themeSlug := "itens"
+			if genTheme != "" {
+				themeSlug = strings.ToLower(strings.ReplaceAll(genTheme, " ", "_"))
+			} else if len(rawItems) > 0 {
+				themeSlug = ai.SanitizeSlug(1, rawItems[0])
+			}
+			targetDir = fmt.Sprintf("./imagens_%s", themeSlug)
+		}
+
+		useImageCache := genReuseCache || genRefreshCache
+		var imageVault *vault.Vault
+		cacheWarnings := []string{}
+		if useImageCache {
+			imageVault, err = vault.Open()
+			if err != nil {
+				cacheWarnings = append(cacheWarnings, "não foi possível abrir a biblioteca local; o Caramel seguirá sem reutilização")
+				imageVault = nil
+			} else {
+				defer imageVault.Close()
+			}
+		}
 
 		harnessCfg := ai.HarnessConfig{
 			Items:       rawItems,
@@ -166,7 +199,7 @@ caramel image generate -f ./itens.txt -s coloring
 			Count:       genCount,
 			Style:       genStyle,
 			CustomStyle: genCustomStyle,
-			OutputDir:   genOutputDir,
+			OutputDir:   targetDir,
 			MaxWorkers:  genWorkers,
 			TextModel:   textModel,
 			ImageModel:  imageModel,
@@ -174,74 +207,61 @@ caramel image generate -f ./itens.txt -s coloring
 			Verbose:     renderer.Options().Verbose,
 		}
 
-		// Estágio 1: Síntese de prompts
-		if genTheme != "" && len(rawItems) == 0 {
-			renderer.Diagnostic("sintetizando %d itens para o tema %s (estilo: %s)\n", genCount, genTheme, genStyle)
-		} else {
-			renderer.Diagnostic("sintetizando prompts para %d item(ns) (estilo: %s)\n", len(rawItems), genStyle)
-		}
-
-		items, err := ai.SynthesizePrompts(harnessCfg, client)
-		if err != nil {
-			return err
-		}
-
-		for _, it := range items {
-			renderer.Diagnostic("item %02d: %s (%s)\n", it.Index, it.Name, it.Slug)
-		}
-
-		// Define pasta final de destino
-		targetDir := genOutputDir
-		if targetDir == "" {
-			themeSlug := "itens"
-			if genTheme != "" {
-				themeSlug = strings.ToLower(strings.ReplaceAll(genTheme, " ", "_"))
-			} else if len(items) > 0 {
-				themeSlug = items[0].Slug
-			}
-			targetDir = fmt.Sprintf("./imagens_%s", themeSlug)
-			harnessCfg.OutputDir = targetDir
-		}
-
-		// Estágio 2: Execução com concorrência adaptativa
-		workers, delay := ai.CalculateConcurrencyDecision(len(items), genWorkers)
-		renderer.Diagnostic("motor de geração: %d worker(s), intervalo %s, saída %s\n", workers, delay, targetDir)
-
 		progressFunc := func(ev ai.HarnessProgressEvent) {
+			position := ev.Completed
+			if useImageCache && ev.Item.Index > 0 {
+				position = ev.Item.Index
+			}
 			if ev.CurrentStep == "saved" {
-				renderer.Text("[%d/%d] gerado: %s\n", ev.Completed, ev.Total, ev.Item.Name)
+				state := "gerado"
+				if ev.Item.Reused {
+					state = "reutilizado"
+				}
+				renderer.Text("[%d/%d] %s: %s\n", position, ev.Total, state, ev.Item.Name)
 				if genPreview && ev.Item.ImagePath != "" && !renderer.Options().JSON && !renderer.Options().Quiet {
 					ansiArt, err := ui.RenderImageFileToANSI(ev.Item.ImagePath, 40, 20)
 					if err == nil && ansiArt != "" {
 						renderer.Text("%s\n", ansiArt)
 					}
 				}
-			} else if ev.CurrentStep == "error" {
-				renderer.Text("[%d/%d] falha na geração\n", ev.Completed, ev.Total)
+			} else if ev.CurrentStep == "error" || ev.Item.Status == "error" {
+				renderer.Text("[%d/%d] falha na geração\n", position, ev.Total)
 				renderer.Diagnostic("falha ao gerar %s: %s\n", ev.Item.Name, ev.Item.Error)
 			}
 		}
 
-		results, err := ai.ExecuteGenerationHarness(items, harnessCfg, client, progressFunc)
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		results, generationWarnings, err := executeImageGeneration(ctx, rawItems, genTheme, harnessCfg, targetDir, imageVault, genRefreshCache, client, progressFunc)
 		if err != nil {
 			return err
 		}
+		cacheWarnings = append(cacheWarnings, generationWarnings...)
 
 		var successfulPaths []string
 		successCount := 0
+		generatedCount := 0
+		reusedCount := 0
 		failCount := 0
 
 		for _, res := range results {
 			if res.Status == "done" && res.ImagePath != "" {
 				successCount++
 				successfulPaths = append(successfulPaths, res.ImagePath)
+				if res.Reused {
+					reusedCount++
+				} else {
+					generatedCount++
+				}
 			} else {
 				failCount++
 			}
 		}
 
 		artifacts := []string{targetDir}
-		warnings := []string{}
+		warnings := cacheWarnings
 		if failCount > 0 {
 			warnings = append(warnings, fmt.Sprintf("%d imagem(ns) falharam durante a geração", failCount))
 		}
@@ -305,9 +325,13 @@ caramel image generate -f ./itens.txt -s coloring
 		if len(warnings) > 0 || successCount == 0 {
 			status = output.StateWarning
 		}
+		summary := fmt.Sprintf("Geração concluída: %d gerada(s); %d falha(s).", generatedCount, failCount)
+		if useImageCache {
+			summary = fmt.Sprintf("Geração concluída: %d gerada(s); %d reutilizada(s); %d falha(s).", generatedCount, reusedCount, failCount)
+		}
 		return renderer.Result(output.Result{
 			Status:   status,
-			Summary:  fmt.Sprintf("Geração concluída: %d gerada(s); %d falha(s).", successCount, failCount),
+			Summary:  summary,
 			Count:    successCount,
 			Data:     results,
 			Outputs:  artifacts,
@@ -331,6 +355,8 @@ func init() {
 	imageGenerateCmd.Flags().BoolVar(&gen2UpPDF, "2up", false, "Compila automaticamente todas as imagens geradas em um PDF 2-up A4")
 	imageGenerateCmd.Flags().StringVarP(&genModelName, "model", "m", ai.DefaultModel, "Modelo de IA para geração de imagens (config: model_image)")
 	imageGenerateCmd.Flags().StringVar(&genTextModel, "text-model", ai.DefaultTextModel, "Modelo de IA para síntese de prompts (config: model_text)")
+	imageGenerateCmd.Flags().BoolVar(&genReuseCache, "reuse-cache", false, "Consulta e salva imagens na biblioteca local do Caramel")
+	imageGenerateCmd.Flags().BoolVar(&genRefreshCache, "refresh-cache", false, "Gera imagens novas e atualiza a biblioteca local (ativa --reuse-cache)")
 
 	// Off-switches: permitem desligar comportamentos ligados por padrão
 	imageGenerateCmd.Flags().BoolVar(&genPreview, "no-preview", false, "Não renderiza miniaturas ANSI no terminal durante a geração")

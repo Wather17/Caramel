@@ -38,6 +38,97 @@ func TestInferFilenameMetadata(t *testing.T) {
 	}
 }
 
+func TestGeneratedImageCacheStoresReadableVersionsAndLooksUpLatest(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CARAMEL_VAULT_DIR", root)
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	key := strings.Repeat("a", 64)
+	firstSource := filepath.Join(t.TempDir(), "first.png")
+	writeVaultPNGColor(t, firstSource, color.RGBA{R: 20, G: 80, B: 180, A: 255})
+	firstBytes, err := os.ReadFile(firstSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := v.StoreGeneratedImage(context.Background(), key, "Bolo de fubá", "a cake", "png", firstBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(filepath.Base(first.Path), "bolo-de-fubá-") {
+		t.Fatalf("nome da biblioteca deveria ser legível: %s", filepath.Base(first.Path))
+	}
+	if filepath.Dir(first.Path) != filepath.Join(root, "image-library") {
+		t.Fatalf("caminho inesperado da biblioteca: %s", first.Path)
+	}
+
+	_, found, err := v.LookupGeneratedImage(context.Background(), strings.Repeat("b", 64))
+	if err != nil || found {
+		t.Fatalf("consulta ausente inesperada: found=%v err=%v", found, err)
+	}
+	got, found, err := v.LookupGeneratedImage(context.Background(), key)
+	if err != nil || !found {
+		t.Fatalf("consulta falhou: found=%v err=%v", found, err)
+	}
+	if got.Path != first.Path || got.Name != first.Name || got.Prompt != first.Prompt {
+		t.Fatalf("metadados recuperados divergiram: got=%+v first=%+v", got, first)
+	}
+	gotBytes, err := os.ReadFile(got.Path)
+	if err != nil || string(gotBytes) != string(firstBytes) {
+		t.Fatalf("conteúdo recuperado divergiu: err=%v", err)
+	}
+
+	secondSource := filepath.Join(t.TempDir(), "second.png")
+	writeVaultPNGColor(t, secondSource, color.RGBA{R: 200, G: 40, B: 20, A: 255})
+	secondBytes, err := os.ReadFile(secondSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := v.StoreGeneratedImage(context.Background(), key, "Bolo de fubá", "a new cake", "png", secondBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Path == first.Path {
+		t.Fatal("refresh deveria preservar a versão anterior em outro arquivo")
+	}
+	if _, err := os.Stat(first.Path); err != nil {
+		t.Fatalf("refresh removeu a versão anterior: %v", err)
+	}
+	latest, found, err := v.LookupGeneratedImage(context.Background(), key)
+	if err != nil || !found || latest.Path != second.Path || latest.Prompt != "a new cake" {
+		t.Fatalf("lookup não apontou para a versão mais recente: %+v found=%v err=%v", latest, found, err)
+	}
+}
+
+func TestGeneratedImageCacheRejectsUnsafeStoredPath(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	key := strings.Repeat("c", 64)
+	source := filepath.Join(t.TempDir(), "image.png")
+	writeVaultPNG(t, source)
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.StoreGeneratedImage(context.Background(), key, "Bolo", "cake", "png", data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.Exec("UPDATE generated_image_cache SET relative_path = ? WHERE cache_key = ?", "../../outside.png", key); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := v.LookupGeneratedImage(context.Background(), key); err == nil || found {
+		t.Fatalf("caminho inseguro deveria ser rejeitado: found=%v err=%v", found, err)
+	}
+}
+
 func TestImportInfersAndMergesFilenameMetadata(t *testing.T) {
 	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())
 	v, err := Open()

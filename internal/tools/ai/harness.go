@@ -22,6 +22,7 @@ type GenerationItem struct {
 	Status    string `json:"status"` // pending, generating, done, error
 	ImagePath string `json:"image_path,omitempty"`
 	Format    string `json:"format,omitempty"`
+	Reused    bool   `json:"reused"`
 	Error     string `json:"error,omitempty"`
 }
 

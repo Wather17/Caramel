@@ -20,7 +20,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -275,6 +275,15 @@ CREATE TABLE IF NOT EXISTS legacy_runs (
     legacy_run_id TEXT NOT NULL,
     run_id TEXT NOT NULL REFERENCES runs(id),
     PRIMARY KEY(legacy_project_id, legacy_run_id)
+);
+CREATE TABLE IF NOT EXISTS generated_image_cache (
+    cache_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    extension TEXT NOT NULL,
+    relative_path TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 `
 
