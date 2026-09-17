@@ -46,6 +46,21 @@ quebras dentro de tabelas ou blocos aninhados retornam erro.
 | `caramel image colorize` | Colora imagens soltas, pastas ou `.docx` inteiros via IA |
 | `caramel image generate` | Gera ilustrações e coleções pedagógicas em lote |
 
+Use `--reuse-cache` para reutilizar e salvar imagens pela combinação exata do conceito, tema,
+estilo, proporção e modelo. `--refresh-cache` força novas imagens e atualiza a versão ativa.
+Para itens informados diretamente, um acerto local não exige chave de API; `--theme` ainda usa
+a API de texto para selecionar os itens.
+
+```bash
+caramel image generate --items "bolo, pão" --reuse-cache
+caramel image generate --items "bolo" --refresh-cache
+```
+
+Os arquivos ficam em `image-library` dentro do diretório global do vault: no Linux/macOS,
+`$XDG_DATA_HOME/caramel/image-library` (por padrão `~/.local/share/caramel/image-library`);
+no Windows, `%LOCALAPPDATA%\caramel\image-library`. Se `CARAMEL_VAULT_DIR` estiver definido,
+a biblioteca fica em `<CARAMEL_VAULT_DIR>/image-library`.
+
 ### 🖨️ Impressão & Papel
 | Comando | Finalidade |
 | :--- | :--- |
