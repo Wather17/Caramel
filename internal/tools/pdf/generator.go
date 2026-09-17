@@ -143,6 +143,102 @@ func Generate2UpPDF(imagePaths []string, outputPath string, opts Options) error 
 	return pdf.OutputFileAndClose(outputPath)
 }
 
+// GenerateImagePDF creates one A4 page per image, choosing portrait or
+// landscape orientation from that image's dimensions while preserving its
+// aspect ratio. The returned count is the number of generated pages.
+func GenerateImagePDF(imagePaths []string, outputPath string, opts Options) (int, error) {
+	if len(imagePaths) == 0 {
+		return 0, fmt.Errorf("nenhuma imagem fornecida para a geração do PDF")
+	}
+	if strings.TrimSpace(outputPath) == "" {
+		return 0, fmt.Errorf("informe o caminho do arquivo PDF de saída")
+	}
+
+	outputAbs, err := filepath.Abs(outputPath)
+	if err != nil {
+		return 0, fmt.Errorf("caminho de saída inválido '%s': %w", outputPath, err)
+	}
+	for _, imagePath := range imagePaths {
+		if !IsSupportedImageFile(imagePath) {
+			return 0, fmt.Errorf("o arquivo '%s' não é uma imagem suportada (%s)", imagePath, SupportedImageExtensionsDescription())
+		}
+		if samePath(imagePath, outputAbs) {
+			return 0, fmt.Errorf("o arquivo PDF de saída não pode substituir uma imagem de entrada: '%s'", imagePath)
+		}
+		info, err := os.Stat(imagePath)
+		if err != nil {
+			return 0, fmt.Errorf("não foi possível acessar a imagem '%s': %w", imagePath, err)
+		}
+		if !info.Mode().IsRegular() {
+			return 0, fmt.Errorf("a entrada '%s' não é um arquivo regular", imagePath)
+		}
+		if _, _, err := getImageDimensions(imagePath); err != nil {
+			return 0, err
+		}
+	}
+
+	if outputInfo, err := os.Stat(outputAbs); err == nil {
+		for _, imagePath := range imagePaths {
+			imageInfo, statErr := os.Stat(imagePath)
+			if statErr == nil && os.SameFile(outputInfo, imageInfo) {
+				return 0, fmt.Errorf("o arquivo PDF de saída não pode apontar para uma imagem de entrada: '%s'", imagePath)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return 0, fmt.Errorf("não foi possível acessar o caminho de saída '%s': %w", outputPath, err)
+	}
+
+	// This command always uses contain and chooses page orientation from the
+	// image. The 2-up renderer is reused without rotating the image itself.
+	opts.AutoRotate = false
+	opts.FitMode = "contain"
+	if opts.Quality <= 0 || opts.Quality > 100 {
+		opts.Quality = 85
+	}
+	if opts.MaxDPI <= 0 {
+		opts.MaxDPI = 300
+	}
+
+	const (
+		a4WidthMM  = 210.0
+		a4HeightMM = 297.0
+		marginMM   = 5.0
+	)
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetAutoPageBreak(false, 0)
+	for i, imagePath := range imagePaths {
+		imageWidth, imageHeight, err := getImageDimensions(imagePath)
+		if err != nil {
+			return 0, err
+		}
+		orientation := "P"
+		pageWidth, pageHeight := a4WidthMM, a4HeightMM
+		if imageWidth > imageHeight {
+			orientation = "L"
+			pageWidth, pageHeight = a4HeightMM, a4WidthMM
+		}
+
+		pdf.AddPageFormat(orientation, gofpdf.SizeType{Wd: a4WidthMM, Ht: a4HeightMM})
+		if pdf.Error() != nil {
+			return 0, fmt.Errorf("não foi possível criar a página %d: %w", i+1, pdf.Error())
+		}
+		if err := renderImageInSlotNamed(pdf, imagePath, marginMM, marginMM, pageWidth-2*marginMM, pageHeight-2*marginMM, opts, fmt.Sprintf("pdf_image_%d", i)); err != nil {
+			return 0, fmt.Errorf("não foi possível inserir a imagem '%s': %w", imagePath, err)
+		}
+	}
+
+	outDir := filepath.Dir(outputAbs)
+	if outDir != "." && outDir != "" {
+		if err := os.MkdirAll(outDir, 0755); err != nil {
+			return 0, fmt.Errorf("não foi possível criar a pasta de saída '%s': %w", outDir, err)
+		}
+	}
+	if err := pdf.OutputFileAndClose(outputAbs); err != nil {
+		return 0, fmt.Errorf("não foi possível salvar o PDF em '%s': %w", outputPath, err)
+	}
+	return len(imagePaths), nil
+}
+
 type imagePair struct {
 	Left  string
 	Right string
@@ -260,6 +356,10 @@ func computeRenderLayout(w, h, maxW, maxH float64, opts Options) renderLayout {
 
 // renderImageInSlot calcula as dimensões, decide por rotação, otimiza se ativado e posiciona a imagem no slot
 func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, maxH float64, opts Options) error {
+	return renderImageInSlotNamed(pdf, imgPath, slotX, slotY, maxW, maxH, opts, fmt.Sprintf("opt_%s", filepath.Base(imgPath)))
+}
+
+func renderImageInSlotNamed(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, maxH float64, opts Options, imageKey string) error {
 	imgW, imgH, err := getImageDimensions(imgPath)
 	if err != nil {
 		return err
@@ -289,7 +389,6 @@ func renderImageInSlot(pdf *gofpdf.Fpdf, imgPath string, slotX, slotY, maxW, max
 			return optErr
 		}
 		if reader != nil {
-			imageKey := fmt.Sprintf("opt_%s", filepath.Base(imgPath))
 			imageType = optFormat
 			pdf.RegisterImageOptionsReader(imageKey, gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}, reader)
 			imageTarget = imageKey
