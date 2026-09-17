@@ -103,26 +103,33 @@ func TestExtractEmbeddedImagesDoesNotOverwriteExistingFiles(t *testing.T) {
 	if err := os.Mkdir(outputDir, 0o700); err != nil {
 		t.Fatalf("não foi possível criar a pasta de saída: %v", err)
 	}
-	firstOutput := filepath.Join(outputDir, "lesson_page_001_image_001.png")
-	if err := os.WriteFile(firstOutput, []byte("user data"), 0o600); err != nil {
-		t.Fatalf("não foi possível criar arquivo existente: %v", err)
+	existingOutputs := map[string][]byte{
+		filepath.Join(outputDir, "lesson_page_001_image_001.png"): []byte("PNG user data"),
+		filepath.Join(outputDir, "lesson_page_001_image_001.jpg"): []byte("JPEG user data"),
+	}
+	for outputPath, data := range existingOutputs {
+		if err := os.WriteFile(outputPath, data, 0o600); err != nil {
+			t.Fatalf("não foi possível criar arquivo existente: %v", err)
+		}
 	}
 
 	if _, _, err := ExtractEmbeddedImages(input, outputDir); err == nil || !strings.Contains(err.Error(), "já existe") {
 		t.Fatalf("esperava rejeição explícita de saída existente, recebeu %v", err)
 	}
-	got, err := os.ReadFile(firstOutput)
-	if err != nil {
-		t.Fatalf("arquivo existente foi removido: %v", err)
-	}
-	if string(got) != "user data" {
-		t.Fatalf("arquivo existente foi alterado: %q", got)
+	for outputPath, want := range existingOutputs {
+		got, err := os.ReadFile(outputPath)
+		if err != nil {
+			t.Fatalf("arquivo existente foi removido: %v", err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("arquivo existente %q foi alterado: %q", filepath.Base(outputPath), got)
+		}
 	}
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
 		t.Fatalf("não foi possível listar pasta de saída: %v", err)
 	}
-	if len(entries) != 1 {
+	if len(entries) != len(existingOutputs) {
 		t.Errorf("a extração deixou saídas parciais: %v", entries)
 	}
 }
