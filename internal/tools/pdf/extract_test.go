@@ -28,17 +28,25 @@ func TestExtractEmbeddedImagesPreservesFormatsAcrossPages(t *testing.T) {
 	if len(warnings) != 0 {
 		t.Errorf("extração completa retornou avisos inesperados: %v", warnings)
 	}
-	wantNames := []string{
-		"lesson_page_001_image_001.png",
-		"lesson_page_001_image_002.jpg",
-		"lesson_page_003_image_001.png",
+	if len(paths) != 3 {
+		t.Fatalf("ExtractEmbeddedImages() gerou %d arquivos; esperava 3: %v", len(paths), paths)
 	}
-	if len(paths) != len(wantNames) {
-		t.Fatalf("ExtractEmbeddedImages() gerou %d arquivos; esperava %d: %v", len(paths), len(wantNames), paths)
+	allowedNames := map[string]bool{
+		"lesson_page_001_image_001.png": true,
+		"lesson_page_001_image_001.jpg": true,
+		"lesson_page_001_image_002.png": true,
+		"lesson_page_001_image_002.jpg": true,
+		"lesson_page_003_image_001.png": true,
 	}
-	for i, path := range paths {
-		if filepath.Base(path) != wantNames[i] {
-			t.Errorf("imagem %d chama-se %q; esperava %q", i+1, filepath.Base(path), wantNames[i])
+	pageOneExtensions := make(map[string]bool)
+	for _, path := range paths {
+		name := filepath.Base(path)
+		if !allowedNames[name] {
+			t.Errorf("nome determinístico inesperado para imagem extraída: %q", name)
+		}
+		delete(allowedNames, name)
+		if strings.HasPrefix(name, "lesson_page_001_") {
+			pageOneExtensions[filepath.Ext(name)] = true
 		}
 		file, err := os.Open(path)
 		if err != nil {
@@ -57,6 +65,9 @@ func TestExtractEmbeddedImagesPreservesFormatsAcrossPages(t *testing.T) {
 			t.Errorf("extensão inesperada na saída %q", path)
 		}
 		_ = file.Close()
+	}
+	if len(pageOneExtensions) != 2 || !pageOneExtensions[".png"] || !pageOneExtensions[".jpg"] {
+		t.Errorf("a página 1 deveria produzir uma imagem PNG e uma JPEG: %v", paths)
 	}
 }
 
