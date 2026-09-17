@@ -24,11 +24,17 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 | :--- | :--- |
 | `caramel docx images list` | Lista imagens contidas em um `.docx` |
 | `caramel docx images extract` | Extrai imagens contidas em um `.docx` |
+| `caramel docx merge` | Junta documentos DOCX na ordem informada |
 | `caramel docx split` | Divide um DOCX em quebras explícitas de página ou seção |
 
 ```bash
+caramel docx merge capa.docx atividades.docx respostas.docx --output apostila.docx
 caramel docx split apostila.docx
 ```
+
+`docx merge` preserva texto, tabelas, imagens, estilos, listas e configurações comuns de página;
+cada documento começa em uma nova seção/página e o destino não é sobrescrito.
+Comentários, notas de rodapé/fim, revisões controladas e objetos incorporados não são suportados.
 
 `docx split` usa quebras gravadas no arquivo; não infere páginas visuais, cuja paginação depende
 do Word, das fontes e do renderizador. As quebras precisam estar em parágrafos de nível superior;

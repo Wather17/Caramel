@@ -245,11 +245,13 @@ func splitXMLNodeAtManualPageBreaks(node *packageXMLNode) []*packageXMLNode {
 
 func (n *packageXMLNode) cloneShallow() *packageXMLNode {
 	return &packageXMLNode{
-		name:     n.name,
-		attrs:    append([]xml.Attr(nil), n.attrs...),
-		open:     append([]byte(nil), n.open...),
-		close:    append([]byte(nil), n.close...),
-		emptyTag: n.emptyTag,
+		name:          n.name,
+		qualifiedName: n.qualifiedName,
+		attrs:         append([]xml.Attr(nil), n.attrs...),
+		attrNames:     append([]string(nil), n.attrNames...),
+		open:          append([]byte(nil), n.open...),
+		close:         append([]byte(nil), n.close...),
+		emptyTag:      n.emptyTag,
 	}
 }
 
