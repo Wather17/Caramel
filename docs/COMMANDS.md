@@ -47,6 +47,12 @@ convertidos em memória para JPEG.
 | :--- | :--- |
 | `caramel pdf create` | Cria um PDF A4 com uma imagem por página |
 | `caramel pdf merge` | Junta PDFs na ordem dos argumentos e preserva o tamanho e a orientação das páginas |
+| `caramel pdf split` | Divide PDFs em um arquivo por página ou por intervalos inclusivos |
+
+```bash
+caramel pdf split documento.pdf
+caramel pdf split apostila.pdf --ranges 1-3,5,7-9 --output-dir ./capitulos
+```
 
 ### 📅 Rotinas de Aula
 | Comando | Finalidade |
