@@ -45,6 +45,7 @@ convertidos em memória para JPEG.
 ### 📑 Arquivos PDF
 | Comando | Finalidade |
 | :--- | :--- |
+| `caramel pdf create` | Cria um PDF A4 com uma imagem por página |
 | `caramel pdf merge` | Junta PDFs na ordem dos argumentos e preserva o tamanho e a orientação das páginas |
 
 ### 📅 Rotinas de Aula
