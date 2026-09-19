@@ -24,6 +24,9 @@ type VaultImageService struct {
 
 // Generate gera imagens e importa cada resultado como material do vault.
 func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]vault.Material, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -66,9 +69,13 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		return nil, err
 	}
 	s.emit(ProgressEvent{Step: "synthesizing", Message: "Sintetizando prompts..."})
-	items, err := ai.SynthesizePrompts(harness, client)
+	items, err := ai.SynthesizePromptsContext(ctx, harness, client)
 	if err != nil {
-		_ = s.Vault.FinishRun(ctx, run.ID, "failed", nil, err)
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Vault.FinishRun(context.Background(), run.ID, status, nil, err)
 		return nil, err
 	}
 	results, err := ai.ExecuteGenerationHarnessContext(ctx, items, harness, client, func(event ai.HarnessProgressEvent) {
@@ -78,28 +85,31 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		}
 		s.emit(ProgressEvent{Step: event.CurrentStep, Current: event.Completed, Total: event.Total, Message: message, Path: event.Item.ImagePath})
 	})
-	if err != nil {
-		status := "failed"
-		if ctx.Err() != nil {
-			status = "canceled"
-		}
-		_ = s.Vault.FinishRun(ctx, run.ID, status, nil, err)
-		return nil, err
-	}
+	// A conclusão do lote pode ser cancelada enquanto resultados já concluídos
+	// ainda precisam ser importados e registrados no estado terminal.
+	persistCtx := context.Background()
 	var materials []vault.Material
 	for _, result := range results {
 		if result.Status != "done" || result.ImagePath == "" {
 			continue
 		}
-		imported, importErr := s.Vault.ImportFile(ctx, result.ImagePath, result.Name, []string{"gerado", opts.Style})
+		imported, importErr := s.Vault.ImportFile(persistCtx, result.ImagePath, result.Name, []string{"gerado", opts.Style})
 		if importErr != nil {
-			_ = s.Vault.FinishRun(ctx, run.ID, "failed", materialIDs(materials), importErr)
+			_ = s.Vault.FinishRun(persistCtx, run.ID, "failed", materialIDs(materials), importErr)
 			return materials, importErr
 		}
 		materials = append(materials, imported.Material)
 		if s.CollectionID != "" {
-			_ = s.Vault.AddToCollection(ctx, s.CollectionID, imported.Material.ID)
+			_ = s.Vault.AddToCollection(persistCtx, s.CollectionID, imported.Material.ID)
 		}
+	}
+	if err != nil {
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Vault.FinishRun(context.Background(), run.ID, status, materialIDs(materials), err)
+		return materials, err
 	}
 	if err := s.Vault.FinishRun(ctx, run.ID, "completed", materialIDs(materials), nil); err != nil {
 		return materials, err

@@ -41,6 +41,9 @@ type ImageService struct {
 
 // Generate cria imagens no diretório outputs/generated/<run>.
 func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]workspace.Artifact, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -85,9 +88,13 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 		ImageModel: opts.ImageModel, ImageFallbacks: cfg.ModelImageFallbacks, Aspect: opts.Aspect,
 	}
 	s.emit(ProgressEvent{Step: "synthesizing", Message: "Sintetizando prompts..."})
-	items, err := ai.SynthesizePrompts(harnessCfg, client)
+	items, err := ai.SynthesizePromptsContext(ctx, harnessCfg, client)
 	if err != nil {
-		_ = s.Project.FinishRun(run.ID, "failed", nil, err)
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Project.FinishRun(run.ID, status, nil, err)
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -102,15 +109,6 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 		}
 		s.emit(ProgressEvent{Step: ev.CurrentStep, Current: ev.Completed, Total: ev.Total, Message: message, Path: ev.Item.ImagePath})
 	})
-	if err != nil {
-		status := "failed"
-		if ctx.Err() != nil {
-			status = "canceled"
-		}
-		_ = s.Project.FinishRun(run.ID, status, nil, err)
-		return nil, err
-	}
-
 	artifacts := make([]workspace.Artifact, 0)
 	for _, result := range results {
 		if result.Status != "done" || result.ImagePath == "" {
@@ -121,6 +119,14 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 			continue
 		}
 		artifacts = append(artifacts, artifact)
+	}
+	if err != nil {
+		status := "failed"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		_ = s.Project.FinishRun(run.ID, status, artifacts, err)
+		return artifacts, err
 	}
 	if err := s.Project.FinishRun(run.ID, "completed", artifacts, nil); err != nil {
 		return artifacts, err

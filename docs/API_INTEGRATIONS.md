@@ -15,7 +15,7 @@ Este documento é o contrato de avaliação para chamadas de serviços externos 
 | Operação | Entrada e endpoint | Saída esperada | Custo potencial | Retry/concurrency atual | Fallback atual | Persistência atual |
 | --- | --- | --- | --- | --- | --- | --- |
 | Catálogo | `GET https://openrouter.ai/api/v1/models`; não exige chave | páginas de modelos, preço e modalidades | sem cobrança de geração | páginas sequenciais; até 100 páginas; retry transitório até 3 tentativas; timeout de 60 s | nenhum | apenas usado para seleção; não grava tentativas |
-| Síntese de prompts | `POST /api/v1/chat/completions` com modelo de texto e texto de entrada | conteúdo textual contendo array de itens com `name` e `prompt` | depende do modelo de texto | uma chamada lógica com até 3 tentativas; limitador por cliente; `Retry-After` respeitado; workflows legados ainda precisam usar a variante context-aware (#77) | fallback opcional configurado por `MODEL_TEXT_FALLBACKS`, uma troca máxima por item | execução guarda opções e erro agregado |
+| Síntese de prompts | `POST /api/v1/chat/completions` com modelo de texto e texto de entrada | conteúdo textual contendo array de itens com `name` e `prompt` | depende do modelo de texto | uma chamada lógica com até 3 tentativas; limitador por cliente; `Retry-After` respeitado; workflows propagam o contexto até a chamada HTTP | fallback opcional configurado por `MODEL_TEXT_FALLBACKS`, uma troca máxima por item | execução guarda opções e erro agregado |
 | Geração de imagem | `POST /api/v1/chat/completions` com modalidade `image` e `image_config` | bytes de imagem inline ou URL/data URL no envelope | normalmente cobrada por imagem/modelo | harness indexado; workers adaptativos de 1--5 conforme lote; teto compartilhado de 4 requests por cliente; retry seguro só antes do envio | resultado ambíguo após envio não repete nem usa fallback; fallback configurado só cobre falhas elegíveis antes do envio | salva imagem e artefato; não guarda usage/request ID |
 | Triagem | `POST /api/v1/chat/completions` com imagem e prompt de decisão | objeto com `should_colorize` e `reason` | baixo ou gratuito, conforme modelo | até 2 tentativas dentro da colorização; limitador compartilhado; `Retry-After` respeitado | fallback opcional configurado por `MODEL_TRIAGE_FALLBACKS`; falha final continua fail-open | registra apenas resultado agregado da colorização |
 | Colorização | `POST /api/v1/chat/completions` com imagem, prompt e modalidade `image` | bytes de imagem colorida | normalmente cobrada por imagem/modelo | lote indexado com workers adaptativos; cliente compartilhado por lote; teto de 4 requests; retry seguro só antes do envio | resultado ambíguo após envio não repete nem usa fallback; reutiliza `MODEL_IMAGE_FALLBACKS` apenas para falhas elegíveis | salva artefato/derivação; não guarda usage/request ID |
@@ -123,7 +123,7 @@ Cada cliente deve ser testado com servidor fake determinístico e relógio/esper
 | `Retry-After` e limitador compartilhado | implementado | #74 |
 | Limites de corpo e URLs seguras | pendente | #75 |
 | Metadados de tentativa/uso persistidos | pendente | #76 |
-| Contexto nos workflows | pendente | #77 |
+| Contexto nos workflows | implementado | #77 |
 | Idempotência e resultado ambíguo | implementado | #78 |
 
 Novas integrações devem adicionar uma linha à matriz, declarar todas as dez dimensões e apontar para testes que demonstrem cada limite.
