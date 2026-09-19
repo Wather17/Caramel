@@ -176,6 +176,41 @@ func TestSynthesizePromptsSemEntrada(t *testing.T) {
 	}
 }
 
+func TestSynthesizePromptsRespostaForaDoContrato(t *testing.T) {
+	setupAnalyzeMock(t, "A lone scene description", nil)
+	client, _ := ai.NewClient("sk-test")
+
+	_, err := ai.SynthesizePrompts(ai.HarnessConfig{Items: []string{"Trigo"}, TextModel: "modelo-texto"}, client)
+	if err == nil || !strings.Contains(err.Error(), "síntese de prompts") || !strings.Contains(err.Error(), "modelo-texto") {
+		t.Fatalf("erro deveria explicar operação e modelo, obtido: %v", err)
+	}
+	if strings.Contains(err.Error(), "A lone scene description") {
+		t.Fatalf("erro normal não deveria incluir resposta completa: %v", err)
+	}
+}
+
+func TestSynthesizePromptsRejeitaListaVaziaEDuplicada(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{name: "vazia", content: "[]", want: "não pode estar vazia"},
+		{name: "duplicada", content: `[{"name":"Trigo","prompt":"um"},{"name":"trigo","prompt":"dois"}]`, want: "duplicado"},
+		{name: "sem prompt", content: `[{"name":"Trigo"}]`, want: "sem prompt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupAnalyzeMock(t, tt.content, nil)
+			client, _ := ai.NewClient("sk-test")
+			_, err := ai.SynthesizePrompts(ai.HarnessConfig{Items: []string{"Trigo"}, TextModel: "modelo-texto"}, client)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("erro esperado contendo %q, obtido %v", tt.want, err)
+			}
+		})
+	}
+}
+
 func TestExecuteGenerationHarnessSucesso(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

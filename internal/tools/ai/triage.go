@@ -89,7 +89,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 		return nil, fmt.Errorf("falha ao ler resposta da triagem: %w", err)
 	}
 
-	c.debugf("🔍 [DEBUG] Resposta Raw da Triagem (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	c.debugf("🔍 [DEBUG] Resposta Raw da Triagem (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, statusError(resp.StatusCode, bodyBytes)
@@ -109,36 +109,36 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	}
 
 	rawContent := fmt.Sprintf("%v", chatResp.Choices[0].Message.Content)
-	return parseTriageResponse(rawContent)
+	return parseTriageResponse(rawContent, model)
 }
 
 // parseTriageResponse interpreta a resposta textual do modelo de triagem.
 // Tolera respostas envoltas em blocos markdown (```json ... ```) e texto extra ao redor do JSON.
-func parseTriageResponse(raw string) (*TriageResult, error) {
-	cleaned := strings.TrimSpace(raw)
-
-	// Remove cercas de bloco de código markdown, se presentes
-	if strings.HasPrefix(cleaned, "```") {
-		lines := strings.Split(cleaned, "\n")
-		var contentLines []string
-		for _, line := range lines {
-			if !strings.HasPrefix(strings.TrimSpace(line), "```") {
-				contentLines = append(contentLines, line)
-			}
-		}
-		cleaned = strings.TrimSpace(strings.Join(contentLines, "\n"))
+func parseTriageResponse(raw, model string) (*TriageResult, error) {
+	structuredJSON, err := ParseStructuredObject(raw, "triagem", model)
+	if err != nil {
+		return nil, err
 	}
-
-	// Extrai apenas o objeto JSON (primeiro '{' até o último '}')
-	startIdx := strings.Index(cleaned, "{")
-	endIdx := strings.LastIndex(cleaned, "}")
-	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
-		return nil, fmt.Errorf("nenhum objeto JSON encontrado na resposta de triagem: %q", truncateForError(raw))
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(structuredJSON, &fields); err != nil {
+		return nil, newContractOutputError("triagem", model, StructuredJSONObject, raw, "objeto com tipos incompatíveis")
 	}
-
+	shouldRaw, ok := fields["should_colorize"]
+	if !ok {
+		return nil, newContractOutputError("triagem", model, StructuredJSONObject, raw, "campo should_colorize ausente")
+	}
+	reasonRaw, hasReason := fields["reason"]
 	var result TriageResult
-	if err := json.Unmarshal([]byte(cleaned[startIdx:endIdx+1]), &result); err != nil {
-		return nil, fmt.Errorf("falha ao interpretar JSON da triagem: %w (conteúdo: %q)", err, truncateForError(raw))
+	if err := json.Unmarshal(shouldRaw, &result.ShouldColorize); err != nil {
+		return nil, newContractOutputError("triagem", model, StructuredJSONObject, raw, "campo should_colorize deve ser booleano")
+	}
+	if hasReason {
+		if err := json.Unmarshal(reasonRaw, &result.Reason); err != nil {
+			return nil, newContractOutputError("triagem", model, StructuredJSONObject, raw, "campo reason deve ser texto")
+		}
+	}
+	if !result.ShouldColorize && strings.TrimSpace(result.Reason) == "" {
+		return nil, newContractOutputError("triagem", model, StructuredJSONObject, raw, "reason é obrigatório quando should_colorize é false")
 	}
 
 	return &result, nil

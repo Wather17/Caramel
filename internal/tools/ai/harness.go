@@ -120,17 +120,16 @@ func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Cl
 		return nil, fmt.Errorf("falha ao sintetizar prompts com a IA: %w", err)
 	}
 
-	// Remove blocos de markdown caso venha ```json ... ```
-	cleanedJSON := strings.TrimSpace(responseJSON)
-	if idxStart := strings.Index(cleanedJSON, "["); idxStart != -1 {
-		if idxEnd := strings.LastIndex(cleanedJSON, "]"); idxEnd != -1 && idxEnd > idxStart {
-			cleanedJSON = cleanedJSON[idxStart : idxEnd+1]
-		}
-	}
-
-	var items []GenerationItem
-	if err := json.Unmarshal([]byte(cleanedJSON), &items); err != nil {
+	structuredJSON, err := ParseStructuredArray(responseJSON, "síntese de prompts", model)
+	if err != nil {
 		return nil, fmt.Errorf("falha ao interpretar lista JSON gerada pela IA: %w", err)
+	}
+	var items []GenerationItem
+	if err := json.Unmarshal(structuredJSON, &items); err != nil {
+		return nil, fmt.Errorf("falha ao validar lista JSON gerada pela IA: %w", newContractOutputError("síntese de prompts", model, StructuredJSONArray, responseJSON, "itens com tipos incompatíveis"))
+	}
+	if err := validateGenerationItems(items, model, responseJSON); err != nil {
+		return nil, fmt.Errorf("falha ao validar lista JSON gerada pela IA: %w", err)
 	}
 
 	// Normaliza índices e slugs
@@ -143,6 +142,28 @@ func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Cl
 	}
 
 	return items, nil
+}
+
+func validateGenerationItems(items []GenerationItem, model, raw string) error {
+	if len(items) == 0 {
+		return newContractOutputError("síntese de prompts", model, StructuredJSONArray, raw, "a lista não pode estar vazia")
+	}
+	seen := make(map[string]struct{}, len(items))
+	for index, item := range items {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			return newContractOutputError("síntese de prompts", model, StructuredJSONArray, raw, fmt.Sprintf("item %d sem name", index+1))
+		}
+		if strings.TrimSpace(item.Prompt) == "" {
+			return newContractOutputError("síntese de prompts", model, StructuredJSONArray, raw, fmt.Sprintf("item %d (%q) sem prompt", index+1, name))
+		}
+		key := strings.ToLower(name)
+		if _, exists := seen[key]; exists {
+			return newContractOutputError("síntese de prompts", model, StructuredJSONArray, raw, fmt.Sprintf("item duplicado: %q", name))
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 // CalculateConcurrencyDecision calcula o número ideal de workers e delay baseado em N
