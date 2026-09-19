@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -236,6 +237,10 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		}
 		results, generationWarnings, err := executeImageGeneration(ctx, rawItems, genTheme, harnessCfg, targetDir, imageVault, genRefreshCache, client, progressFunc)
 		if err != nil {
+			var contractErr *ai.ContractOutputError
+			if renderer.Options().Verbose && errors.As(err, &contractErr) {
+				renderer.Diagnostic("%s\n", contractErr.Diagnostic())
+			}
 			return err
 		}
 		cacheWarnings = append(cacheWarnings, generationWarnings...)

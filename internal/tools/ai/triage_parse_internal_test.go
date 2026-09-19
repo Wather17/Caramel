@@ -7,10 +7,10 @@ import (
 
 func TestParseTriageResponse(t *testing.T) {
 	tests := []struct {
-		name        string
-		raw         string
-		wantErr     bool
-		wantShould  bool
+		name       string
+		raw        string
+		wantErr    bool
+		wantShould bool
 	}{
 		{name: "json puro aprovando", raw: `{"should_colorize": true, "reason": "ilustração"}`, wantShould: true},
 		{name: "json puro rejeitando", raw: `{"should_colorize": false, "reason": "foto"}`, wantShould: false},
@@ -18,11 +18,13 @@ func TestParseTriageResponse(t *testing.T) {
 		{name: "texto extra ao redor do json", raw: "Claro! Aqui está: {\"should_colorize\": false, \"reason\": \"tabela\"} Espero ajudar.", wantShould: false},
 		{name: "sem json retorna erro", raw: "não sei o que dizer", wantErr: true},
 		{name: "json malformado retorna erro", raw: `{"should_colorize": talvez}`, wantErr: true},
+		{name: "decisão negativa exige motivo", raw: `{"should_colorize": false}`, wantErr: true},
+		{name: "campo obrigatório ausente", raw: `{"reason": "sem imagem"}`, wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parseTriageResponse(tt.raw)
+			res, err := parseTriageResponse(tt.raw, "test/triage")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("esperado erro para %q, obtido %+v", tt.raw, res)

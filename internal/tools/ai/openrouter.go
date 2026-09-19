@@ -176,7 +176,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
 
-	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", statusError(resp.StatusCode, bodyBytes)
@@ -301,7 +301,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
 
-	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", statusError(resp.StatusCode, bodyBytes)
@@ -578,7 +578,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 		return "", fmt.Errorf("failed to read API response: %w", err)
 	}
 
-	c.debugf("🔍 [DEBUG] Raw OpenRouter response (%d bytes):\n%s\n\n", len(bodyBytes), string(bodyBytes))
+	c.debugf("🔍 [DEBUG] Resposta Raw de rotina do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", statusError(resp.StatusCode, bodyBytes)

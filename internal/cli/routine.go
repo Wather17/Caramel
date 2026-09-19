@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,10 +28,11 @@ var (
 )
 
 type routineFileResult struct {
-	rows    []docx.RoutineRow
-	skipped bool
-	err     error
-	detail  string
+	rows       []docx.RoutineRow
+	skipped    bool
+	err        error
+	detail     string
+	diagnostic string
 }
 
 var routineCmd = &cobra.Command{
@@ -161,15 +163,46 @@ caramel routine process rotina_semana_1.docx`,
 				return err
 			}
 
-			var fileRows []docx.RoutineRow
-			if err := json.Unmarshal([]byte(jsonResponse), &fileRows); err != nil {
+			structuredJSON, err := ai.ParseStructuredArray(jsonResponse, "rotina", routineModel)
+			if err != nil {
 				result.err = err
-				result.detail = fmt.Sprintf("falha ao decodificar JSON de '%s': %v; resposta raw: %s", filepath.Base(file), err, jsonResponse)
+				result.detail = fmt.Sprintf("falha de contrato ao analisar '%s': %v", filepath.Base(file), err)
+				var contractErr *ai.ContractOutputError
+				if errors.As(err, &contractErr) {
+					result.diagnostic = contractErr.Diagnostic()
+				}
 				return err
 			}
+
+			var fileRows []docx.RoutineRow
+			if err := json.Unmarshal(structuredJSON, &fileRows); err != nil {
+				result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, "campos com tipos incompatíveis")
+				result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
+				var contractErr *ai.ContractOutputError
+				if errors.As(result.err, &contractErr) {
+					result.diagnostic = contractErr.Diagnostic()
+				}
+				return result.err
+			}
 			if len(fileRows) == 0 {
-				result.skipped = true
-				return nil
+				result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, "a lista não pode estar vazia")
+				result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
+				var contractErr *ai.ContractOutputError
+				if errors.As(result.err, &contractErr) {
+					result.diagnostic = contractErr.Diagnostic()
+				}
+				return result.err
+			}
+			for rowIndex, row := range fileRows {
+				if strings.TrimSpace(row.Data) == "" || strings.TrimSpace(row.Campo) == "" || strings.TrimSpace(row.Experiencia) == "" {
+					result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, fmt.Sprintf("item %d exige data, campo e experiencia não vazios", rowIndex+1))
+					result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
+					var contractErr *ai.ContractOutputError
+					if errors.As(result.err, &contractErr) {
+						result.diagnostic = contractErr.Diagnostic()
+					}
+					return result.err
+				}
 			}
 			result.rows = fileRows
 			return nil
@@ -188,6 +221,9 @@ caramel routine process rotina_semana_1.docx`,
 			if result.err != nil {
 				failed++
 				renderer.Diagnostic("%s\n", result.detail)
+				if result.diagnostic != "" {
+					renderer.Diagnostic("%s\n", result.diagnostic)
+				}
 				continue
 			}
 			if result.skipped {
