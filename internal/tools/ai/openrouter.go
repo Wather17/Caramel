@@ -33,6 +33,7 @@ type Client struct {
 	Verbose          bool
 	DiagnosticWriter io.Writer
 	HTTPClient       *http.Client
+	URLPolicy        ImageURLPolicy
 	limiter          *requestLimiter
 }
 
@@ -197,7 +198,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
@@ -222,6 +223,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	}
 
 	choice := chatResp.Choices[0]
+	var extractionErr error
 
 	// 1. Padrão oficial OpenRouter: `message.images[0].image_url.url`
 	if len(choice.Message.Images) > 0 {
@@ -231,6 +233,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 				if err == nil {
 					return bytes, ext, nil
 				}
+				extractionErr = err
 			}
 		}
 	}
@@ -245,6 +248,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 						if err == nil {
 							return bytes, ext, nil
 						}
+						extractionErr = err
 					}
 				}
 			}
@@ -255,6 +259,9 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
+		if extractionErr != nil {
+			return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", extractionErr)
+		}
 		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err)
 	}
 
@@ -327,7 +334,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
 		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
 	}
@@ -352,6 +359,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	}
 
 	choice := chatResp.Choices[0]
+	var extractionErr error
 
 	// 1. Padrão oficial OpenRouter: `message.images[0].image_url.url`
 	if len(choice.Message.Images) > 0 {
@@ -361,6 +369,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 				if err == nil {
 					return bytes, ext, nil
 				}
+				extractionErr = err
 			}
 		}
 	}
@@ -375,6 +384,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 						if err == nil {
 							return bytes, ext, nil
 						}
+						extractionErr = err
 					}
 				}
 			}
@@ -385,6 +395,9 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)
 	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
+		if extractionErr != nil {
+			return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", extractionErr)
+		}
 		return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err)
 	}
 
@@ -423,6 +436,7 @@ func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, conte
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var extractionErr error
 	// 1. Procura por todas as ocorrências de Data URL (data:image/png;base64,...),
 	//    tolerando case e aspas escapadas de JSON (\")
 	for {
@@ -442,6 +456,11 @@ func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, conte
 
 		commaIdx := strings.Index(dataPart, ",")
 		if commaIdx == -1 {
+			extractionErr = fmt.Errorf("Data URL de imagem sem payload base64")
+			continue
+		}
+		if !isSupportedDataImageHeader(dataPart[:commaIdx]) {
+			extractionErr = fmt.Errorf("MIME da Data URL de imagem não é suportado; use image/png, image/jpeg ou image/webp")
 			continue
 		}
 
@@ -451,20 +470,19 @@ func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, conte
 			// Alguns modelos retornam base64 URL-safe sem padding
 			decBytes, err = base64.RawURLEncoding.DecodeString(strings.TrimRight(b64Str, "="))
 			if err != nil {
+				extractionErr = fmt.Errorf("payload base64 da Data URL de imagem inválido")
 				continue
 			}
 		}
 		if ext, ok := detectImageType(decBytes); ok {
 			return decBytes, ext, nil
 		}
+		extractionErr = fmt.Errorf("bytes da Data URL não correspondem a uma imagem PNG, JPEG ou WEBP")
 	}
 
 	// 2. Procura por URLs de imagens HTTP/HTTPS retornadas pela IA
 	if match := urlRegex.FindString(content); match != "" {
-		imgBytes, ext, err := c.downloadImageFromURLContext(ctx, match)
-		if err == nil {
-			return imgBytes, ext, nil
-		}
+		return c.downloadImageFromURLContext(ctx, match)
 	}
 
 	// 3. Fallback: Se for qualquer URL http/https simples na resposta
@@ -474,10 +492,7 @@ func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, conte
 		if endIdx := strings.IndexAny(urlStr, " \"')\n"); endIdx != -1 {
 			urlStr = urlStr[:endIdx]
 		}
-		imgBytes, ext, err := c.downloadImageFromURLContext(ctx, strings.TrimSpace(urlStr))
-		if err == nil {
-			return imgBytes, ext, nil
-		}
+		return c.downloadImageFromURLContext(ctx, strings.TrimSpace(urlStr))
 	}
 
 	// 4. Fallback se for uma string base64 pura
@@ -489,7 +504,15 @@ func (c *Client) extractImageBytesFromResponseContext(ctx context.Context, conte
 		}
 	}
 
+	if extractionErr != nil {
+		return nil, "", extractionErr
+	}
 	return nil, "", fmt.Errorf("não foi possível extrair os dados da imagem")
+}
+
+func isSupportedDataImageHeader(header string) bool {
+	header = strings.ToLower(strings.TrimSpace(header))
+	return strings.HasPrefix(header, "data:image/png;base64") || strings.HasPrefix(header, "data:image/jpeg;base64") || strings.HasPrefix(header, "data:image/jpg;base64") || strings.HasPrefix(header, "data:image/webp;base64")
 }
 
 // indexFold retorna o índice da primeira ocorrência case-insensitive de needle em haystack
@@ -521,6 +544,10 @@ func (c *Client) downloadImageFromURLContext(ctx context.Context, url string) ([
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	policy := c.imageURLPolicy()
+	if err := validateImageURL(ctx, url, policy); err != nil {
+		return nil, "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, "", err
@@ -529,7 +556,7 @@ func (c *Client) downloadImageFromURLContext(ctx context.Context, url string) ([
 	if err != nil {
 		return nil, "", err
 	}
-	resp, err := c.HTTPClient.Do(req)
+	resp, err := c.downloadHTTPClient().Do(req)
 	release()
 	if err != nil {
 		return nil, "", err
@@ -540,14 +567,9 @@ func (c *Client) downloadImageFromURLContext(ctx context.Context, url string) ([
 		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, nil)
 	}
 
-	// Limita o download para evitar estouro de memória com respostas gigantes
-	const maxDownloadBytes = 25 * 1024 * 1024 // 25 MB
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadBytes+1))
+	data, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxDownloadBytes, "imagem baixada")
 	if err != nil {
 		return nil, "", err
-	}
-	if len(data) > maxDownloadBytes {
-		return nil, "", fmt.Errorf("imagem baixada excede o limite de %d MB", maxDownloadBytes/(1024*1024))
 	}
 
 	ext, ok := detectImageType(data)
@@ -614,7 +636,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
 		return "", fmt.Errorf("failed to read API response: %w", err)
 	}

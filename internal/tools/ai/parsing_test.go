@@ -101,7 +101,7 @@ func TestDownloadImageFromURL_OKAndMagicBytes(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := &Client{HTTPClient: srv.Client()}
+	c := &Client{HTTPClient: srv.Client(), URLPolicy: ImageURLPolicy{AllowHTTP: true, AllowPrivateNetworks: true}}
 	got, ext, err := c.downloadImageFromURL(srv.URL)
 	if err != nil {
 		t.Fatalf("download falhou: %v", err)
@@ -117,7 +117,7 @@ func TestDownloadImageFromURL_RejeitaNaoImagem(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := &Client{HTTPClient: srv.Client()}
+	c := &Client{HTTPClient: srv.Client(), URLPolicy: ImageURLPolicy{AllowHTTP: true, AllowPrivateNetworks: true}}
 	if _, _, err := c.downloadImageFromURL(srv.URL); err == nil {
 		t.Error("esperava erro ao baixar conteúdo que não é imagem")
 	}
@@ -130,7 +130,7 @@ func TestDownloadImageFromURL_LimiteDeTamanho(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := &Client{HTTPClient: srv.Client()}
+	c := &Client{HTTPClient: srv.Client(), URLPolicy: ImageURLPolicy{AllowHTTP: true, AllowPrivateNetworks: true}}
 	if _, _, err := c.downloadImageFromURL(srv.URL); err == nil {
 		t.Error("esperava erro ao baixar imagem acima do limite")
 	}
@@ -142,7 +142,7 @@ func TestDownloadImageFromURL_StatusErro(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := &Client{HTTPClient: srv.Client()}
+	c := &Client{HTTPClient: srv.Client(), URLPolicy: ImageURLPolicy{AllowHTTP: true, AllowPrivateNetworks: true}}
 	if _, _, err := c.downloadImageFromURL(srv.URL); err == nil {
 		t.Error("esperava erro para status 404")
 	}

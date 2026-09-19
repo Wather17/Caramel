@@ -91,7 +91,8 @@ O erro final deve manter a causa e informar operação, modelo efetivo, classe e
 
 ### 9. Segurança e limites
 
-- Respostas JSON/texto e downloads têm limite de tamanho antes da alocação completa.
+- Envelopes JSON/texto de respostas têm limite de 4 MiB; downloads de imagens têm limite de 25 MiB e leitura limitada interrompe o corpo antes do decode/persistência.
+- URLs remotas de imagem exigem HTTPS, permitem no máximo três redirects e validam novamente cada destino; loopback, RFC1918, link-local, multicast e endpoints de metadados são bloqueados.
 - URLs remotas devem usar HTTPS por padrão, limitar redirects e bloquear loopback, RFC1918, link-local, multicast e endpoints de metadados; cada destino é revalidado.
 - Data URLs permitidas continuam sujeitas a MIME, tamanho e bytes mágicos.
 - Erros de limite, SSRF ou formato inválido não entram em retry/fallback.
