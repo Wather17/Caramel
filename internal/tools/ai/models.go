@@ -104,8 +104,12 @@ func ListModelsContext(ctx context.Context) ([]Model, error) {
 				return statusErrorWithHeaders(resp.StatusCode, resp.Header, body)
 			}
 
+			body, readErr := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta do catálogo")
+			if readErr != nil {
+				return readErr
+			}
 			var decoded modelsResponse
-			if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+			if err := json.Unmarshal(body, &decoded); err != nil {
 				return fmt.Errorf("falha ao interpretar resposta de modelos: %w", err)
 			}
 			page = decoded

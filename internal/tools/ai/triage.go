@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -89,7 +88,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da triagem")
 	if err != nil {
 		return nil, fmt.Errorf("falha ao ler resposta da triagem: %w", err)
 	}
