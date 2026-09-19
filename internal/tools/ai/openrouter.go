@@ -3,11 +3,13 @@ package ai
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,7 +36,16 @@ type Client struct {
 	DiagnosticWriter io.Writer
 	HTTPClient       *http.Client
 	URLPolicy        ImageURLPolicy
+	MetadataWriter   func(RequestMetadata)
 	limiter          *requestLimiter
+}
+
+// RequestMetadata expõe apenas metadados redigidos da resposta do provedor.
+type RequestMetadata struct {
+	Operation     string
+	CorrelationID string
+	RequestID     string
+	StatusCode    int
 }
 
 // NewClient cria uma nova instância do cliente OpenRouter
@@ -81,6 +92,47 @@ func (c *Client) debugf(format string, args ...interface{}) {
 		writer = io.Discard
 	}
 	_, _ = fmt.Fprintf(writer, format, args...)
+}
+
+func (c *Client) emitRequestMetadata(operation, correlationID string, resp *http.Response) {
+	if c == nil || resp == nil {
+		return
+	}
+	requestID := resp.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = resp.Header.Get("X-Request-Id")
+	}
+	if requestID == "" {
+		requestID = resp.Header.Get("Request-Id")
+	}
+	metadata := RequestMetadata{Operation: operation, CorrelationID: correlationID, RequestID: requestID, StatusCode: resp.StatusCode}
+	if c.MetadataWriter != nil {
+		c.MetadataWriter(metadata)
+	}
+	if requestID != "" {
+		c.debugf("[API] operação=%s status=%d request_id=%s correlação=%s\n", operation, resp.StatusCode, requestID, correlationID)
+	}
+}
+
+func imageCorrelationID(parts ...string) string {
+	hash := sha256.New()
+	for _, part := range parts {
+		_, _ = hash.Write([]byte(part))
+		_, _ = hash.Write([]byte{0})
+	}
+	return "caramel-" + fmt.Sprintf("%x", hash.Sum(nil))[:48]
+}
+
+func requestTrace(ctx context.Context, wrote *bool) context.Context {
+	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
+		if info.Err == nil {
+			*wrote = true
+		}
+	}})
+}
+
+func ambiguousImageError(operation, correlationID string, err error) error {
+	return &UnknownOutcomeError{Operation: operation, CorrelationID: correlationID, Err: err}
 }
 
 type ChatMessageContentPart struct {
@@ -149,6 +201,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	if err != nil {
 		return nil, "", err
 	}
+	correlationID := imageCorrelationID("colorize", model, promptText, dataURL)
 
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
@@ -186,6 +239,10 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
+	req.Header.Set("Idempotency-Key", correlationID)
+	req.Header.Set("X-Caramel-Correlation-ID", correlationID)
+	wroteRequest := false
+	req = req.WithContext(requestTrace(ctx, &wroteRequest))
 
 	release, err := c.acquireRequest(ctx)
 	if err != nil {
@@ -194,32 +251,45 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	resp, err := c.HTTPClient.Do(req)
 	release()
 	if err != nil {
-		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		transportErr := &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		if wroteRequest {
+			return nil, "", ambiguousImageError("image_colorization", correlationID, transportErr)
+		}
+		return nil, "", transportErr
 	}
+	c.emitRequestMetadata("image_colorization", correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
-		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
+		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao ler resposta da API: %w", err))
 	}
 
 	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
+		statusErr := statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
+		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= http.StatusInternalServerError {
+			return nil, "", ambiguousImageError("image_colorization", correlationID, statusErr)
+		}
+		return nil, "", statusErr
 	}
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta: %w", err)
+		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao decodificar JSON da resposta: %w", err))
 	}
 
 	if chatResp.Error != nil {
-		return nil, "", apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
+		apiErr := apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
+		if chatResp.Error.Code != http.StatusTooManyRequests && isRetryable(apiErr) {
+			return nil, "", ambiguousImageError("image_colorization", correlationID, apiErr)
+		}
+		return nil, "", apiErr
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
+		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("resposta vazia da API do OpenRouter"))
 	}
 
 	choice := chatResp.Choices[0]
@@ -260,9 +330,9 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
 		if extractionErr != nil {
-			return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", extractionErr)
+			return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", extractionErr))
 		}
-		return nil, "", fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err)
+		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err))
 	}
 
 	return outBytes, outExt, nil
@@ -288,6 +358,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	if aspect == "" {
 		aspect = "1:1"
 	}
+	correlationID := imageCorrelationID("generate", model, aspect, promptText)
 
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
@@ -322,6 +393,10 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
+	req.Header.Set("Idempotency-Key", correlationID)
+	req.Header.Set("X-Caramel-Correlation-ID", correlationID)
+	wroteRequest := false
+	req = req.WithContext(requestTrace(ctx, &wroteRequest))
 
 	release, err := c.acquireRequest(ctx)
 	if err != nil {
@@ -330,32 +405,45 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	resp, err := c.HTTPClient.Do(req)
 	release()
 	if err != nil {
-		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		transportErr := &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		if wroteRequest {
+			return nil, "", ambiguousImageError("image_generation", correlationID, transportErr)
+		}
+		return nil, "", transportErr
 	}
+	c.emitRequestMetadata("image_generation", correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
-		return nil, "", fmt.Errorf("falha ao ler resposta da API: %w", err)
+		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao ler resposta da API: %w", err))
 	}
 
 	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
+		statusErr := statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
+		if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= http.StatusInternalServerError {
+			return nil, "", ambiguousImageError("image_generation", correlationID, statusErr)
+		}
+		return nil, "", statusErr
 	}
 
 	var chatResp ChatCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, "", fmt.Errorf("falha ao decodificar JSON da resposta: %w", err)
+		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao decodificar JSON da resposta: %w", err))
 	}
 
 	if chatResp.Error != nil {
-		return nil, "", apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
+		apiErr := apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
+		if chatResp.Error.Code != http.StatusTooManyRequests && isRetryable(apiErr) {
+			return nil, "", ambiguousImageError("image_generation", correlationID, apiErr)
+		}
+		return nil, "", apiErr
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, "", fmt.Errorf("resposta vazia da API do OpenRouter")
+		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("resposta vazia da API do OpenRouter"))
 	}
 
 	choice := chatResp.Choices[0]
@@ -396,9 +484,9 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	outBytes, outExt, err := c.extractImageBytesFromResponseContext(ctx, rawContent)
 	if err != nil {
 		if extractionErr != nil {
-			return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", extractionErr)
+			return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", extractionErr))
 		}
-		return nil, "", fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err)
+		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err))
 	}
 
 	return outBytes, outExt, nil

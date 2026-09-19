@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -86,6 +88,9 @@ func (v *Vault) LookupGeneratedImage(ctx context.Context, key string) (Generated
 	if !info.Mode().IsRegular() {
 		return GeneratedImage{}, false, errors.New("arquivo da biblioteca de imagens não é regular")
 	}
+	if err := validateStoredImageFile(entry.Path, entry.Extension); err != nil {
+		return GeneratedImage{}, false, err
+	}
 	return entry, true, nil
 }
 
@@ -117,6 +122,9 @@ func (v *Vault) StoreGeneratedImage(ctx context.Context, key, name, prompt, exte
 	case "png", "jpg", "webp":
 	default:
 		return GeneratedImage{}, fmt.Errorf("formato de imagem não suportado pela biblioteca: %q", extension)
+	}
+	if err := validateStoredImageBytes(data, extension); err != nil {
+		return GeneratedImage{}, err
 	}
 
 	libraryDir := v.ImageLibraryDir()
@@ -178,6 +186,42 @@ func (v *Vault) StoreGeneratedImage(ctx context.Context, key, name, prompt, exte
 		Key: key, Name: name, Prompt: prompt, Extension: extension,
 		RelativePath: fileName, Path: path,
 	}, nil
+}
+
+func validateStoredImageFile(path, extension string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("não foi possível ler a imagem da biblioteca: %w", err)
+	}
+	defer file.Close()
+	header := make([]byte, 12)
+	if _, err := io.ReadFull(file, header); err != nil {
+		return errors.New("imagem da biblioteca está vazia ou truncada")
+	}
+	if !matchesStoredImageSignature(header, extension) {
+		return errors.New("bytes da imagem da biblioteca não correspondem à extensão")
+	}
+	return nil
+}
+
+func validateStoredImageBytes(data []byte, extension string) error {
+	if len(data) < 12 || !matchesStoredImageSignature(data, extension) {
+		return errors.New("bytes da imagem da biblioteca não correspondem à extensão")
+	}
+	return nil
+}
+
+func matchesStoredImageSignature(data []byte, extension string) bool {
+	switch extension {
+	case "png":
+		return len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
+	case "jpg":
+		return len(data) >= 3 && bytes.Equal(data[:3], []byte{0xff, 0xd8, 0xff})
+	case "webp":
+		return len(data) >= 12 && bytes.HasPrefix(data, []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP"))
+	default:
+		return false
+	}
 }
 
 func publishImageFile(tempPath, finalPath string, expectedHash [32]byte) error {

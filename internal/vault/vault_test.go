@@ -129,6 +129,37 @@ func TestGeneratedImageCacheRejectsUnsafeStoredPath(t *testing.T) {
 	}
 }
 
+func TestGeneratedImageCacheRejectsInvalidBytes(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	if _, err := v.StoreGeneratedImage(context.Background(), strings.Repeat("d", 64), "Bolo", "cake", "png", []byte("não é PNG")); err == nil {
+		t.Fatal("bytes inválidos não deveriam entrar na biblioteca")
+	}
+
+	key := strings.Repeat("e", 64)
+	path := filepath.Join(t.TempDir(), "image.png")
+	writeVaultPNG(t, path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := v.StoreGeneratedImage(context.Background(), key, "Bolo", "cake", "png", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry.Path, []byte("arquivo corrompido"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := v.LookupGeneratedImage(context.Background(), key); err == nil || found {
+		t.Fatalf("lookup deveria rejeitar bytes corrompidos: found=%v err=%v", found, err)
+	}
+}
+
 func TestImportInfersAndMergesFilenameMetadata(t *testing.T) {
 	t.Setenv("CARAMEL_VAULT_DIR", t.TempDir())
 	v, err := Open()
