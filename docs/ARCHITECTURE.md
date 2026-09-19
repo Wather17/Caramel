@@ -77,6 +77,10 @@ MVP. Na abertura da TUI, projetos antigos são migrados automaticamente para col
 materiais do vault, sem apagar os diretórios legados. Os comandos CLI existentes preservam
 seus próprios contratos e destinos.
 
+Chamadas a serviços externos seguem o contrato documentado em
+[`API_INTEGRATIONS.md`](API_INTEGRATIONS.md), que cobre transporte, classes de falha,
+retry, workers, rate limit, custo, saída, fallback, persistência e segurança.
+
 ---
 
 ## 🔄 Fluxo de Execução

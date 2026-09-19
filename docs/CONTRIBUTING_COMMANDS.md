@@ -11,6 +11,9 @@ nomenclatura, flags, documentação e estrutura de código.
 O contrato de saída e feedback está em [`docs/OUTPUT_UX.md`](OUTPUT_UX.md), com a matriz
 de cenários em [`docs/OUTPUT_UX_MATRIX.md`](OUTPUT_UX_MATRIX.md). Consulte esses documentos
 ao definir resumos, avisos, diagnósticos e formatos estruturados de um novo comando.
+Para qualquer comando que acesse um serviço externo, aplique também o contrato de
+[`docs/API_INTEGRATIONS.md`](API_INTEGRATIONS.md) antes de implementar transporte, retry,
+concorrência, parsing, fallback ou persistência.
 
 ---
 
