@@ -172,6 +172,7 @@ caramel colorize atividade.docx -i`,
 		successCount := 0
 		skipCount := 0
 		failCount := 0
+		attempts := ai.NewAttemptCollector()
 
 		batchResults, batchErr := ai.ColorizeImagesContext(cmd.Context(), selectedImages, ai.ColorizeOptions{
 			OutputDir:            targetDir,
@@ -184,6 +185,7 @@ caramel colorize atividade.docx -i`,
 			MaxWorkers:           imgWorkers,
 			Verbose:              renderer.Options().Verbose,
 			DiagnosticWriter:     cmd.ErrOrStderr(),
+			AttemptWriter:        attempts.Writer(),
 		}, func(event ai.BatchProgressEvent) {
 			if event.State == "started" && event.Index >= 0 && event.Index < len(selectedImages) {
 				renderer.Text("[%d/%d] colorizando %s\n", event.Index+1, event.Total, filepath.Base(selectedImages[event.Index]))
@@ -193,7 +195,7 @@ caramel colorize atividade.docx -i`,
 			return batchErr
 		}
 
-		for _, batch := range batchResults {
+		for index, batch := range batchResults {
 			imgPath := batch.Path
 			res := batch.Result
 			err := batch.Err
@@ -218,6 +220,7 @@ caramel colorize atividade.docx -i`,
 
 			successCount++
 			colorized = append(colorized, *res)
+			attempts.AnnotateItem(index+1, res.ColorizedPath, false)
 		}
 
 		status := output.StateSuccess
@@ -231,6 +234,7 @@ caramel colorize atividade.docx -i`,
 			Data:     colorized,
 			Outputs:  []string{targetDir},
 			Warnings: warnings,
+			Attempts: attempts.Snapshot(),
 		})
 	},
 }

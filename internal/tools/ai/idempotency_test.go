@@ -31,6 +31,8 @@ func TestGenerateImageMarcaResultadoAmbiguoEm5xxSemRepetir(t *testing.T) {
 	t.Cleanup(func() { ai.OpenRouterAPIURL = oldURL })
 
 	client, _ := ai.NewClient("sk-test")
+	var attempt ai.AttemptMetadata
+	client.AttemptWriter = func(value ai.AttemptMetadata) { attempt = value }
 	_, _, err := client.GenerateImage("bolo", "modelo", "1:1")
 	var ambiguous *ai.UnknownOutcomeError
 	if !errors.As(err, &ambiguous) || atomic.LoadInt32(&requests) != 1 {
@@ -38,6 +40,9 @@ func TestGenerateImageMarcaResultadoAmbiguoEm5xxSemRepetir(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown_outcome") || !strings.Contains(err.Error(), "não será repetida") {
 		t.Fatalf("mensagem deveria orientar a não repetir: %v", err)
+	}
+	if attempt.ErrorClass != "unknown_outcome" {
+		t.Fatalf("evento deveria classificar resultado ambíguo: %+v", attempt)
 	}
 }
 

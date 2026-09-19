@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"caramel/internal/tools/ai"
 	"caramel/internal/vault"
@@ -32,7 +33,16 @@ func executeImageGeneration(
 	refreshCache bool,
 	client *ai.Client,
 	onProgress ai.HarnessProgressFunc,
+	attemptCollectors ...*ai.AttemptCollector,
 ) ([]ai.GenerationItem, []string, error) {
+	var attempts *ai.AttemptCollector
+	if len(attemptCollectors) > 0 {
+		attempts = attemptCollectors[0]
+	}
+	if client != nil && attempts != nil {
+		client.AttemptWriter = attempts.Writer()
+		cfg.AttemptWriter = attempts.Writer()
+	}
 	if cache == nil {
 		if client == nil {
 			return nil, nil, errMissingOpenRouterKey
@@ -138,6 +148,15 @@ func executeImageGeneration(
 			item.ImagePath = destination
 			item.Format = group.cached.Extension
 			item.Reused = true
+			if attempts != nil {
+				now := time.Now().UTC()
+				attempts.Add(ai.AttemptMetadata{
+					Operation: "image_generation", Role: "image", ItemIndex: originalIndex + 1,
+					ItemName: item.Name, ArtifactPath: destination, Reused: true, Status: "reused",
+					EffectiveModel: item.Model,
+					StartedAt:      now, FinishedAt: now,
+				})
+			}
 			groupResults = append(groupResults, item)
 		}
 		if copyFailed {

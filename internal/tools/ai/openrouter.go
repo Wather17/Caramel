@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -37,15 +38,21 @@ type Client struct {
 	HTTPClient       *http.Client
 	URLPolicy        ImageURLPolicy
 	MetadataWriter   func(RequestMetadata)
+	AttemptWriter    func(AttemptMetadata)
+	metadataMu       sync.Mutex
+	attempts         map[string]int
 	limiter          *requestLimiter
 }
 
 // RequestMetadata expõe apenas metadados redigidos da resposta do provedor.
 type RequestMetadata struct {
 	Operation     string
+	Model         string
 	CorrelationID string
 	RequestID     string
 	StatusCode    int
+	RetryAfterMS  int64
+	Usage         UsageMetadata
 }
 
 // NewClient cria uma nova instância do cliente OpenRouter
@@ -95,23 +102,61 @@ func (c *Client) debugf(format string, args ...interface{}) {
 }
 
 func (c *Client) emitRequestMetadata(operation, correlationID string, resp *http.Response) {
+	c.emitRequestMetadataWithModel(operation, "", correlationID, resp)
+}
+
+func (c *Client) emitRequestMetadataWithModel(operation, model, correlationID string, resp *http.Response) {
 	if c == nil || resp == nil {
 		return
 	}
-	requestID := resp.Header.Get("X-Request-ID")
-	if requestID == "" {
-		requestID = resp.Header.Get("X-Request-Id")
-	}
-	if requestID == "" {
-		requestID = resp.Header.Get("Request-Id")
-	}
-	metadata := RequestMetadata{Operation: operation, CorrelationID: correlationID, RequestID: requestID, StatusCode: resp.StatusCode}
+	requestID := firstRequestID(resp.Header)
+	metadata := RequestMetadata{Operation: operation, Model: model, CorrelationID: correlationID, RequestID: requestID, StatusCode: resp.StatusCode, RetryAfterMS: retryAfterMilliseconds(resp.Header.Get("Retry-After"))}
 	if c.MetadataWriter != nil {
 		c.MetadataWriter(metadata)
 	}
 	if requestID != "" {
 		c.debugf("[API] operação=%s status=%d request_id=%s correlação=%s\n", operation, resp.StatusCode, requestID, correlationID)
 	}
+}
+
+func firstRequestID(headers http.Header) string {
+	for _, key := range []string{"X-Request-ID", "X-Request-Id", "Request-Id"} {
+		if value := strings.TrimSpace(headers.Get(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func (c *Client) nextAttempt(correlationID string) int {
+	if c == nil {
+		return 1
+	}
+	c.metadataMu.Lock()
+	defer c.metadataMu.Unlock()
+	if c.attempts == nil {
+		c.attempts = make(map[string]int)
+	}
+	c.attempts[correlationID]++
+	return c.attempts[correlationID]
+}
+
+func (c *Client) emitAttemptMetadata(ctx context.Context, event AttemptMetadata) {
+	writer := attemptWriterFromContext(ctx)
+	if writer == nil && c != nil {
+		writer = c.AttemptWriter
+	}
+	if writer == nil {
+		return
+	}
+	writer(event.Redacted())
+}
+
+func retryAfterMilliseconds(header string) int64 {
+	if delay, ok := parseRetryAfter(header, retryNow()); ok {
+		return delay.Milliseconds()
+	}
+	return 0
 }
 
 func imageCorrelationID(parts ...string) string {
@@ -180,6 +225,7 @@ type ChatCompletionResponse struct {
 		Message string `json:"message"`
 		Code    int    `json:"code"`
 	} `json:"error,omitempty"`
+	Usage UsageMetadata `json:"usage,omitempty"`
 }
 
 // ColorizeImage envia uma imagem local usando um contexto de fundo.
@@ -202,6 +248,18 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 		return nil, "", err
 	}
 	correlationID := imageCorrelationID("colorize", model, promptText, dataURL)
+	attemptEvent := AttemptMetadata{
+		Operation: "image_colorization", Role: "image", RequestedModel: model, EffectiveModel: model,
+		Attempt: c.nextAttempt(correlationID), CorrelationID: correlationID, StartedAt: time.Now().UTC(), Status: "failure",
+	}
+	defer func() {
+		if attemptEvent.Status != "success" && attemptEvent.ErrorClass == "" {
+			attemptEvent.ErrorClass = "unknown"
+		}
+		attemptEvent.FinishedAt = time.Now().UTC()
+		attemptEvent.DurationMS = attemptEvent.FinishedAt.Sub(attemptEvent.StartedAt).Milliseconds()
+		c.emitAttemptMetadata(ctx, attemptEvent)
+	}()
 
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
@@ -252,12 +310,24 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	release()
 	if err != nil {
 		transportErr := &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		attemptEvent.ErrorClass = ErrorClass(transportErr)
 		if wroteRequest {
+			attemptEvent.ErrorClass = "unknown_outcome"
 			return nil, "", ambiguousImageError("image_colorization", correlationID, transportErr)
 		}
 		return nil, "", transportErr
 	}
-	c.emitRequestMetadata("image_colorization", correlationID, resp)
+	attemptEvent.StatusCode = resp.StatusCode
+	attemptEvent.RequestID = firstRequestID(resp.Header)
+	attemptEvent.RetryAfterMS = retryAfterMilliseconds(resp.Header.Get("Retry-After"))
+	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= http.StatusInternalServerError {
+		attemptEvent.ErrorClass = "unknown_outcome"
+	} else if resp.StatusCode == http.StatusTooManyRequests {
+		attemptEvent.ErrorClass = "transient"
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		attemptEvent.ErrorClass = "permanent"
+	}
+	c.emitRequestMetadataWithModel("image_colorization", model, correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
@@ -279,6 +349,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao decodificar JSON da resposta: %w", err))
 	}
+	attemptEvent.Usage = chatResp.Usage
 
 	if chatResp.Error != nil {
 		apiErr := apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
@@ -301,6 +372,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
 				bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, imgItem.ImageURL.URL)
 				if err == nil {
+					attemptEvent.Status = "success"
 					return bytes, ext, nil
 				}
 				extractionErr = err
@@ -316,6 +388,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 					if urlStr, ok := imgURLObj["url"].(string); ok {
 						bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, urlStr)
 						if err == nil {
+							attemptEvent.Status = "success"
 							return bytes, ext, nil
 						}
 						extractionErr = err
@@ -334,6 +407,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 		}
 		return nil, "", ambiguousImageError("image_colorization", correlationID, fmt.Errorf("falha ao extrair imagem da resposta da IA: %w", err))
 	}
+	attemptEvent.Status = "success"
 
 	return outBytes, outExt, nil
 }
@@ -359,6 +433,18 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 		aspect = "1:1"
 	}
 	correlationID := imageCorrelationID("generate", model, aspect, promptText)
+	attemptEvent := AttemptMetadata{
+		Operation: "image_generation", Role: "image", RequestedModel: model, EffectiveModel: model,
+		Attempt: c.nextAttempt(correlationID), CorrelationID: correlationID, StartedAt: time.Now().UTC(), Status: "failure",
+	}
+	defer func() {
+		if attemptEvent.Status != "success" && attemptEvent.ErrorClass == "" {
+			attemptEvent.ErrorClass = "unknown"
+		}
+		attemptEvent.FinishedAt = time.Now().UTC()
+		attemptEvent.DurationMS = attemptEvent.FinishedAt.Sub(attemptEvent.StartedAt).Milliseconds()
+		c.emitAttemptMetadata(ctx, attemptEvent)
+	}()
 
 	reqPayload := ChatCompletionRequest{
 		Model:      model,
@@ -406,12 +492,24 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	release()
 	if err != nil {
 		transportErr := &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
+		attemptEvent.ErrorClass = ErrorClass(transportErr)
 		if wroteRequest {
+			attemptEvent.ErrorClass = "unknown_outcome"
 			return nil, "", ambiguousImageError("image_generation", correlationID, transportErr)
 		}
 		return nil, "", transportErr
 	}
-	c.emitRequestMetadata("image_generation", correlationID, resp)
+	attemptEvent.StatusCode = resp.StatusCode
+	attemptEvent.RequestID = firstRequestID(resp.Header)
+	attemptEvent.RetryAfterMS = retryAfterMilliseconds(resp.Header.Get("Retry-After"))
+	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= http.StatusInternalServerError {
+		attemptEvent.ErrorClass = "unknown_outcome"
+	} else if resp.StatusCode == http.StatusTooManyRequests {
+		attemptEvent.ErrorClass = "transient"
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		attemptEvent.ErrorClass = "permanent"
+	}
+	c.emitRequestMetadataWithModel("image_generation", model, correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
@@ -433,6 +531,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao decodificar JSON da resposta: %w", err))
 	}
+	attemptEvent.Usage = chatResp.Usage
 
 	if chatResp.Error != nil {
 		apiErr := apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
@@ -455,6 +554,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 			if imgItem.ImageURL != nil && imgItem.ImageURL.URL != "" {
 				bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, imgItem.ImageURL.URL)
 				if err == nil {
+					attemptEvent.Status = "success"
 					return bytes, ext, nil
 				}
 				extractionErr = err
@@ -470,6 +570,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 					if urlStr, ok := imgURLObj["url"].(string); ok {
 						bytes, ext, err := c.extractImageBytesFromResponseContext(ctx, urlStr)
 						if err == nil {
+							attemptEvent.Status = "success"
 							return bytes, ext, nil
 						}
 						extractionErr = err
@@ -488,6 +589,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 		}
 		return nil, "", ambiguousImageError("image_generation", correlationID, fmt.Errorf("falha ao extrair imagem gerada da resposta da IA: %w", err))
 	}
+	attemptEvent.Status = "success"
 
 	return outBytes, outExt, nil
 }
@@ -702,6 +804,19 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize request: %w", err)
 	}
+	correlationID := imageCorrelationID("analyze", model, routineText, promptText)
+	attemptEvent := AttemptMetadata{
+		Operation: "text_analysis", Role: "text", RequestedModel: model, EffectiveModel: model,
+		Attempt: c.nextAttempt(correlationID), CorrelationID: correlationID, StartedAt: time.Now().UTC(), Status: "failure",
+	}
+	defer func() {
+		if attemptEvent.Status != "success" && attemptEvent.ErrorClass == "" {
+			attemptEvent.ErrorClass = "unknown"
+		}
+		attemptEvent.FinishedAt = time.Now().UTC()
+		attemptEvent.DurationMS = attemptEvent.FinishedAt.Sub(attemptEvent.StartedAt).Milliseconds()
+		c.emitAttemptMetadata(ctx, attemptEvent)
+	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -712,6 +827,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
+	req.Header.Set("X-Caramel-Correlation-ID", correlationID)
 
 	release, err := c.acquireRequest(ctx)
 	if err != nil {
@@ -720,8 +836,19 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	resp, err := c.HTTPClient.Do(req)
 	release()
 	if err != nil {
-		return "", &retryableError{err: fmt.Errorf("failed to contact OpenRouter API: %w", err)}
+		transportErr := &retryableError{err: fmt.Errorf("failed to contact OpenRouter API: %w", err)}
+		attemptEvent.ErrorClass = ErrorClass(transportErr)
+		return "", transportErr
 	}
+	attemptEvent.StatusCode = resp.StatusCode
+	attemptEvent.RequestID = firstRequestID(resp.Header)
+	attemptEvent.RetryAfterMS = retryAfterMilliseconds(resp.Header.Get("Retry-After"))
+	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+		attemptEvent.ErrorClass = "transient"
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		attemptEvent.ErrorClass = "permanent"
+	}
+	c.emitRequestMetadataWithModel("text_analysis", model, correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
@@ -739,6 +866,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return "", fmt.Errorf("failed to decode JSON response: %w", err)
 	}
+	attemptEvent.Usage = chatResp.Usage
 
 	if chatResp.Error != nil {
 		return "", apiError(fmt.Sprintf("OpenRouter API error: %s", chatResp.Error.Message), chatResp.Error.Code)
@@ -747,6 +875,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	if len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("empty response from OpenRouter API")
 	}
+	attemptEvent.Status = "success"
 
 	choice := chatResp.Choices[0]
 	rawContent := fmt.Sprintf("%v", choice.Message.Content)

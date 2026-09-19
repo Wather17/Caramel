@@ -23,6 +23,7 @@ type ColorizeOptions struct {
 	MaxWorkers           int       // Número máximo de imagens processadas em paralelo (0 = adaptativo)
 	Verbose              bool      // Exibe logs detalhados de depuração
 	DiagnosticWriter     io.Writer // Canal para diagnóstico verbose
+	AttemptWriter        func(AttemptMetadata)
 }
 
 // ColorizeResult contém o relatório do processo de coloração
@@ -59,6 +60,7 @@ func ColorizeImagesContext(ctx context.Context, imagePaths []string, opts Colori
 	sharedClient, clientErr := NewClient(opts.APIKey)
 	if clientErr == nil {
 		sharedClient.Verbose = opts.Verbose
+		sharedClient.AttemptWriter = opts.AttemptWriter
 		if opts.DiagnosticWriter != nil {
 			sharedClient.DiagnosticWriter = opts.DiagnosticWriter
 		}
@@ -66,6 +68,24 @@ func ColorizeImagesContext(ctx context.Context, imagePaths []string, opts Colori
 	results := make([]ColorizeBatchResult, len(imagePaths))
 	itemErrors, batchErr := ExecuteBatchContext(ctx, len(imagePaths), opts.MaxWorkers, func(workCtx context.Context, index int) error {
 		path := imagePaths[index]
+		imageCandidates := ModelCandidates(opts.Model, DefaultModel, opts.ModelFallbacks)
+		triageCandidates := ModelCandidates(opts.TriageModel, DefaultTriageModel, opts.TriageModelFallbacks)
+		if opts.AttemptWriter != nil {
+			workCtx = WithAttemptWriter(workCtx, func(event AttemptMetadata) {
+				event.ItemIndex = index + 1
+				event.ItemName = filepath.Base(path)
+				candidate := event.RequestedModel
+				if event.Role == "triage" {
+					event.RequestedModel = triageCandidates[0]
+					event.FallbackOrdinal = fallbackOrdinal(candidate, triageCandidates)
+				} else {
+					event.RequestedModel = imageCandidates[0]
+					event.FallbackOrdinal = fallbackOrdinal(candidate, imageCandidates)
+				}
+				event.EffectiveModel = candidate
+				opts.AttemptWriter(event)
+			})
+		}
 		var result *ColorizeResult
 		var err error
 		if clientErr != nil {

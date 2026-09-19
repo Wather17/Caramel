@@ -17,10 +17,12 @@ import (
 	"strings"
 	"time"
 
+	"caramel/internal/tools/ai"
+
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -63,6 +65,7 @@ type Run struct {
 	Error        string
 	StartedAt    time.Time
 	FinishedAt   *time.Time
+	Attempts     []ai.AttemptMetadata
 }
 
 // SearchOptions define a busca na inbox/biblioteca.
@@ -258,6 +261,12 @@ CREATE TABLE IF NOT EXISTS run_outputs (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE RESTRICT,
     PRIMARY KEY(run_id, material_id)
+);
+CREATE TABLE IF NOT EXISTS run_attempts (
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL,
+    PRIMARY KEY(run_id, sequence)
 );
 CREATE TABLE IF NOT EXISTS material_derivations (
     parent_id TEXT NOT NULL REFERENCES materials(id) ON DELETE RESTRICT,
@@ -570,6 +579,11 @@ func (v *Vault) StartRun(ctx context.Context, collectionID, operation string, op
 
 // FinishRun fecha a execução e registra seus outputs.
 func (v *Vault) FinishRun(ctx context.Context, runID, status string, outputs []string, runErr error) error {
+	return v.FinishRunWithAttempts(ctx, runID, status, outputs, runErr, nil)
+}
+
+// FinishRunWithAttempts fecha a execução e registra metadados redigidos de API.
+func (v *Vault) FinishRunWithAttempts(ctx context.Context, runID, status string, outputs []string, runErr error, attempts []ai.AttemptMetadata) error {
 	finished := nowString()
 	message := ""
 	if runErr != nil {
@@ -578,7 +592,67 @@ func (v *Vault) FinishRun(ctx context.Context, runID, status string, outputs []s
 	if _, err := v.db.ExecContext(ctx, "UPDATE runs SET status=?, error=?, finished_at=? WHERE id=?", status, message, finished, runID); err != nil {
 		return err
 	}
-	return v.addRunMaterials(ctx, "run_outputs", runID, outputs)
+	if err := v.addRunMaterials(ctx, "run_outputs", runID, outputs); err != nil {
+		return err
+	}
+	return v.RecordRunAttempts(ctx, runID, attempts)
+}
+
+// RecordRunAttempts substitui os eventos de uma execução por uma sequência
+// redigida e determinística. Uma lista vazia remove somente eventos antigos.
+func (v *Vault) RecordRunAttempts(ctx context.Context, runID string, attempts []ai.AttemptMetadata) error {
+	if v == nil || v.db == nil {
+		return errors.New("vault não está aberto")
+	}
+	tx, err := v.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "DELETE FROM run_attempts WHERE run_id=?", runID); err != nil {
+		return err
+	}
+	for index, attempt := range attempts {
+		attempt = attempt.Redacted()
+		sequence := attempt.Sequence
+		if sequence <= 0 {
+			sequence = int64(index + 1)
+		}
+		attempt.Sequence = sequence
+		data, err := json.Marshal(attempt)
+		if err != nil {
+			return fmt.Errorf("falha ao serializar metadado de tentativa: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO run_attempts(run_id,sequence,metadata_json) VALUES (?,?,?)", runID, sequence, string(data)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// RunAttempts lê eventos de uma execução. Bancos antigos retornam uma lista vazia.
+func (v *Vault) RunAttempts(ctx context.Context, runID string) ([]ai.AttemptMetadata, error) {
+	if v == nil || v.db == nil {
+		return nil, errors.New("vault não está aberto")
+	}
+	rows, err := v.db.QueryContext(ctx, "SELECT metadata_json FROM run_attempts WHERE run_id=? ORDER BY sequence", runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []ai.AttemptMetadata
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var attempt ai.AttemptMetadata
+		if err := json.Unmarshal([]byte(raw), &attempt); err != nil {
+			return nil, fmt.Errorf("falha ao ler metadado de tentativa: %w", err)
+		}
+		result = append(result, attempt.Redacted())
+	}
+	return result, rows.Err()
 }
 
 // AddDerivation registra a proveniência automática entre materiais.

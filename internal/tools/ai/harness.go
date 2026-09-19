@@ -42,6 +42,7 @@ type HarnessConfig struct {
 	ImageFallbacks []string
 	Aspect         string // Proporção das imagens geradas (ex: "1:1", "16:9"; vazio = 1:1)
 	Verbose        bool
+	AttemptWriter  func(AttemptMetadata)
 }
 
 // HarnessProgressEvent transporta informações em tempo real do progresso
@@ -109,6 +110,15 @@ func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Cl
 	}
 
 	modelCandidates := ModelCandidates(cfg.TextModel, DefaultTextModel, cfg.TextFallbacks)
+	if cfg.AttemptWriter != nil {
+		ctx = WithAttemptWriter(ctx, func(event AttemptMetadata) {
+			candidate := event.RequestedModel
+			event.RequestedModel = modelCandidates[0]
+			event.EffectiveModel = candidate
+			event.FallbackOrdinal = fallbackOrdinal(candidate, modelCandidates)
+			cfg.AttemptWriter(event)
+		})
+	}
 
 	var responseJSON string
 	var items []GenerationItem
@@ -208,6 +218,9 @@ func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem
 	if len(items) == 0 {
 		return items, nil
 	}
+	if client != nil && cfg.AttemptWriter != nil {
+		client.AttemptWriter = cfg.AttemptWriter
+	}
 
 	targetDir := cfg.OutputDir
 	if targetDir == "" {
@@ -223,9 +236,20 @@ func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem
 	copy(results, items)
 	_, batchErr := ExecuteBatchContext(ctx, total, cfg.MaxWorkers, func(workCtx context.Context, idx int) error {
 		item := results[idx]
+		imageCandidates := ModelCandidates(cfg.ImageModel, DefaultModel, cfg.ImageFallbacks)
+		if cfg.AttemptWriter != nil {
+			workCtx = WithAttemptWriter(workCtx, func(event AttemptMetadata) {
+				event.ItemIndex = item.Index
+				event.ItemName = item.Name
+				candidate := event.RequestedModel
+				event.RequestedModel = imageCandidates[0]
+				event.EffectiveModel = candidate
+				event.FallbackOrdinal = fallbackOrdinal(candidate, imageCandidates)
+				cfg.AttemptWriter(event)
+			})
+		}
 		var imgBytes []byte
 		var ext string
-		imageCandidates := ModelCandidates(cfg.ImageModel, DefaultModel, cfg.ImageFallbacks)
 		effectiveModel, genErr := ExecuteModelChainContext(workCtx, imageCandidates, 3, func(candidate string) error {
 			var e error
 			imgBytes, ext, e = client.GenerateImageContext(workCtx, item.Prompt, candidate, cfg.Aspect)

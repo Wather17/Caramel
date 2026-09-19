@@ -82,10 +82,12 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 		_ = s.Project.FinishRun(run.ID, "failed", nil, err)
 		return nil, err
 	}
+	attempts := ai.NewAttemptCollector()
+	client.AttemptWriter = attempts.Writer()
 	harnessCfg := ai.HarnessConfig{
 		Items: opts.Items, Theme: opts.Theme, Count: opts.Count, Style: opts.Style,
 		OutputDir: outputDir, TextModel: opts.TextModel, TextFallbacks: cfg.ModelTextFallbacks,
-		ImageModel: opts.ImageModel, ImageFallbacks: cfg.ModelImageFallbacks, Aspect: opts.Aspect,
+		ImageModel: opts.ImageModel, ImageFallbacks: cfg.ModelImageFallbacks, Aspect: opts.Aspect, AttemptWriter: attempts.Writer(),
 	}
 	s.emit(ProgressEvent{Step: "synthesizing", Message: "Sintetizando prompts..."})
 	items, err := ai.SynthesizePromptsContext(ctx, harnessCfg, client)
@@ -94,11 +96,11 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Project.FinishRun(run.ID, status, nil, err)
+		_ = s.Project.FinishRunWithAttempts(run.ID, status, nil, err, attempts.Snapshot())
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		_ = s.Project.FinishRun(run.ID, "canceled", nil, err)
+		_ = s.Project.FinishRunWithAttempts(run.ID, "canceled", nil, err, attempts.Snapshot())
 		return nil, err
 	}
 
@@ -119,16 +121,17 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 			continue
 		}
 		artifacts = append(artifacts, artifact)
+		attempts.AnnotateItem(result.Index, result.ImagePath, result.Reused)
 	}
 	if err != nil {
 		status := "failed"
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Project.FinishRun(run.ID, status, artifacts, err)
+		_ = s.Project.FinishRunWithAttempts(run.ID, status, artifacts, err, attempts.Snapshot())
 		return artifacts, err
 	}
-	if err := s.Project.FinishRun(run.ID, "completed", artifacts, nil); err != nil {
+	if err := s.Project.FinishRunWithAttempts(run.ID, "completed", artifacts, nil, attempts.Snapshot()); err != nil {
 		return artifacts, err
 	}
 	s.emit(ProgressEvent{Step: "done", Current: len(artifacts), Total: len(results), Message: fmt.Sprintf("%d imagem(ns) gerada(s)", len(artifacts))})
@@ -167,6 +170,7 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 		return nil, err
 	}
 	outputDir := s.Project.OutputDir("colorized", run.ID)
+	attempts := ai.NewAttemptCollector()
 	artifacts := make([]workspace.Artifact, 0)
 	paths := make([]string, 0, len(selected))
 	for _, asset := range selected {
@@ -176,6 +180,7 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 		OutputDir: outputDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
 		ModelFallbacks: cfg.ModelImageFallbacks, TriageModel: opts.TriageModel,
 		TriageModelFallbacks: cfg.ModelTriageFallbacks, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+		AttemptWriter: attempts.Writer(),
 	}, func(event ai.BatchProgressEvent) {
 		if event.State == "started" && event.Index >= 0 && event.Index < len(selected) {
 			asset := selected[event.Index]
@@ -203,6 +208,7 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 			continue
 		}
 		artifacts = append(artifacts, artifact)
+		attempts.AnnotateItem(i+1, batch.Result.ColorizedPath, false)
 		s.emit(ProgressEvent{Step: "saved", Current: i + 1, Total: len(selected), Message: asset.Name, Path: batch.Result.ColorizedPath})
 	}
 	if batchErr != nil {
@@ -210,15 +216,15 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Project.FinishRun(run.ID, status, artifacts, batchErr)
+		_ = s.Project.FinishRunWithAttempts(run.ID, status, artifacts, batchErr, attempts.Snapshot())
 		return artifacts, batchErr
 	}
 	if len(failures) > 0 {
 		err = fmt.Errorf("%d imagem(ns) falharam: %s", len(failures), strings.Join(failures, "; "))
-		_ = s.Project.FinishRun(run.ID, "failed", artifacts, err)
+		_ = s.Project.FinishRunWithAttempts(run.ID, "failed", artifacts, err, attempts.Snapshot())
 		return artifacts, err
 	}
-	if err := s.Project.FinishRun(run.ID, "completed", artifacts, nil); err != nil {
+	if err := s.Project.FinishRunWithAttempts(run.ID, "completed", artifacts, nil, attempts.Snapshot()); err != nil {
 		return artifacts, err
 	}
 	s.emit(ProgressEvent{Step: "done", Current: len(selected), Total: len(selected), Message: fmt.Sprintf("%d imagem(ns) processada(s)", len(artifacts))})

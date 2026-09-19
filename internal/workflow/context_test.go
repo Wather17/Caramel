@@ -40,6 +40,7 @@ func TestImageServiceGeneratePropagaCancelamentoNaSintese(t *testing.T) {
 	t.Cleanup(func() { ai.OpenRouterAPIURL = oldURL })
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	resultCh := make(chan error, 1)
 	go func() {
 		_, runErr := (&ImageService{Project: project}).Generate(ctx, ImageOptions{Items: []string{"bolo"}})
@@ -98,6 +99,7 @@ func TestVaultImageServiceGeneratePropagaCancelamentoNaSintese(t *testing.T) {
 	t.Cleanup(func() { ai.OpenRouterAPIURL = oldURL })
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	resultCh := make(chan error, 1)
 	go func() {
 		_, runErr := (&VaultImageService{Vault: v}).Generate(ctx, ImageOptions{Items: []string{"bolo"}})
