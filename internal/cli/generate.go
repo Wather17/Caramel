@@ -195,17 +195,19 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		}
 
 		harnessCfg := ai.HarnessConfig{
-			Items:       rawItems,
-			Theme:       genTheme,
-			Count:       genCount,
-			Style:       genStyle,
-			CustomStyle: genCustomStyle,
-			OutputDir:   targetDir,
-			MaxWorkers:  genWorkers,
-			TextModel:   textModel,
-			ImageModel:  imageModel,
-			Aspect:      genAspect,
-			Verbose:     renderer.Options().Verbose,
+			Items:          rawItems,
+			Theme:          genTheme,
+			Count:          genCount,
+			Style:          genStyle,
+			CustomStyle:    genCustomStyle,
+			OutputDir:      targetDir,
+			MaxWorkers:     genWorkers,
+			TextModel:      textModel,
+			TextFallbacks:  cfg.ModelTextFallbacks,
+			ImageModel:     imageModel,
+			ImageFallbacks: cfg.ModelImageFallbacks,
+			Aspect:         genAspect,
+			Verbose:        renderer.Options().Verbose,
 		}
 
 		progressFunc := func(ev ai.HarnessProgressEvent) {

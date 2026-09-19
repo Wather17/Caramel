@@ -24,21 +24,24 @@ type GenerationItem struct {
 	Format    string `json:"format,omitempty"`
 	Reused    bool   `json:"reused"`
 	Error     string `json:"error,omitempty"`
+	Model     string `json:"model,omitempty"`
 }
 
 // HarnessConfig contém todas as configurações do pipeline em lote
 type HarnessConfig struct {
-	Items       []string
-	Theme       string
-	Count       int
-	Style       string
-	CustomStyle string
-	OutputDir   string
-	MaxWorkers  int
-	TextModel   string
-	ImageModel  string
-	Aspect      string // Proporção das imagens geradas (ex: "1:1", "16:9"; vazio = 1:1)
-	Verbose     bool
+	Items          []string
+	Theme          string
+	Count          int
+	Style          string
+	CustomStyle    string
+	OutputDir      string
+	MaxWorkers     int
+	TextModel      string
+	TextFallbacks  []string
+	ImageModel     string
+	ImageFallbacks []string
+	Aspect         string // Proporção das imagens geradas (ex: "1:1", "16:9"; vazio = 1:1)
+	Verbose        bool
 }
 
 // HarnessProgressEvent transporta informações em tempo real do progresso
@@ -105,33 +108,35 @@ func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Cl
 		return nil, fmt.Errorf("nenhum item ou tema informado para geração de prompts")
 	}
 
-	model := cfg.TextModel
-	if model == "" {
-		model = DefaultTextModel
-	}
+	modelCandidates := ModelCandidates(cfg.TextModel, DefaultTextModel, cfg.TextFallbacks)
 
 	var responseJSON string
-	err := retryWithBackoffContext(ctx, 3, func() error {
-		var analyzeErr error
-		responseJSON, analyzeErr = client.AnalyzeRoutineContext(ctx, inputText, synthesizerPrompt, model)
-		return analyzeErr
+	var items []GenerationItem
+	effectiveModel, err := ExecuteModelChainContext(ctx, modelCandidates, 3, func(candidate string) error {
+		var err error
+		responseJSON, err = client.AnalyzeRoutineContext(ctx, inputText, synthesizerPrompt, candidate)
+		if err != nil {
+			return err
+		}
+		structuredJSON, parseErr := ParseStructuredArray(responseJSON, "síntese de prompts", candidate)
+		if parseErr != nil {
+			return parseErr
+		}
+		var candidateItems []GenerationItem
+		if err := json.Unmarshal(structuredJSON, &candidateItems); err != nil {
+			return newContractOutputError("síntese de prompts", candidate, StructuredJSONArray, responseJSON, "itens com tipos incompatíveis")
+		}
+		if err := validateGenerationItems(candidateItems, candidate, responseJSON); err != nil {
+			return err
+		}
+		items = candidateItems
+		return nil
+	}, func(event ModelFallbackEvent) {
+		client.debugf("⚠️ [FALLBACK] síntese: %s -> %s (%v)\n", event.From, event.To, event.Error)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("falha ao sintetizar prompts com a IA: %w", err)
 	}
-
-	structuredJSON, err := ParseStructuredArray(responseJSON, "síntese de prompts", model)
-	if err != nil {
-		return nil, fmt.Errorf("falha ao interpretar lista JSON gerada pela IA: %w", err)
-	}
-	var items []GenerationItem
-	if err := json.Unmarshal(structuredJSON, &items); err != nil {
-		return nil, fmt.Errorf("falha ao validar lista JSON gerada pela IA: %w", newContractOutputError("síntese de prompts", model, StructuredJSONArray, responseJSON, "itens com tipos incompatíveis"))
-	}
-	if err := validateGenerationItems(items, model, responseJSON); err != nil {
-		return nil, fmt.Errorf("falha ao validar lista JSON gerada pela IA: %w", err)
-	}
-
 	// Normaliza índices e slugs
 	for i := range items {
 		items[i].Index = i + 1
@@ -139,6 +144,7 @@ func SynthesizePromptsContext(ctx context.Context, cfg HarnessConfig, client *Cl
 			items[i].Slug = SanitizeSlug(items[i].Index, items[i].Name)
 		}
 		items[i].Status = "pending"
+		items[i].Model = effectiveModel
 	}
 
 	return items, nil
@@ -219,16 +225,20 @@ func ExecuteGenerationHarnessContext(ctx context.Context, items []GenerationItem
 		item := results[idx]
 		var imgBytes []byte
 		var ext string
-		genErr := retryWithBackoffContext(workCtx, 3, func() error {
+		imageCandidates := ModelCandidates(cfg.ImageModel, DefaultModel, cfg.ImageFallbacks)
+		effectiveModel, genErr := ExecuteModelChainContext(workCtx, imageCandidates, 3, func(candidate string) error {
 			var e error
-			imgBytes, ext, e = client.GenerateImageContext(workCtx, item.Prompt, cfg.ImageModel, cfg.Aspect)
+			imgBytes, ext, e = client.GenerateImageContext(workCtx, item.Prompt, candidate, cfg.Aspect)
 			return e
+		}, func(event ModelFallbackEvent) {
+			client.debugf("⚠️ [FALLBACK] imagem %s: %s -> %s (%v)\n", item.Name, event.From, event.To, event.Error)
 		})
 		if genErr != nil {
 			results[idx].Status = "error"
 			results[idx].Error = genErr.Error()
 			return genErr
 		}
+		results[idx].Model = effectiveModel
 
 		if ext == "" {
 			ext = "png"

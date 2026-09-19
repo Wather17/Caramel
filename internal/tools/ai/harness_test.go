@@ -211,6 +211,39 @@ func TestSynthesizePromptsRejeitaListaVaziaEDuplicada(t *testing.T) {
 	}
 }
 
+func TestSynthesizePromptsUsaFallbackParaRespostaDeContrato(t *testing.T) {
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("falha ao ler modelo: %v", err)
+		}
+		calls = append(calls, request.Model)
+		content := "resposta sem array"
+		if request.Model == "fallback-texto" {
+			content = `[{"name":"Trigo","prompt":"trigo em fundo branco"}]`
+		}
+		w.Header().Set("Content-Type", "application/json")
+		payload := fmt.Sprintf(`{"choices":[{"message":{"content":%s}}]}`, mustJSONString(t, content))
+		fmt.Fprint(w, payload)
+	}))
+	defer server.Close()
+	oldURL := ai.OpenRouterAPIURL
+	ai.OpenRouterAPIURL = server.URL
+	t.Cleanup(func() { ai.OpenRouterAPIURL = oldURL })
+
+	client, _ := ai.NewClient("sk-test")
+	items, err := ai.SynthesizePrompts(ai.HarnessConfig{Items: []string{"Trigo"}, TextModel: "primario-texto", TextFallbacks: []string{"fallback-texto"}}, client)
+	if err != nil || len(items) != 1 || items[0].Name != "Trigo" {
+		t.Fatalf("fallback de contrato deveria concluir: items=%+v err=%v", items, err)
+	}
+	if len(calls) != 2 || calls[0] != "primario-texto" || calls[1] != "fallback-texto" {
+		t.Fatalf("cadeia de modelos inesperada: %v", calls)
+	}
+}
+
 func TestExecuteGenerationHarnessSucesso(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

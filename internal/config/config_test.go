@@ -101,6 +101,21 @@ func TestEnvModelPriority(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadModelFallbacks(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	if err := config.SaveConfigValue("MODEL_TEXT_FALLBACKS", " openai/gpt-oss-120b, deepseek/deepseek-v4-flash, openai/gpt-oss-120b "); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.ModelTextFallbacks) != 2 || cfg.ModelTextFallbacks[0] != "openai/gpt-oss-120b" || cfg.ModelTextFallbacks[1] != "deepseek/deepseek-v4-flash" {
+		t.Fatalf("fallbacks inesperados: %#v", cfg.ModelTextFallbacks)
+	}
+}
+
 func TestGetConfigDirComXDG(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tempDir)

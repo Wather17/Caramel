@@ -59,7 +59,7 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		return nil, err
 	}
 	defer os.RemoveAll(tempDir)
-	harness := ai.HarnessConfig{Items: opts.Items, Theme: opts.Theme, Count: opts.Count, Style: opts.Style, OutputDir: tempDir, TextModel: opts.TextModel, ImageModel: opts.ImageModel, Aspect: opts.Aspect}
+	harness := ai.HarnessConfig{Items: opts.Items, Theme: opts.Theme, Count: opts.Count, Style: opts.Style, OutputDir: tempDir, TextModel: opts.TextModel, TextFallbacks: cfg.ModelTextFallbacks, ImageModel: opts.ImageModel, ImageFallbacks: cfg.ModelImageFallbacks, Aspect: opts.Aspect}
 	client, err := ai.NewClient(cfg.OpenRouterAPIKey)
 	if err != nil {
 		_ = s.Vault.FinishRun(ctx, run.ID, "failed", nil, err)
@@ -150,7 +150,8 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 	}
 	batchResults, batchErr := ai.ColorizeImagesContext(ctx, paths, ai.ColorizeOptions{
 		OutputDir: tempDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
-		TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+		ModelFallbacks: cfg.ModelImageFallbacks, TriageModel: opts.TriageModel,
+		TriageModelFallbacks: cfg.ModelTriageFallbacks, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
 	}, func(event ai.BatchProgressEvent) {
 		if event.State == "started" && event.Index >= 0 && event.Index < len(parents) {
 			parent := parents[event.Index]

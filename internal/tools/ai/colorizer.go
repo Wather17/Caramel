@@ -13,20 +13,24 @@ import (
 
 // ColorizeOptions contém todos os parâmetros para o processo de coloração de uma imagem
 type ColorizeOptions struct {
-	OutputDir        string    // Diretório onde a imagem colorida será salva
-	APIKey           string    // Chave da API do OpenRouter
-	Model            string    // Modelo de geração de imagem (padrão: DefaultModel)
-	TriageModel      string    // Modelo de visão para a triagem (padrão: DefaultTriageModel)
-	DisableTriage    bool      // true desativa as duas camadas de triagem (coloração forçada)
-	MaxWorkers       int       // Número máximo de imagens processadas em paralelo (0 = adaptativo)
-	Verbose          bool      // Exibe logs detalhados de depuração
-	DiagnosticWriter io.Writer // Canal para diagnóstico verbose
+	OutputDir            string    // Diretório onde a imagem colorida será salva
+	APIKey               string    // Chave da API do OpenRouter
+	Model                string    // Modelo de geração de imagem (padrão: DefaultModel)
+	ModelFallbacks       []string  // Primeiro fallback opcional para geração de imagem
+	TriageModel          string    // Modelo de visão para a triagem (padrão: DefaultTriageModel)
+	TriageModelFallbacks []string  // Primeiro fallback opcional para triagem
+	DisableTriage        bool      // true desativa as duas camadas de triagem (coloração forçada)
+	MaxWorkers           int       // Número máximo de imagens processadas em paralelo (0 = adaptativo)
+	Verbose              bool      // Exibe logs detalhados de depuração
+	DiagnosticWriter     io.Writer // Canal para diagnóstico verbose
 }
 
 // ColorizeResult contém o relatório do processo de coloração
 type ColorizeResult struct {
 	OriginalPath  string
 	ColorizedPath string
+	Model         string `json:"model,omitempty"`
+	TriageModel   string `json:"triage_model,omitempty"`
 
 	// Campos de triagem: preenchidos quando a imagem é pulada antes da coloração
 	Skipped    bool   // true se a imagem foi rejeitada pela triagem (não foi colorida)
@@ -108,10 +112,13 @@ func ColorizeSingleImageContext(ctx context.Context, imagePath string, opts Colo
 	// com backoff para não perder a imagem no batch/docx.
 	var imgBytes []byte
 	var ext string
-	colorizeErr := retryWithBackoffContext(ctx, 3, func() error {
+	modelCandidates := ModelCandidates(opts.Model, DefaultModel, opts.ModelFallbacks)
+	effectiveModel, colorizeErr := ExecuteModelChainContext(ctx, modelCandidates, 3, func(model string) error {
 		var e error
-		imgBytes, ext, e = client.ColorizeImageContext(ctx, imagePath, prompt, opts.Model)
+		imgBytes, ext, e = client.ColorizeImageContext(ctx, imagePath, prompt, model)
 		return e
+	}, func(event ModelFallbackEvent) {
+		client.debugf("⚠️ [FALLBACK] coloração %s: %s -> %s (%v)\n", filepath.Base(imagePath), event.From, event.To, event.Error)
 	})
 	if colorizeErr != nil {
 		return nil, fmt.Errorf("falha ao colorir imagem '%s': %w", filepath.Base(imagePath), colorizeErr)
@@ -132,6 +139,7 @@ func ColorizeSingleImageContext(ctx context.Context, imagePath string, opts Colo
 	return &ColorizeResult{
 		OriginalPath:  imagePath,
 		ColorizedPath: outputPath,
+		Model:         effectiveModel,
 	}, nil
 }
 
@@ -168,18 +176,18 @@ func checkTriageContext(ctx context.Context, imagePath string, client *Client, o
 	}
 
 	// Camada 2: triagem por LLM de visão barata (com retry em falhas transitórias)
-	triageModel := opts.TriageModel
-	if triageModel == "" {
-		triageModel = DefaultTriageModel
-	}
+	triageCandidates := ModelCandidates(opts.TriageModel, DefaultTriageModel, opts.TriageModelFallbacks)
+	triageModel := triageCandidates[0]
 
 	client.debugf("🔎 [TRIAGE] Analisando '%s' com o modelo '%s'...\n", baseName, triageModel)
 
 	var triageRes *TriageResult
-	triageErr := retryWithBackoffContext(ctx, 2, func() error {
+	effectiveTriageModel, triageErr := ExecuteModelChainContext(ctx, triageCandidates, 2, func(model string) error {
 		var e error
-		triageRes, e = client.TriageImageContext(ctx, imagePath, prompts.GetTriagePrompt(), triageModel)
+		triageRes, e = client.TriageImageContext(ctx, imagePath, prompts.GetTriagePrompt(), model)
 		return e
+	}, func(event ModelFallbackEvent) {
+		client.debugf("⚠️ [FALLBACK] triagem %s: %s -> %s (%v)\n", baseName, event.From, event.To, event.Error)
 	})
 	if triageErr != nil {
 		// Fail-open: em caso de erro (rate limit, API fora, parse), colore mesmo assim
@@ -190,6 +198,7 @@ func checkTriageContext(ctx context.Context, imagePath string, client *Client, o
 	if !triageRes.ShouldColorize {
 		return true, &ColorizeResult{
 			OriginalPath: imagePath,
+			TriageModel:  effectiveTriageModel,
 			Skipped:      true,
 			SkipStage:    "triage",
 			SkipReason:   triageRes.Reason,

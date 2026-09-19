@@ -113,6 +113,9 @@ os objetos de imagem embutidos e avisa quando algum recurso não pode ser decodi
 | `MODEL_IMAGE` | Geração/coloração de imagens | `google/gemini-3.1-flash-image-preview` |
 | `MODEL_TEXT` | Síntese de prompts e rotinas | `deepseek/deepseek-v4-flash` |
 | `MODEL_TRIAGE` | Triagem de economia (visão) | `qwen/qwen3.7-flash` |
+| `MODEL_IMAGE_FALLBACKS` | Primeiro fallback de imagem, separado por vírgulas | vazio |
+| `MODEL_TEXT_FALLBACKS` | Primeiro fallback de texto, separado por vírgulas | vazio |
+| `MODEL_TRIAGE_FALLBACKS` | Primeiro fallback de triagem, separado por vírgulas | vazio |
 
 **Prioridade de resolução dos modelos:** flag no comando (`-m`, `--text-model`, `--triage-model`) > valor salvo no `.env` > padrão de fábrica.
 
@@ -125,6 +128,9 @@ caramel config models list --role image --limit 10
 
 # Definir um modelo diretamente
 caramel config set model_image google/gemini-3.1-flash-image
+
+# Configurar um fallback de texto (uma troca máxima por item)
+caramel config set model_text_fallbacks openai/gpt-oss-120b
 ```
 
 ### ℹ️ Sistema & Utilidades

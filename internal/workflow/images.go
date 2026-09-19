@@ -81,7 +81,8 @@ func (s *ImageService) Generate(ctx context.Context, opts ImageOptions) ([]works
 	}
 	harnessCfg := ai.HarnessConfig{
 		Items: opts.Items, Theme: opts.Theme, Count: opts.Count, Style: opts.Style,
-		OutputDir: outputDir, TextModel: opts.TextModel, ImageModel: opts.ImageModel, Aspect: opts.Aspect,
+		OutputDir: outputDir, TextModel: opts.TextModel, TextFallbacks: cfg.ModelTextFallbacks,
+		ImageModel: opts.ImageModel, ImageFallbacks: cfg.ModelImageFallbacks, Aspect: opts.Aspect,
 	}
 	s.emit(ProgressEvent{Step: "synthesizing", Message: "Sintetizando prompts..."})
 	items, err := ai.SynthesizePrompts(harnessCfg, client)
@@ -167,7 +168,8 @@ func (s *ImageService) Colorize(ctx context.Context, assetIDs []string, opts Ima
 	}
 	batchResults, batchErr := ai.ColorizeImagesContext(ctx, paths, ai.ColorizeOptions{
 		OutputDir: outputDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
-		TriageModel: opts.TriageModel, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+		ModelFallbacks: cfg.ModelImageFallbacks, TriageModel: opts.TriageModel,
+		TriageModelFallbacks: cfg.ModelTriageFallbacks, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
 	}, func(event ai.BatchProgressEvent) {
 		if event.State == "started" && event.Index >= 0 && event.Index < len(selected) {
 			asset := selected[event.Index]

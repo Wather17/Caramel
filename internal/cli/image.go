@@ -174,14 +174,16 @@ caramel colorize atividade.docx -i`,
 		failCount := 0
 
 		batchResults, batchErr := ai.ColorizeImagesContext(cmd.Context(), selectedImages, ai.ColorizeOptions{
-			OutputDir:        targetDir,
-			APIKey:           cfg.OpenRouterAPIKey,
-			Model:            modelName,
-			TriageModel:      triageModel,
-			DisableTriage:    imgNoTriage,
-			MaxWorkers:       imgWorkers,
-			Verbose:          renderer.Options().Verbose,
-			DiagnosticWriter: cmd.ErrOrStderr(),
+			OutputDir:            targetDir,
+			APIKey:               cfg.OpenRouterAPIKey,
+			Model:                modelName,
+			ModelFallbacks:       cfg.ModelImageFallbacks,
+			TriageModel:          triageModel,
+			TriageModelFallbacks: cfg.ModelTriageFallbacks,
+			DisableTriage:        imgNoTriage,
+			MaxWorkers:           imgWorkers,
+			Verbose:              renderer.Options().Verbose,
+			DiagnosticWriter:     cmd.ErrOrStderr(),
 		}, func(event ai.BatchProgressEvent) {
 			if event.State == "started" && event.Index >= 0 && event.Index < len(selectedImages) {
 				renderer.Text("[%d/%d] colorizando %s\n", event.Index+1, event.Total, filepath.Base(selectedImages[event.Index]))

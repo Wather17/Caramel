@@ -31,10 +31,12 @@ type PipelineResult struct {
 
 // PipelineOptions controla os diagnósticos do pipeline sem acoplar a ferramenta à CLI.
 type PipelineOptions struct {
-	Context          context.Context
-	MaxWorkers       int
-	Verbose          bool
-	DiagnosticWriter io.Writer
+	Context              context.Context
+	MaxWorkers           int
+	ModelFallbacks       []string
+	TriageModelFallbacks []string
+	Verbose              bool
+	DiagnosticWriter     io.Writer
 }
 
 type imageBatchProcessingResult struct {
@@ -70,13 +72,15 @@ func processExtractedImages(ctx context.Context, tempExtractDir, targetDir, apiK
 	}
 
 	colorizeOpts := ai.ColorizeOptions{
-		OutputDir:        targetDir,
-		APIKey:           apiKey,
-		Model:            model,
-		TriageModel:      triageModel,
-		DisableTriage:    noTriage,
-		Verbose:          options.Verbose,
-		DiagnosticWriter: options.DiagnosticWriter,
+		OutputDir:            targetDir,
+		APIKey:               apiKey,
+		Model:                model,
+		ModelFallbacks:       options.ModelFallbacks,
+		TriageModel:          triageModel,
+		TriageModelFallbacks: options.TriageModelFallbacks,
+		DisableTriage:        noTriage,
+		Verbose:              options.Verbose,
+		DiagnosticWriter:     options.DiagnosticWriter,
 	}
 	itemResults := make([]imagePipelineItemResult, len(eligible))
 	itemErrors, batchErr := ai.ExecuteBatchContext(ctx, len(eligible), options.MaxWorkers, func(workCtx context.Context, index int) error {
