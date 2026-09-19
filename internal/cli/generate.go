@@ -158,6 +158,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		imageModel := resolveModel(genModelName, cmd.Flags().Changed("model"), cfg.ModelImage)
 		textModel := resolveModel(genTextModel, cmd.Flags().Changed("text-model"), cfg.ModelText)
 
+		attempts := ai.NewAttemptCollector()
 		var client *ai.Client
 		if cfg.OpenRouterAPIKey != "" {
 			client, err = ai.NewClient(cfg.OpenRouterAPIKey)
@@ -166,6 +167,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 			}
 			client.Verbose = renderer.Options().Verbose
 			client.DiagnosticWriter = cmd.ErrOrStderr()
+			client.AttemptWriter = attempts.Writer()
 		}
 
 		// Define a pasta final antes da síntese para que acertos locais possam ser copiados
@@ -208,6 +210,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 			ImageFallbacks: cfg.ModelImageFallbacks,
 			Aspect:         genAspect,
 			Verbose:        renderer.Options().Verbose,
+			AttemptWriter:  attempts.Writer(),
 		}
 
 		progressFunc := func(ev ai.HarnessProgressEvent) {
@@ -237,7 +240,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		results, generationWarnings, err := executeImageGeneration(ctx, rawItems, genTheme, harnessCfg, targetDir, imageVault, genRefreshCache, client, progressFunc)
+		results, generationWarnings, err := executeImageGeneration(ctx, rawItems, genTheme, harnessCfg, targetDir, imageVault, genRefreshCache, client, progressFunc, attempts)
 		if err != nil {
 			var contractErr *ai.ContractOutputError
 			if renderer.Options().Verbose && errors.As(err, &contractErr) {
@@ -255,6 +258,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 
 		for _, res := range results {
 			if res.Status == "done" && res.ImagePath != "" {
+				attempts.AnnotateItem(res.Index, res.ImagePath, res.Reused)
 				successCount++
 				successfulPaths = append(successfulPaths, res.ImagePath)
 				if res.Reused {
@@ -343,6 +347,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 			Data:     results,
 			Outputs:  artifacts,
 			Warnings: warnings,
+			Attempts: attempts.Snapshot(),
 		})
 	},
 }

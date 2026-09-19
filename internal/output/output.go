@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"caramel/internal/tools/ai"
 )
 
 // Mode identifica o formato principal de saída de uma execução.
@@ -65,13 +67,14 @@ type Event struct {
 
 // Result contém o resumo serializável de uma operação.
 type Result struct {
-	Status   State       `json:"status"`
-	Summary  string      `json:"summary,omitempty"`
-	Count    int         `json:"count,omitempty"`
-	Data     interface{} `json:"data,omitempty"`
-	Outputs  []string    `json:"outputs,omitempty"`
-	Warnings []string    `json:"warnings,omitempty"`
-	Errors   []string    `json:"errors,omitempty"`
+	Status   State                `json:"status"`
+	Summary  string               `json:"summary,omitempty"`
+	Count    int                  `json:"count,omitempty"`
+	Data     interface{}          `json:"data,omitempty"`
+	Outputs  []string             `json:"outputs,omitempty"`
+	Warnings []string             `json:"warnings,omitempty"`
+	Errors   []string             `json:"errors,omitempty"`
+	Attempts []ai.AttemptMetadata `json:"attempts,omitempty"`
 }
 
 // Renderer separa resultado, progresso e diagnóstico nos canais apropriados.

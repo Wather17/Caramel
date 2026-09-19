@@ -68,14 +68,17 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		_ = s.Vault.FinishRun(ctx, run.ID, "failed", nil, err)
 		return nil, err
 	}
+	attempts := ai.NewAttemptCollector()
+	client.AttemptWriter = attempts.Writer()
 	s.emit(ProgressEvent{Step: "synthesizing", Message: "Sintetizando prompts..."})
+	harness.AttemptWriter = attempts.Writer()
 	items, err := ai.SynthesizePromptsContext(ctx, harness, client)
 	if err != nil {
 		status := "failed"
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Vault.FinishRun(context.Background(), run.ID, status, nil, err)
+		_ = s.Vault.FinishRunWithAttempts(context.Background(), run.ID, status, nil, err, attempts.Snapshot())
 		return nil, err
 	}
 	results, err := ai.ExecuteGenerationHarnessContext(ctx, items, harness, client, func(event ai.HarnessProgressEvent) {
@@ -95,10 +98,11 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		}
 		imported, importErr := s.Vault.ImportFile(persistCtx, result.ImagePath, result.Name, []string{"gerado", opts.Style})
 		if importErr != nil {
-			_ = s.Vault.FinishRun(persistCtx, run.ID, "failed", materialIDs(materials), importErr)
+			_ = s.Vault.FinishRunWithAttempts(persistCtx, run.ID, "failed", materialIDs(materials), importErr, attempts.Snapshot())
 			return materials, importErr
 		}
 		materials = append(materials, imported.Material)
+		attempts.AnnotateItem(result.Index, imported.Material.ObjectPath, false)
 		if s.CollectionID != "" {
 			_ = s.Vault.AddToCollection(persistCtx, s.CollectionID, imported.Material.ID)
 		}
@@ -108,10 +112,10 @@ func (s *VaultImageService) Generate(ctx context.Context, opts ImageOptions) ([]
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Vault.FinishRun(context.Background(), run.ID, status, materialIDs(materials), err)
+		_ = s.Vault.FinishRunWithAttempts(context.Background(), run.ID, status, materialIDs(materials), err, attempts.Snapshot())
 		return materials, err
 	}
-	if err := s.Vault.FinishRun(ctx, run.ID, "completed", materialIDs(materials), nil); err != nil {
+	if err := s.Vault.FinishRunWithAttempts(persistCtx, run.ID, "completed", materialIDs(materials), nil, attempts.Snapshot()); err != nil {
 		return materials, err
 	}
 	s.emit(ProgressEvent{Step: "done", Current: len(materials), Total: len(results), Message: fmt.Sprintf("%d material(is) gerado(s)", len(materials))})
@@ -153,6 +157,8 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 		return nil, err
 	}
 	defer os.RemoveAll(tempDir)
+	attempts := ai.NewAttemptCollector()
+	persistCtx := context.Background()
 	var materials []vault.Material
 	paths := make([]string, 0, len(parents))
 	for _, parent := range parents {
@@ -162,6 +168,7 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 		OutputDir: tempDir, APIKey: cfg.OpenRouterAPIKey, Model: opts.ImageModel,
 		ModelFallbacks: cfg.ModelImageFallbacks, TriageModel: opts.TriageModel,
 		TriageModelFallbacks: cfg.ModelTriageFallbacks, DisableTriage: opts.DisableTriage, MaxWorkers: opts.MaxWorkers,
+		AttemptWriter: attempts.Writer(),
 	}, func(event ai.BatchProgressEvent) {
 		if event.State == "started" && event.Index >= 0 && event.Index < len(parents) {
 			parent := parents[event.Index]
@@ -184,18 +191,19 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 			continue
 		}
 
-		imported, importErr := s.Vault.ImportFile(ctx, batch.Result.ColorizedPath, parent.Title+" colorida", []string{"colorido"})
+		imported, importErr := s.Vault.ImportFile(persistCtx, batch.Result.ColorizedPath, parent.Title+" colorida", []string{"colorido"})
 		if importErr != nil {
 			failures = append(failures, fmt.Sprintf("%s: falha ao importar resultado: %v", parent.Title, importErr))
 			continue
 		}
 		materials = append(materials, imported.Material)
-		if err := s.Vault.AddDerivation(ctx, run.ID, []string{parent.ID}, []string{imported.Material.ID}); err != nil {
+		attempts.AnnotateItem(i+1, imported.Material.ObjectPath, false)
+		if err := s.Vault.AddDerivation(persistCtx, run.ID, []string{parent.ID}, []string{imported.Material.ID}); err != nil {
 			failures = append(failures, fmt.Sprintf("%s: falha ao registrar derivação: %v", parent.Title, err))
 			continue
 		}
 		if s.CollectionID != "" {
-			if err := s.Vault.AddToCollection(ctx, s.CollectionID, imported.Material.ID); err != nil {
+			if err := s.Vault.AddToCollection(persistCtx, s.CollectionID, imported.Material.ID); err != nil {
 				failures = append(failures, fmt.Sprintf("%s: falha ao adicionar à coleção: %v", parent.Title, err))
 				continue
 			}
@@ -207,15 +215,15 @@ func (s *VaultImageService) Colorize(ctx context.Context, ids []string, opts Ima
 		if ctx.Err() != nil {
 			status = "canceled"
 		}
-		_ = s.Vault.FinishRun(ctx, run.ID, status, materialIDs(materials), batchErr)
+		_ = s.Vault.FinishRunWithAttempts(persistCtx, run.ID, status, materialIDs(materials), batchErr, attempts.Snapshot())
 		return materials, batchErr
 	}
 	if len(failures) > 0 {
 		batchErr = fmt.Errorf("%d material(is) falharam: %s", len(failures), strings.Join(failures, "; "))
-		_ = s.Vault.FinishRun(ctx, run.ID, "failed", materialIDs(materials), batchErr)
+		_ = s.Vault.FinishRunWithAttempts(persistCtx, run.ID, "failed", materialIDs(materials), batchErr, attempts.Snapshot())
 		return materials, batchErr
 	}
-	if err := s.Vault.FinishRun(ctx, run.ID, "completed", materialIDs(materials), nil); err != nil {
+	if err := s.Vault.FinishRunWithAttempts(persistCtx, run.ID, "completed", materialIDs(materials), nil, attempts.Snapshot()); err != nil {
 		return materials, err
 	}
 	return materials, nil

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"caramel/internal/tools/ai"
 )
 
 const (
@@ -56,15 +58,16 @@ type Artifact struct {
 
 // Run registra uma execução, inclusive execuções parcialmente concluídas.
 type Run struct {
-	ID         string            `json:"id"`
-	Operation  string            `json:"operation"`
-	Status     string            `json:"status"`
-	Inputs     []string          `json:"inputs,omitempty"`
-	Options    map[string]string `json:"options,omitempty"`
-	Artifacts  []Artifact        `json:"artifacts,omitempty"`
-	StartedAt  time.Time         `json:"started_at"`
-	FinishedAt *time.Time        `json:"finished_at,omitempty"`
-	Error      string            `json:"error,omitempty"`
+	ID         string               `json:"id"`
+	Operation  string               `json:"operation"`
+	Status     string               `json:"status"`
+	Inputs     []string             `json:"inputs,omitempty"`
+	Options    map[string]string    `json:"options,omitempty"`
+	Artifacts  []Artifact           `json:"artifacts,omitempty"`
+	StartedAt  time.Time            `json:"started_at"`
+	FinishedAt *time.Time           `json:"finished_at,omitempty"`
+	Error      string               `json:"error,omitempty"`
+	Attempts   []ai.AttemptMetadata `json:"attempts,omitempty"`
 }
 
 // Project é o manifesto persistente de um projeto do Caramel.
@@ -396,6 +399,11 @@ func (p *Project) BeginRun(operation string, inputs []string, options map[string
 
 // FinishRun fecha uma execução e publica seus artefatos no manifesto.
 func (p *Project) FinishRun(runID, status string, artifacts []Artifact, runErr error) error {
+	return p.FinishRunWithAttempts(runID, status, artifacts, runErr, nil)
+}
+
+// FinishRunWithAttempts fecha uma execução e persiste eventos redigidos de API.
+func (p *Project) FinishRunWithAttempts(runID, status string, artifacts []Artifact, runErr error, attempts []ai.AttemptMetadata) error {
 	for i := range p.Runs {
 		if p.Runs[i].ID != runID {
 			continue
@@ -404,6 +412,10 @@ func (p *Project) FinishRun(runID, status string, artifacts []Artifact, runErr e
 		p.Runs[i].Status = status
 		p.Runs[i].FinishedAt = &now
 		p.Runs[i].Artifacts = append([]Artifact(nil), artifacts...)
+		p.Runs[i].Attempts = append([]ai.AttemptMetadata(nil), attempts...)
+		for index := range p.Runs[i].Attempts {
+			p.Runs[i].Attempts[index] = p.Runs[i].Attempts[index].Redacted()
+		}
 		if runErr != nil {
 			p.Runs[i].Error = runErr.Error()
 		}

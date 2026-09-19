@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // TriageResult representa a decisão do modelo de visão barato (gatekeeper) sobre
@@ -66,6 +67,19 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	if err != nil {
 		return nil, fmt.Errorf("falha ao serializar requisição de triagem: %w", err)
 	}
+	correlationID := imageCorrelationID("triage", model, promptText, dataURL)
+	attemptEvent := AttemptMetadata{
+		Operation: "triage", Role: "triage", RequestedModel: model, EffectiveModel: model,
+		Attempt: c.nextAttempt(correlationID), CorrelationID: correlationID, StartedAt: time.Now().UTC(), Status: "failure",
+	}
+	defer func() {
+		if attemptEvent.Status != "success" && attemptEvent.ErrorClass == "" {
+			attemptEvent.ErrorClass = "unknown"
+		}
+		attemptEvent.FinishedAt = time.Now().UTC()
+		attemptEvent.DurationMS = attemptEvent.FinishedAt.Sub(attemptEvent.StartedAt).Milliseconds()
+		c.emitAttemptMetadata(ctx, attemptEvent)
+	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -76,6 +90,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
+	req.Header.Set("X-Caramel-Correlation-ID", correlationID)
 
 	release, err := c.acquireRequest(ctx)
 	if err != nil {
@@ -84,8 +99,19 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	resp, err := c.HTTPClient.Do(req)
 	release()
 	if err != nil {
-		return nil, &retryableError{err: fmt.Errorf("erro na comunicação com a API de triagem: %w", err)}
+		transportErr := &retryableError{err: fmt.Errorf("erro na comunicação com a API de triagem: %w", err)}
+		attemptEvent.ErrorClass = ErrorClass(transportErr)
+		return nil, transportErr
 	}
+	attemptEvent.StatusCode = resp.StatusCode
+	attemptEvent.RequestID = firstRequestID(resp.Header)
+	attemptEvent.RetryAfterMS = retryAfterMilliseconds(resp.Header.Get("Retry-After"))
+	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+		attemptEvent.ErrorClass = "transient"
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		attemptEvent.ErrorClass = "permanent"
+	}
+	c.emitRequestMetadataWithModel("triage", model, correlationID, resp)
 	defer resp.Body.Close()
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da triagem")
@@ -103,6 +129,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return nil, fmt.Errorf("falha ao decodificar JSON da resposta de triagem: %w", err)
 	}
+	attemptEvent.Usage = chatResp.Usage
 
 	if chatResp.Error != nil {
 		return nil, apiError(fmt.Sprintf("erro na API de triagem: %s", chatResp.Error.Message), chatResp.Error.Code)
@@ -113,7 +140,11 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	}
 
 	rawContent := fmt.Sprintf("%v", chatResp.Choices[0].Message.Content)
-	return parseTriageResponse(rawContent, model)
+	result, parseErr := parseTriageResponse(rawContent, model)
+	if parseErr == nil {
+		attemptEvent.Status = "success"
+	}
+	return result, parseErr
 }
 
 // parseTriageResponse interpreta a resposta textual do modelo de triagem.
