@@ -21,6 +21,39 @@ type retryableError struct {
 	hasRetryAfter bool
 }
 
+// UnknownOutcomeError indica que uma operação potencialmente cobrada pode ter
+// sido aceita antes de a resposta chegar. A causa nunca deve ser repetida
+// automaticamente nem encaminhada para fallback.
+type UnknownOutcomeError struct {
+	Operation     string
+	CorrelationID string
+	Err           error
+}
+
+func (e *UnknownOutcomeError) Error() string {
+	if e == nil {
+		return "resultado ambíguo da operação"
+	}
+	message := fmt.Sprintf("unknown_outcome na operação %s; a requisição pode ter sido aceita e não será repetida automaticamente", e.Operation)
+	if e.CorrelationID != "" {
+		message += fmt.Sprintf(" (correlação %s)", e.CorrelationID)
+	}
+	if e.Err != nil {
+		message += ": " + e.Err.Error()
+	}
+	return message
+}
+
+// Code identifica a classe estável para consumidores estruturados e diagnósticos.
+func (e *UnknownOutcomeError) Code() string { return "unknown_outcome" }
+
+func (e *UnknownOutcomeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 func (e *retryableError) Error() string { return e.err.Error() }
 func (e *retryableError) Unwrap() error { return e.err }
 
@@ -43,6 +76,10 @@ func (e *retryableError) RetryAfter() (time.Duration, bool) {
 
 // isRetryable indica se o erro é transitório e pode ser reexecutado
 func isRetryable(err error) bool {
+	var unknown *UnknownOutcomeError
+	if errors.As(err, &unknown) {
+		return false
+	}
 	var re *retryableError
 	return errors.As(err, &re)
 }

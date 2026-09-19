@@ -48,6 +48,18 @@ func TestExecuteModelChainNaoFazFallbackParaErroPermanente(t *testing.T) {
 	}
 }
 
+func TestExecuteModelChainNaoFazFallbackParaResultadoAmbiguo(t *testing.T) {
+	calls := 0
+	ambiguous := &ai.UnknownOutcomeError{Operation: "image_generation", CorrelationID: "caramel-abc", Err: errors.New("resposta perdida")}
+	model, err := ai.ExecuteModelChainContext(context.Background(), []string{"primary", "fallback"}, 3, func(model string) error {
+		calls++
+		return ambiguous
+	}, nil)
+	if !errors.As(err, &ambiguous) || model != "primary" || calls != 1 {
+		t.Fatalf("resultado ambíguo deveria encerrar sem fallback: model=%s calls=%d err=%v", model, calls, err)
+	}
+}
+
 func TestExecuteModelChainNaoFazFallbackDepoisDeCancelamento(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -16,9 +16,9 @@ Este documento é o contrato de avaliação para chamadas de serviços externos 
 | --- | --- | --- | --- | --- | --- | --- |
 | Catálogo | `GET https://openrouter.ai/api/v1/models`; não exige chave | páginas de modelos, preço e modalidades | sem cobrança de geração | páginas sequenciais; até 100 páginas; retry transitório até 3 tentativas; timeout de 60 s | nenhum | apenas usado para seleção; não grava tentativas |
 | Síntese de prompts | `POST /api/v1/chat/completions` com modelo de texto e texto de entrada | conteúdo textual contendo array de itens com `name` e `prompt` | depende do modelo de texto | uma chamada lógica com até 3 tentativas; limitador por cliente; `Retry-After` respeitado; workflows legados ainda precisam usar a variante context-aware (#77) | fallback opcional configurado por `MODEL_TEXT_FALLBACKS`, uma troca máxima por item | execução guarda opções e erro agregado |
-| Geração de imagem | `POST /api/v1/chat/completions` com modalidade `image` e `image_config` | bytes de imagem inline ou URL/data URL no envelope | normalmente cobrada por imagem/modelo | harness indexado; workers adaptativos de 1--5 conforme lote; teto compartilhado de 4 requests por cliente; até 3 tentativas | fallback opcional configurado por `MODEL_IMAGE_FALLBACKS`, uma troca máxima por item | salva imagem e artefato; não guarda usage/request ID |
+| Geração de imagem | `POST /api/v1/chat/completions` com modalidade `image` e `image_config` | bytes de imagem inline ou URL/data URL no envelope | normalmente cobrada por imagem/modelo | harness indexado; workers adaptativos de 1--5 conforme lote; teto compartilhado de 4 requests por cliente; retry seguro só antes do envio | resultado ambíguo após envio não repete nem usa fallback; fallback configurado só cobre falhas elegíveis antes do envio | salva imagem e artefato; não guarda usage/request ID |
 | Triagem | `POST /api/v1/chat/completions` com imagem e prompt de decisão | objeto com `should_colorize` e `reason` | baixo ou gratuito, conforme modelo | até 2 tentativas dentro da colorização; limitador compartilhado; `Retry-After` respeitado | fallback opcional configurado por `MODEL_TRIAGE_FALLBACKS`; falha final continua fail-open | registra apenas resultado agregado da colorização |
-| Colorização | `POST /api/v1/chat/completions` com imagem, prompt e modalidade `image` | bytes de imagem colorida | normalmente cobrada por imagem/modelo | lote indexado com workers adaptativos; cliente compartilhado por lote; teto de 4 requests; até 3 tentativas | reutiliza `MODEL_IMAGE_FALLBACKS`, uma troca máxima por item | salva artefato/derivação; não guarda usage/request ID |
+| Colorização | `POST /api/v1/chat/completions` com imagem, prompt e modalidade `image` | bytes de imagem colorida | normalmente cobrada por imagem/modelo | lote indexado com workers adaptativos; cliente compartilhado por lote; teto de 4 requests; retry seguro só antes do envio | resultado ambíguo após envio não repete nem usa fallback; reutiliza `MODEL_IMAGE_FALLBACKS` apenas para falhas elegíveis | salva artefato/derivação; não guarda usage/request ID |
 
 O comportamento listado como atual é o baseline. As lacunas restantes são implementadas nas issues #74--#78; esta documentação acompanha o runtime de #72 e #73.
 
@@ -64,7 +64,8 @@ O erro final deve manter a causa e informar operação, modelo efetivo, classe e
 
 - A matriz de cada operação deve declarar `safe_retry`, cobrança potencial e comportamento para resultado ambíguo.
 - Geração e colorização podem gerar cobrança por tentativa. Use correlação determinística por item e configuração, sem incluir API key ou prompt completo.
-- Envie header de idempotência/correlação quando o provedor suportar e registre o request ID retornado.
+- Geração e colorização enviam `Idempotency-Key` e `X-Caramel-Correlation-ID` derivados por hash de item/configuração, sem API key ou prompt completo, e capturam request ID quando retornado.
+- Falha de transporte depois do envio, 408 ou 5xx em operação cobrada vira `unknown_outcome`; não repetir nem acionar fallback sem confirmação externa (#78).
 - Só grave artefatos no cache depois de validar bytes, formato e metadados. Reutilização local deve ser marcada como tal e não contar como novo consumo.
 
 ### 6. Saída e análise
@@ -123,6 +124,6 @@ Cada cliente deve ser testado com servidor fake determinístico e relógio/esper
 | Limites de corpo e URLs seguras | pendente | #75 |
 | Metadados de tentativa/uso persistidos | pendente | #76 |
 | Contexto nos workflows | pendente | #77 |
-| Idempotência e resultado ambíguo | pendente | #78 |
+| Idempotência e resultado ambíguo | implementado | #78 |
 
 Novas integrações devem adicionar uma linha à matriz, declarar todas as dez dimensões e apontar para testes que demonstrem cada limite.
