@@ -29,10 +29,18 @@ var (
 
 type routineFileResult struct {
 	rows       []docx.RoutineRow
+	model      string
 	skipped    bool
 	err        error
 	detail     string
 	diagnostic string
+	fallback   string
+}
+
+type routineModelResult struct {
+	File      string `json:"file"`
+	Primary   string `json:"primary_model"`
+	Effective string `json:"effective_model"`
 }
 
 var routineCmd = &cobra.Command{
@@ -156,54 +164,48 @@ caramel routine process rotina_semana_1.docx`,
 				return err
 			}
 
-			jsonResponse, err := aiClient.AnalyzeRoutineContext(workCtx, txt, prompt, routineModel)
+			var jsonResponse string
+			var fileRows []docx.RoutineRow
+			modelCandidates := ai.ModelCandidates(routineModel, ai.DefaultTextModel, cfg.ModelTextFallbacks)
+			effectiveModel, err := ai.ExecuteModelChainContext(workCtx, modelCandidates, 3, func(model string) error {
+				var analyzeErr error
+				jsonResponse, analyzeErr = aiClient.AnalyzeRoutineContext(workCtx, txt, prompt, model)
+				if analyzeErr != nil {
+					return analyzeErr
+				}
+				structuredJSON, parseErr := ai.ParseStructuredArray(jsonResponse, "rotina", model)
+				if parseErr != nil {
+					return parseErr
+				}
+				var candidateRows []docx.RoutineRow
+				if err := json.Unmarshal(structuredJSON, &candidateRows); err != nil {
+					return ai.NewContractOutputError("rotina", model, ai.StructuredJSONArray, jsonResponse, "campos com tipos incompatíveis")
+				}
+				if len(candidateRows) == 0 {
+					return ai.NewContractOutputError("rotina", model, ai.StructuredJSONArray, jsonResponse, "a lista não pode estar vazia")
+				}
+				for rowIndex, row := range candidateRows {
+					if strings.TrimSpace(row.Data) == "" || strings.TrimSpace(row.Campo) == "" || strings.TrimSpace(row.Experiencia) == "" {
+						return ai.NewContractOutputError("rotina", model, ai.StructuredJSONArray, jsonResponse, fmt.Sprintf("item %d exige data, campo e experiencia não vazios", rowIndex+1))
+					}
+				}
+				fileRows = candidateRows
+				return nil
+			}, func(event ai.ModelFallbackEvent) {
+				result.fallback = fmt.Sprintf("⚠️ [FALLBACK] rotina %s: %s -> %s (%v)", filepath.Base(file), event.From, event.To, event.Error)
+			})
 			if err != nil {
 				result.err = err
 				result.detail = fmt.Sprintf("falha na análise de '%s': %v", filepath.Base(file), err)
-				return err
-			}
-
-			structuredJSON, err := ai.ParseStructuredArray(jsonResponse, "rotina", routineModel)
-			if err != nil {
-				result.err = err
-				result.detail = fmt.Sprintf("falha de contrato ao analisar '%s': %v", filepath.Base(file), err)
 				var contractErr *ai.ContractOutputError
 				if errors.As(err, &contractErr) {
+					result.detail = fmt.Sprintf("falha de contrato ao analisar '%s': %v", filepath.Base(file), err)
 					result.diagnostic = contractErr.Diagnostic()
 				}
 				return err
 			}
 
-			var fileRows []docx.RoutineRow
-			if err := json.Unmarshal(structuredJSON, &fileRows); err != nil {
-				result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, "campos com tipos incompatíveis")
-				result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
-				var contractErr *ai.ContractOutputError
-				if errors.As(result.err, &contractErr) {
-					result.diagnostic = contractErr.Diagnostic()
-				}
-				return result.err
-			}
-			if len(fileRows) == 0 {
-				result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, "a lista não pode estar vazia")
-				result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
-				var contractErr *ai.ContractOutputError
-				if errors.As(result.err, &contractErr) {
-					result.diagnostic = contractErr.Diagnostic()
-				}
-				return result.err
-			}
-			for rowIndex, row := range fileRows {
-				if strings.TrimSpace(row.Data) == "" || strings.TrimSpace(row.Campo) == "" || strings.TrimSpace(row.Experiencia) == "" {
-					result.err = ai.NewContractOutputError("rotina", routineModel, ai.StructuredJSONArray, jsonResponse, fmt.Sprintf("item %d exige data, campo e experiencia não vazios", rowIndex+1))
-					result.detail = fmt.Sprintf("falha de contrato ao validar '%s': %v", filepath.Base(file), result.err)
-					var contractErr *ai.ContractOutputError
-					if errors.As(result.err, &contractErr) {
-						result.diagnostic = contractErr.Diagnostic()
-					}
-					return result.err
-				}
-			}
+			result.model = effectiveModel
 			result.rows = fileRows
 			return nil
 		}, nil)
@@ -220,11 +222,17 @@ caramel routine process rotina_semana_1.docx`,
 			file := files[index]
 			if result.err != nil {
 				failed++
+				if result.fallback != "" {
+					renderer.Diagnostic("%s\n", result.fallback)
+				}
 				renderer.Diagnostic("%s\n", result.detail)
 				if result.diagnostic != "" {
 					renderer.Diagnostic("%s\n", result.diagnostic)
 				}
 				continue
+			}
+			if result.fallback != "" {
+				renderer.Diagnostic("%s\n", result.fallback)
 			}
 			if result.skipped {
 				skipped++
@@ -283,10 +291,20 @@ caramel routine process rotina_semana_1.docx`,
 			status = output.StateWarning
 			warnings = append(warnings, fmt.Sprintf("%d rotina(s) falharam durante o processamento", failed))
 		}
+		modelResults := make([]routineModelResult, 0, len(fileResults))
+		for index, result := range fileResults {
+			if result.model == "" {
+				continue
+			}
+			modelResults = append(modelResults, routineModelResult{File: filepath.Base(files[index]), Primary: routineModel, Effective: result.model})
+		}
 		return renderer.Result(output.Result{
-			Status:   status,
-			Summary:  fmt.Sprintf("Rotinas consolidadas: %d processada(s); %d pulada(s); %d falha(s).", processed, skipped, failed),
-			Count:    processed,
+			Status:  status,
+			Summary: fmt.Sprintf("Rotinas consolidadas: %d processada(s); %d pulada(s); %d falha(s).", processed, skipped, failed),
+			Count:   processed,
+			Data: struct {
+				Models []routineModelResult `json:"models,omitempty"`
+			}{Models: modelResults},
 			Outputs:  []string{finalDocxPath},
 			Warnings: warnings,
 		})

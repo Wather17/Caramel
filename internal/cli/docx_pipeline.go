@@ -139,7 +139,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 			}
 		}
 
-		res, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
+		res, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, ModelFallbacks: cfg.ModelImageFallbacks, TriageModelFallbacks: cfg.ModelTriageFallbacks, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 	}
 
 	// Execução Automatizada Padrão (Colora todas as imagens mantidas pelo filtro minSize)
-	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
+	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, ModelFallbacks: cfg.ModelImageFallbacks, TriageModelFallbacks: cfg.ModelTriageFallbacks, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 	if err != nil {
 		return err
 	}

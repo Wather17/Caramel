@@ -60,6 +60,12 @@ caramel config set openrouter_key sk-or-v1-suachaveaqui`,
 			key = "MODEL_TEXT"
 		case "MODEL_TRIAGE", "TRIAGEMODEL", "TRIAGE_MODEL":
 			key = "MODEL_TRIAGE"
+		case "MODEL_IMAGE_FALLBACKS", "IMAGE_FALLBACKS", "IMAGE_MODEL_FALLBACKS":
+			key = "MODEL_IMAGE_FALLBACKS"
+		case "MODEL_TEXT_FALLBACKS", "TEXT_FALLBACKS", "TEXT_MODEL_FALLBACKS":
+			key = "MODEL_TEXT_FALLBACKS"
+		case "MODEL_TRIAGE_FALLBACKS", "TRIAGE_FALLBACKS", "TRIAGE_MODEL_FALLBACKS":
+			key = "MODEL_TRIAGE_FALLBACKS"
 		}
 
 		if err := config.SaveConfigValue(key, val); err != nil {
@@ -97,7 +103,7 @@ caramel config show`,
 		}
 
 		apiConfigured := cfg.OpenRouterAPIKey != ""
-		modelSummary := fmt.Sprintf("image=%s, text=%s, triage=%s", orDefault(cfg.ModelImage, ai.DefaultModel), orDefault(cfg.ModelText, ai.DefaultTextModel), orDefault(cfg.ModelTriage, ai.DefaultTriageModel))
+		modelSummary := fmt.Sprintf("image=%s, text=%s, triage=%s; fallbacks: image=%d, text=%d, triage=%d", orDefault(cfg.ModelImage, ai.DefaultModel), orDefault(cfg.ModelText, ai.DefaultTextModel), orDefault(cfg.ModelTriage, ai.DefaultTriageModel), len(cfg.ModelImageFallbacks), len(cfg.ModelTextFallbacks), len(cfg.ModelTriageFallbacks))
 		status := output.StateSuccess
 		summary := fmt.Sprintf("Configuração pronta: chave de API configurada; modelos: %s.", modelSummary)
 		warnings := []string{}
@@ -110,17 +116,23 @@ caramel config show`,
 			Status:  status,
 			Summary: summary,
 			Data: struct {
-				APIKeyConfigured bool   `json:"api_key_configured"`
-				APIKeyMasked     string `json:"api_key_masked,omitempty"`
-				ModelImage       string `json:"model_image"`
-				ModelText        string `json:"model_text"`
-				ModelTriage      string `json:"model_triage"`
+				APIKeyConfigured     bool     `json:"api_key_configured"`
+				APIKeyMasked         string   `json:"api_key_masked,omitempty"`
+				ModelImage           string   `json:"model_image"`
+				ModelText            string   `json:"model_text"`
+				ModelTriage          string   `json:"model_triage"`
+				ModelImageFallbacks  []string `json:"model_image_fallbacks,omitempty"`
+				ModelTextFallbacks   []string `json:"model_text_fallbacks,omitempty"`
+				ModelTriageFallbacks []string `json:"model_triage_fallbacks,omitempty"`
 			}{
-				APIKeyConfigured: apiConfigured,
-				APIKeyMasked:     maskedKeyOrEmpty(cfg.OpenRouterAPIKey),
-				ModelImage:       orDefault(cfg.ModelImage, ai.DefaultModel),
-				ModelText:        orDefault(cfg.ModelText, ai.DefaultTextModel),
-				ModelTriage:      orDefault(cfg.ModelTriage, ai.DefaultTriageModel),
+				APIKeyConfigured:     apiConfigured,
+				APIKeyMasked:         maskedKeyOrEmpty(cfg.OpenRouterAPIKey),
+				ModelImage:           orDefault(cfg.ModelImage, ai.DefaultModel),
+				ModelText:            orDefault(cfg.ModelText, ai.DefaultTextModel),
+				ModelTriage:          orDefault(cfg.ModelTriage, ai.DefaultTriageModel),
+				ModelImageFallbacks:  cfg.ModelImageFallbacks,
+				ModelTextFallbacks:   cfg.ModelTextFallbacks,
+				ModelTriageFallbacks: cfg.ModelTriageFallbacks,
 			},
 			Outputs:  []string{envPath},
 			Warnings: warnings,

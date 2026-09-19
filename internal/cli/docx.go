@@ -151,7 +151,7 @@ caramel docx extract mapa_biologia.docx -c`,
 					return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 				}
 
-				pipeRes, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Context: cmd.Context(), MaxWorkers: docxWorkers, Verbose: outputOptions().Verbose, DiagnosticWriter: cmd.ErrOrStderr()}, triageModel, docxNoTriage)
+				pipeRes, err := pipeline.RunDocxPipelineSelectedWithOptions(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, selectedImages, pipeline.PipelineOptions{Context: cmd.Context(), MaxWorkers: docxWorkers, ModelFallbacks: cfg.ModelImageFallbacks, TriageModelFallbacks: cfg.ModelTriageFallbacks, Verbose: outputOptions().Verbose, DiagnosticWriter: cmd.ErrOrStderr()}, triageModel, docxNoTriage)
 				if err != nil {
 					return err
 				}
@@ -173,7 +173,7 @@ caramel docx extract mapa_biologia.docx -c`,
 				return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>' para poder utilizar a IA de coloração")
 			}
 
-			pipeRes, err := pipeline.RunDocxPipelineWithOptions(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: cmd.Context(), MaxWorkers: docxWorkers, Verbose: outputOptions().Verbose, DiagnosticWriter: cmd.ErrOrStderr()}, triageModel, docxNoTriage)
+			pipeRes, err := pipeline.RunDocxPipelineWithOptions(docxPath, targetDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: cmd.Context(), MaxWorkers: docxWorkers, ModelFallbacks: cfg.ModelImageFallbacks, TriageModelFallbacks: cfg.ModelTriageFallbacks, Verbose: outputOptions().Verbose, DiagnosticWriter: cmd.ErrOrStderr()}, triageModel, docxNoTriage)
 			if err != nil {
 				return err
 			}

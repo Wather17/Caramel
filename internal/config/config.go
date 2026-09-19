@@ -11,10 +11,13 @@ import (
 
 // Config armazena as configurações e chaves de API da aplicação
 type Config struct {
-	OpenRouterAPIKey string
-	ModelImage       string // Modelo de IA para geração/coloração de imagens (MODEL_IMAGE)
-	ModelText        string // Modelo de IA para síntese de texto/prompts (MODEL_TEXT)
-	ModelTriage      string // Modelo de IA de visão para a triagem de economia (MODEL_TRIAGE)
+	OpenRouterAPIKey     string
+	ModelImage           string   // Modelo de IA para geração/coloração de imagens (MODEL_IMAGE)
+	ModelText            string   // Modelo de IA para síntese de texto/prompts (MODEL_TEXT)
+	ModelTriage          string   // Modelo de IA de visão para a triagem de economia (MODEL_TRIAGE)
+	ModelImageFallbacks  []string // Cadeia opcional de fallback para imagens
+	ModelTextFallbacks   []string // Cadeia opcional de fallback para texto
+	ModelTriageFallbacks []string // Cadeia opcional de fallback para triagem
 }
 
 // GetConfigDir retorna o caminho absoluto da pasta de configuração do usuário no sistema operacional
@@ -77,6 +80,15 @@ func LoadConfig() (*Config, error) {
 	}
 	if envVal := os.Getenv("MODEL_TRIAGE"); envVal != "" {
 		cfg.ModelTriage = envVal
+	}
+	if envVal := os.Getenv("MODEL_IMAGE_FALLBACKS"); envVal != "" {
+		cfg.ModelImageFallbacks = parseModelList(envVal)
+	}
+	if envVal := os.Getenv("MODEL_TEXT_FALLBACKS"); envVal != "" {
+		cfg.ModelTextFallbacks = parseModelList(envVal)
+	}
+	if envVal := os.Getenv("MODEL_TRIAGE_FALLBACKS"); envVal != "" {
+		cfg.ModelTriageFallbacks = parseModelList(envVal)
 	}
 
 	return cfg, nil
@@ -154,7 +166,30 @@ func loadEnvFileToMap(filePath string, cfg *Config) {
 				cfg.ModelText = v
 			case "MODEL_TRIAGE":
 				cfg.ModelTriage = v
+			case "MODEL_IMAGE_FALLBACKS":
+				cfg.ModelImageFallbacks = parseModelList(v)
+			case "MODEL_TEXT_FALLBACKS":
+				cfg.ModelTextFallbacks = parseModelList(v)
+			case "MODEL_TRIAGE_FALLBACKS":
+				cfg.ModelTriageFallbacks = parseModelList(v)
 			}
 		}
 	}
+}
+
+func parseModelList(value string) []string {
+	var models []string
+	seen := make(map[string]struct{})
+	for _, raw := range strings.Split(value, ",") {
+		model := strings.TrimSpace(raw)
+		if model == "" {
+			continue
+		}
+		if _, exists := seen[model]; exists {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	return models
 }
