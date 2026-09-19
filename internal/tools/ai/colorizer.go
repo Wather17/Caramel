@@ -56,10 +56,25 @@ func ColorizeImagesContext(ctx context.Context, imagePaths []string, opts Colori
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	sharedClient, clientErr := NewClient(opts.APIKey)
+	if clientErr == nil {
+		sharedClient.Verbose = opts.Verbose
+		if opts.DiagnosticWriter != nil {
+			sharedClient.DiagnosticWriter = opts.DiagnosticWriter
+		}
+	}
 	results := make([]ColorizeBatchResult, len(imagePaths))
 	itemErrors, batchErr := ExecuteBatchContext(ctx, len(imagePaths), opts.MaxWorkers, func(workCtx context.Context, index int) error {
 		path := imagePaths[index]
-		result, err := ColorizeSingleImageContext(workCtx, path, opts)
+		var result *ColorizeResult
+		var err error
+		if clientErr != nil {
+			// Mantém o erro por item para preservar o contrato de sucesso parcial
+			// quando a opção não contém uma chave válida.
+			result, err = ColorizeSingleImageContext(workCtx, path, opts)
+		} else {
+			result, err = colorizeSingleImageWithClientContext(workCtx, path, opts, sharedClient)
+		}
 		results[index] = ColorizeBatchResult{Path: path, Result: result, Err: err}
 		return err
 	}, onProgress)
@@ -97,6 +112,16 @@ func ColorizeSingleImageContext(ctx context.Context, imagePath string, opts Colo
 	client.Verbose = opts.Verbose
 	if opts.DiagnosticWriter != nil {
 		client.DiagnosticWriter = opts.DiagnosticWriter
+	}
+	return colorizeSingleImageWithClientContext(ctx, imagePath, opts, client)
+}
+
+func colorizeSingleImageWithClientContext(ctx context.Context, imagePath string, opts ColorizeOptions, client *Client) (*ColorizeResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	// Triagem de economia: evita gastar a API de geração com imagens que não precisam de cor

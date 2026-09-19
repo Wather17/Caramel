@@ -101,7 +101,7 @@ func ListModelsContext(ctx context.Context) ([]Model, error) {
 				if readErr != nil {
 					return &retryableError{err: fmt.Errorf("falha ao ler erro da OpenRouter: %w", readErr)}
 				}
-				return statusError(resp.StatusCode, body)
+				return statusErrorWithHeaders(resp.StatusCode, resp.Header, body)
 			}
 
 			var decoded modelsResponse
