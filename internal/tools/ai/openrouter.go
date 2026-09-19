@@ -33,6 +33,7 @@ type Client struct {
 	Verbose          bool
 	DiagnosticWriter io.Writer
 	HTTPClient       *http.Client
+	limiter          *requestLimiter
 }
 
 // NewClient cria uma nova instância do cliente OpenRouter
@@ -46,7 +47,27 @@ func NewClient(apiKey string) (*Client, error) {
 		HTTPClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
+		limiter: newRequestLimiter(DefaultMaxConcurrentRequests),
 	}, nil
+}
+
+// SetMaxConcurrentRequests ajusta o teto compartilhado de requests deste
+// cliente. Valores não positivos restauram o padrão conservador.
+func (c *Client) SetMaxConcurrentRequests(maxConcurrent int) {
+	if c == nil {
+		return
+	}
+	c.limiter = newRequestLimiter(maxConcurrent)
+}
+
+func (c *Client) acquireRequest(ctx context.Context) (func(), error) {
+	if c == nil || c.limiter == nil {
+		return func() {}, nil
+	}
+	if err := c.limiter.acquire(ctx); err != nil {
+		return nil, err
+	}
+	return c.limiter.release, nil
 }
 
 // debugf envia diagnósticos somente para o canal configurado, nunca para stdout.
@@ -165,7 +186,12 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
 
+	release, err := c.acquireRequest(ctx)
+	if err != nil {
+		return nil, "", err
+	}
 	resp, err := c.HTTPClient.Do(req)
+	release()
 	if err != nil {
 		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
 	}
@@ -179,7 +205,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", statusError(resp.StatusCode, bodyBytes)
+		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -188,7 +214,7 @@ func (c *Client) ColorizeImageContext(ctx context.Context, imagePath string, pro
 	}
 
 	if chatResp.Error != nil {
-		return nil, "", fmt.Errorf("erro na API OpenRouter: %s", chatResp.Error.Message)
+		return nil, "", apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
 	}
 
 	if len(chatResp.Choices) == 0 {
@@ -290,7 +316,12 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
 
+	release, err := c.acquireRequest(ctx)
+	if err != nil {
+		return nil, "", err
+	}
 	resp, err := c.HTTPClient.Do(req)
+	release()
 	if err != nil {
 		return nil, "", &retryableError{err: fmt.Errorf("erro na comunicação com a API do OpenRouter: %w", err)}
 	}
@@ -304,7 +335,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	c.debugf("🔍 [DEBUG] Resposta Raw do OpenRouter GenerateImage (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", statusError(resp.StatusCode, bodyBytes)
+		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -313,7 +344,7 @@ func (c *Client) GenerateImageContext(ctx context.Context, promptText string, mo
 	}
 
 	if chatResp.Error != nil {
-		return nil, "", fmt.Errorf("erro na API OpenRouter: %s", chatResp.Error.Message)
+		return nil, "", apiError(fmt.Sprintf("erro na API OpenRouter: %s", chatResp.Error.Message), chatResp.Error.Code)
 	}
 
 	if len(chatResp.Choices) == 0 {
@@ -494,14 +525,19 @@ func (c *Client) downloadImageFromURLContext(ctx context.Context, url string) ([
 	if err != nil {
 		return nil, "", err
 	}
+	release, err := c.acquireRequest(ctx)
+	if err != nil {
+		return nil, "", err
+	}
 	resp, err := c.HTTPClient.Do(req)
+	release()
 	if err != nil {
 		return nil, "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("status HTTP %d ao baixar imagem da URL", resp.StatusCode)
+		return nil, "", statusErrorWithHeaders(resp.StatusCode, resp.Header, nil)
 	}
 
 	// Limita o download para evitar estouro de memória com respostas gigantes
@@ -567,7 +603,12 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
 
+	release, err := c.acquireRequest(ctx)
+	if err != nil {
+		return "", err
+	}
 	resp, err := c.HTTPClient.Do(req)
+	release()
 	if err != nil {
 		return "", &retryableError{err: fmt.Errorf("failed to contact OpenRouter API: %w", err)}
 	}
@@ -581,7 +622,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	c.debugf("🔍 [DEBUG] Resposta Raw de rotina do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return "", statusError(resp.StatusCode, bodyBytes)
+		return "", statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -590,7 +631,7 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	}
 
 	if chatResp.Error != nil {
-		return "", fmt.Errorf("OpenRouter API error: %s", chatResp.Error.Message)
+		return "", apiError(fmt.Sprintf("OpenRouter API error: %s", chatResp.Error.Message), chatResp.Error.Code)
 	}
 
 	if len(chatResp.Choices) == 0 {

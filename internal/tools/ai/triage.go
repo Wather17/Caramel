@@ -78,7 +78,12 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	req.Header.Set("HTTP-Referer", "https://github.com/Wather17/Caramel")
 	req.Header.Set("X-Title", "Caramel CLI")
 
+	release, err := c.acquireRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.HTTPClient.Do(req)
+	release()
 	if err != nil {
 		return nil, &retryableError{err: fmt.Errorf("erro na comunicação com a API de triagem: %w", err)}
 	}
@@ -92,7 +97,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	c.debugf("🔍 [DEBUG] Resposta Raw da Triagem (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, statusError(resp.StatusCode, bodyBytes)
+		return nil, statusErrorWithHeaders(resp.StatusCode, resp.Header, bodyBytes)
 	}
 
 	var chatResp ChatCompletionResponse
@@ -101,7 +106,7 @@ func (c *Client) TriageImageContext(ctx context.Context, imagePath string, promp
 	}
 
 	if chatResp.Error != nil {
-		return nil, fmt.Errorf("erro na API de triagem: %s", chatResp.Error.Message)
+		return nil, apiError(fmt.Sprintf("erro na API de triagem: %s", chatResp.Error.Message), chatResp.Error.Code)
 	}
 
 	if len(chatResp.Choices) == 0 {

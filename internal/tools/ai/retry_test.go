@@ -11,7 +11,7 @@ import (
 
 func TestStatusError_RetryableAndTruncation(t *testing.T) {
 	// 429 e 5xx são transitórios (retryable)
-	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway} {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway} {
 		err := statusError(status, []byte("corpo"))
 		if !isRetryable(err) {
 			t.Errorf("status %d deveria ser retryable", status)
@@ -31,6 +31,60 @@ func TestStatusError_RetryableAndTruncation(t *testing.T) {
 	err := statusError(http.StatusBadGateway, longBody)
 	if len(err.Error()) > 400 {
 		t.Errorf("mensagem de erro deveria truncar o corpo (len=%d)", len(err.Error()))
+	}
+}
+
+func TestRetryAfterAceitaSegundosEDataHTTP(t *testing.T) {
+	oldMax := retryBackoffMax
+	retryBackoffMax = 30 * time.Second
+	t.Cleanup(func() { retryBackoffMax = oldMax })
+
+	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	if delay, ok := parseRetryAfter("3", now); !ok || delay != 3*time.Second {
+		t.Fatalf("Retry-After em segundos inesperado: delay=%v ok=%v", delay, ok)
+	}
+	date := now.Add(5 * time.Second).Format(http.TimeFormat)
+	if delay, ok := parseRetryAfter(date, now); !ok || delay != 5*time.Second {
+		t.Fatalf("Retry-After em data HTTP inesperado: delay=%v ok=%v", delay, ok)
+	}
+	for _, raw := range []string{"-1", "31", "inválido", now.Add(-time.Second).Format(http.TimeFormat)} {
+		if _, ok := parseRetryAfter(raw, now); ok {
+			t.Errorf("Retry-After inválido deveria ser rejeitado: %q", raw)
+		}
+	}
+}
+
+func TestStatusErrorPreservaRetryAfter(t *testing.T) {
+	headers := make(http.Header)
+	headers.Set("Retry-After", "3")
+	err := statusErrorWithHeaders(http.StatusTooManyRequests, headers, nil)
+	re, ok := err.(*retryableError)
+	if !ok {
+		t.Fatalf("esperava retryableError, obtido %T", err)
+	}
+	if re.StatusCode() != http.StatusTooManyRequests {
+		t.Errorf("status inesperado: %d", re.StatusCode())
+	}
+	if delay, ok := re.RetryAfter(); !ok || delay != 3*time.Second {
+		t.Errorf("Retry-After não preservado: delay=%v ok=%v", delay, ok)
+	}
+}
+
+func TestRetryWithBackoffRespeitaRetryAfter(t *testing.T) {
+	calls := 0
+	started := time.Now()
+	err := retryWithBackoffContext(context.Background(), 2, func() error {
+		calls++
+		if calls == 1 {
+			return &retryableError{err: fmt.Errorf("limite"), retryAfter: 20 * time.Millisecond, hasRetryAfter: true}
+		}
+		return nil
+	})
+	if err != nil || calls != 2 {
+		t.Fatalf("retry deveria concluir após Retry-After: calls=%d err=%v", calls, err)
+	}
+	if elapsed := time.Since(started); elapsed < 15*time.Millisecond {
+		t.Fatalf("Retry-After não foi respeitado: %v", elapsed)
 	}
 }
 
