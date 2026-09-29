@@ -27,6 +27,44 @@ var (
 	routineWorkers   int
 )
 
+const routineReportPrefix = "Campos_de_experiências_"
+
+// collectRoutineFiles discovers routine inputs without treating reports from
+// previous runs as new source documents when the user passes a directory.
+func collectRoutineFiles(targetPath string) ([]string, bool, error) {
+	fileInfo, err := os.Stat(targetPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("caminho inválido: %w", err)
+	}
+
+	if !fileInfo.IsDir() {
+		if !strings.HasSuffix(strings.ToLower(targetPath), ".docx") {
+			return nil, false, fmt.Errorf("o arquivo fornecido não é um documento .docx")
+		}
+		return []string{targetPath}, false, nil
+	}
+
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, true, fmt.Errorf("erro ao ler diretório: %w", err)
+	}
+
+	generatedPrefix := strings.ToLower(routineReportPrefix)
+	files := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		lowerName := strings.ToLower(name)
+		if entry.IsDir() || !strings.HasSuffix(lowerName, ".docx") || strings.HasPrefix(name, "~$") {
+			continue
+		}
+		if strings.HasPrefix(lowerName, generatedPrefix) {
+			continue
+		}
+		files = append(files, filepath.Join(targetPath, name))
+	}
+	return files, true, nil
+}
+
 type routineFileResult struct {
 	rows       []docx.RoutineRow
 	model      string
@@ -87,31 +125,9 @@ caramel routine process rotina_semana_1.docx`,
 		routineModel := resolveModel(routineModelName, cmd.Flags().Changed("model"), cfg.ModelText)
 
 		// 1. Coleta os arquivos .docx a serem processados
-		var files []string
-		fileInfo, err := os.Stat(targetPath)
+		files, targetIsDir, err := collectRoutineFiles(targetPath)
 		if err != nil {
-			return fmt.Errorf("caminho inválido: %w", err)
-		}
-
-		if fileInfo.IsDir() {
-			entries, err := os.ReadDir(targetPath)
-			if err != nil {
-				return fmt.Errorf("erro ao ler diretório: %w", err)
-			}
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".docx") {
-					// Ignora arquivos temporários do Word que começam com ~$
-					if !strings.HasPrefix(entry.Name(), "~$") {
-						files = append(files, filepath.Join(targetPath, entry.Name()))
-					}
-				}
-			}
-		} else {
-			if strings.HasSuffix(strings.ToLower(targetPath), ".docx") {
-				files = append(files, targetPath)
-			} else {
-				return fmt.Errorf("o arquivo fornecido não é um documento .docx")
-			}
+			return err
 		}
 
 		if len(files) == 0 {
@@ -261,14 +277,14 @@ caramel routine process rotina_semana_1.docx`,
 		// 5. Gera o arquivo de destino
 		targetOutDir := routineOutputDir
 		if targetOutDir == "" {
-			if fileInfo.IsDir() {
+			if targetIsDir {
 				targetOutDir = targetPath
 			} else {
 				targetOutDir = filepath.Dir(targetPath)
 			}
 		}
 
-		finalDocxName := fmt.Sprintf("Campos_de_experiências_%s.docx", time.Now().Format("02-01-2006"))
+		finalDocxName := fmt.Sprintf("%s%s.docx", routineReportPrefix, time.Now().Format("02-01-2006"))
 		finalDocxPath := filepath.Join(targetOutDir, finalDocxName)
 
 		renderer.Diagnostic("gerando relatório final em paisagem\n")

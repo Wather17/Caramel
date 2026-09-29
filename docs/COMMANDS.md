@@ -96,6 +96,10 @@ os objetos de imagem embutidos e avisa quando algum recurso não pode ser decodi
 | :--- | :--- |
 | `caramel routine consolidate` | Consolida rotinas semanais e classifica Campos de Experiência da BNCC |
 
+Ao receber uma pasta, o comando ignora relatórios consolidados anteriores com o prefixo
+`Campos_de_experiências_` para não reprocessar suas próprias saídas. Um arquivo DOCX passado
+explicitamente continua sendo processado mesmo que use esse prefixo.
+
 ### ⚙️ Configurações & IA
 | Comando | Finalidade |
 | :--- | :--- |
