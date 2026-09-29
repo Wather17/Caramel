@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -40,6 +42,57 @@ func TestParseResilientDate(t *testing.T) {
 				t.Errorf("parseResilientDate(%q) = %v, esperado %v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCollectRoutineFilesExcludesGeneratedReportsAndTemporaryDocuments(t *testing.T) {
+	inputDir := t.TempDir()
+	for _, name := range []string{
+		"rotina-a.docx",
+		"ROTINA-B.DOCX",
+		"Campos_de_experiências_28-09-2026.docx",
+		"campos_de_experiências_29-09-2026.DOCX",
+		"~$rotina-aberta.docx",
+		"not-a-docx.txt",
+	} {
+		if err := os.WriteFile(filepath.Join(inputDir, name), []byte("fixture"), 0644); err != nil {
+			t.Fatalf("falha ao criar fixture %q: %v", name, err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(inputDir, "subpasta.docx"), 0755); err != nil {
+		t.Fatalf("falha ao criar diretório com extensão DOCX: %v", err)
+	}
+
+	files, isDir, err := collectRoutineFiles(inputDir)
+	if err != nil {
+		t.Fatalf("collectRoutineFiles falhou: %v", err)
+	}
+	if !isDir {
+		t.Fatal("a entrada deveria ser identificada como diretório")
+	}
+	want := []string{filepath.Join(inputDir, "ROTINA-B.DOCX"), filepath.Join(inputDir, "rotina-a.docx")}
+	sort.Strings(want)
+	sort.Strings(files)
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("arquivos selecionados incorretamente: got=%v want=%v", files, want)
+	}
+}
+
+func TestCollectRoutineFilesPreservesExplicitGeneratedReport(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Campos_de_experiências_29-09-2026.docx")
+	if err := os.WriteFile(path, []byte("fixture"), 0644); err != nil {
+		t.Fatalf("falha ao criar fixture: %v", err)
+	}
+
+	files, isDir, err := collectRoutineFiles(path)
+	if err != nil {
+		t.Fatalf("collectRoutineFiles falhou: %v", err)
+	}
+	if isDir {
+		t.Fatal("a entrada deveria ser identificada como arquivo")
+	}
+	if !reflect.DeepEqual(files, []string{path}) {
+		t.Fatalf("arquivo explícito não foi preservado: got=%v", files)
 	}
 }
 
