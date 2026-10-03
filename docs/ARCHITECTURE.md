@@ -77,6 +77,9 @@ A biblioteca visível é uma camada distinta, configurada por `caramel vault ini
 `indexed_sources` registra a biblioteca e fontes externas; `indexed_files` mantém caminhos,
 metadados, hashes e disponibilidade sem copiar ou assumir posse desses arquivos. O sync é
 recursivo e incremental. Objetos imutáveis, cache e SQLite permanecem no diretório interno.
+O autocomplete do PowerShell consulta esse índice, sincroniza fontes com estado mais antigo
+que 30 segundos e aplica filtro de formato antes do ranking textual e temporal. Falhas nessa
+consulta retornam silenciosamente ao completador nativo de arquivos.
 
 O pacote `workspace` permanece como camada de compatibilidade para os manifestos JSON do
 MVP. Na abertura da TUI, projetos antigos são migrados automaticamente para coleções e

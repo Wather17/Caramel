@@ -147,6 +147,7 @@ caramel config set model_text_fallbacks openai/gpt-oss-120b
 | `caramel vault source add/list` | Vincula ou lista fontes externas sem copiar arquivos |
 | `caramel vault sync` | Atualiza o índice incrementalmente (`--full` recalcula hashes) |
 | `caramel vault status` | Exibe fontes, contagens e última sincronização |
+| `caramel completion powershell` | Gera o script que habilita sugestões contextuais com `Tab` |
 | `caramel install` | Instala o Caramel CLI globalmente |
 | `caramel version` | Exibe a versão atual do executável |
 

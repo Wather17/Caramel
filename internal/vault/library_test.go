@@ -259,6 +259,51 @@ func TestFullSyncRepairsHashWhenMetadataIsUnchanged(t *testing.T) {
 	}
 }
 
+func TestSearchIndexedFilesFiltersRanksAndExcludes(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", filepath.Join(t.TempDir(), "vault"))
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	root := t.TempDir()
+	older := filepath.Join(root, "Caderno Árvore.docx")
+	newer := filepath.Join(root, "Caderno Água.docx")
+	ignoredType := filepath.Join(root, "Caderno recente.pdf")
+	for _, path := range []string{older, newer, ignoredType} {
+		writeIndexedFixture(t, path, path)
+	}
+	base := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(older, base, base); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(newer, base.Add(time.Hour), base.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.AddSource(context.Background(), root, SourceExternal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.Sync(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := v.SearchIndexedFiles(context.Background(), IndexedFileQuery{Text: "caderno", Extensions: []string{"DOCX"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Path != newer || results[0].SourceRole != SourceExternal {
+		t.Fatalf("ranking/filtro inesperado: %#v", results)
+	}
+	accentless, err := v.SearchIndexedFiles(context.Background(), IndexedFileQuery{Text: "arvore", Extensions: []string{".docx"}})
+	if err != nil || len(accentless) != 1 || accentless[0].Path != older {
+		t.Fatalf("busca sem acento inesperada: %#v, %v", accentless, err)
+	}
+	excluded, err := v.SearchIndexedFiles(context.Background(), IndexedFileQuery{Extensions: []string{"docx"}, Exclude: []string{newer}})
+	if err != nil || len(excluded) != 1 || excluded[0].Path != older {
+		t.Fatalf("exclusão inesperada: %#v, %v", excluded, err)
+	}
+}
+
 func writeIndexedFixture(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

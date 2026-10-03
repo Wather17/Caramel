@@ -48,6 +48,21 @@ type IndexedFile struct {
 	Available    bool       `json:"available"`
 }
 
+// IndexedFileCandidate combina um arquivo disponível com a origem exibida no autocomplete.
+type IndexedFileCandidate struct {
+	IndexedFile
+	SourcePath string     `json:"source_path"`
+	SourceRole SourceRole `json:"source_role"`
+}
+
+// IndexedFileQuery define os filtros do autocomplete contextual.
+type IndexedFileQuery struct {
+	Text       string
+	Extensions []string
+	Exclude    []string
+	Limit      int
+}
+
 // SyncReport resume uma atualização incremental de uma ou mais fontes.
 type SyncReport struct {
 	Sources     int      `json:"sources"`
@@ -224,6 +239,101 @@ func (v *Vault) ListIndexedFiles(ctx context.Context, includeUnavailable bool) (
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+// SearchIndexedFiles retorna sugestões compatíveis em ordem determinística.
+func (v *Vault) SearchIndexedFiles(ctx context.Context, query IndexedFileQuery) ([]IndexedFileCandidate, error) {
+	if v == nil || v.db == nil {
+		return nil, errors.New("vault não está aberto")
+	}
+	extensions := make(map[string]bool, len(query.Extensions))
+	for _, extension := range query.Extensions {
+		extension = strings.ToLower(strings.TrimSpace(extension))
+		if extension != "" && !strings.HasPrefix(extension, ".") {
+			extension = "." + extension
+		}
+		if extension != "" {
+			extensions[extension] = true
+		}
+	}
+	excluded := make(map[string]bool, len(query.Exclude))
+	for _, path := range query.Exclude {
+		if absolute, err := cleanAbsolutePath(path); err == nil {
+			excluded[filepath.Clean(absolute)] = true
+		}
+	}
+
+	rows, err := v.db.QueryContext(ctx, indexedFileSelectWithSource+" WHERE f.available=1")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type rankedCandidate struct {
+		candidate      IndexedFileCandidate
+		relevance      int
+		activity       time.Time
+		normalizedName string
+	}
+	normalizedText := normalizeFilenameText(strings.TrimSpace(query.Text))
+	var ranked []rankedCandidate
+	for rows.Next() {
+		candidate, err := scanIndexedFileCandidate(rows)
+		if err != nil {
+			return nil, err
+		}
+		if len(extensions) > 0 && !extensions[strings.ToLower(candidate.Extension)] || excluded[filepath.Clean(candidate.Path)] {
+			continue
+		}
+		normalizedName := normalizeFilenameText(candidate.Name)
+		normalizedPath := normalizeFilenameText(candidate.Path)
+		relevance := 0
+		if normalizedText != "" {
+			switch {
+			case normalizedName == normalizedText:
+				relevance = 0
+			case strings.HasPrefix(normalizedName, normalizedText):
+				relevance = 1
+			case strings.Contains(normalizedName, normalizedText):
+				relevance = 2
+			case strings.Contains(normalizedPath, normalizedText):
+				relevance = 3
+			default:
+				continue
+			}
+		}
+		activity := candidate.FirstSeenAt
+		if candidate.ModifiedAt.After(activity) {
+			activity = candidate.ModifiedAt
+		}
+		if candidate.LastUsedAt != nil && candidate.LastUsedAt.After(activity) {
+			activity = *candidate.LastUsedAt
+		}
+		ranked = append(ranked, rankedCandidate{candidate: candidate, relevance: relevance, activity: activity, normalizedName: normalizedName})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].relevance != ranked[j].relevance {
+			return ranked[i].relevance < ranked[j].relevance
+		}
+		if !ranked[i].activity.Equal(ranked[j].activity) {
+			return ranked[i].activity.After(ranked[j].activity)
+		}
+		if ranked[i].normalizedName != ranked[j].normalizedName {
+			return ranked[i].normalizedName < ranked[j].normalizedName
+		}
+		return ranked[i].candidate.Path < ranked[j].candidate.Path
+	})
+	limit := query.Limit
+	if limit <= 0 || limit > len(ranked) {
+		limit = len(ranked)
+	}
+	result := make([]IndexedFileCandidate, 0, limit)
+	for _, item := range ranked[:limit] {
+		result = append(result, item.candidate)
+	}
+	return result, nil
 }
 
 // TouchIndexedFile registra uso sem alterar o arquivo fonte.
@@ -496,6 +606,7 @@ func scanSource(row sourceScanner) (IndexedSource, error) {
 }
 
 const indexedFileSelect = `SELECT id,source_id,path,relative_path,name,extension,size,modified_at,content_hash,first_seen_at,last_seen_at,last_used_at,available FROM indexed_files`
+const indexedFileSelectWithSource = `SELECT f.id,f.source_id,f.path,f.relative_path,f.name,f.extension,f.size,f.modified_at,f.content_hash,f.first_seen_at,f.last_seen_at,f.last_used_at,f.available,s.path,s.role FROM indexed_files f JOIN indexed_sources s ON s.id=f.source_id`
 
 func scanIndexedFile(row sourceScanner) (IndexedFile, error) {
 	var item IndexedFile
@@ -512,6 +623,25 @@ func scanIndexedFile(row sourceScanner) (IndexedFile, error) {
 		item.LastUsedAt = &t
 	}
 	return item, nil
+}
+
+func scanIndexedFileCandidate(row sourceScanner) (IndexedFileCandidate, error) {
+	var candidate IndexedFileCandidate
+	var modified, firstSeen, lastSeen string
+	var lastUsed sql.NullString
+	var available int
+	var role string
+	if err := row.Scan(&candidate.ID, &candidate.SourceID, &candidate.Path, &candidate.RelativePath, &candidate.Name, &candidate.Extension, &candidate.Size, &modified, &candidate.ContentHash, &firstSeen, &lastSeen, &lastUsed, &available, &candidate.SourcePath, &role); err != nil {
+		return candidate, err
+	}
+	candidate.ModifiedAt, candidate.FirstSeenAt, candidate.LastSeenAt = parseTime(modified), parseTime(firstSeen), parseTime(lastSeen)
+	candidate.Available = available != 0
+	candidate.SourceRole = SourceRole(role)
+	if lastUsed.Valid {
+		t := parseTime(lastUsed.String)
+		candidate.LastUsedAt = &t
+	}
+	return candidate, nil
 }
 
 func cleanAbsolutePath(path string) (string, error) {
