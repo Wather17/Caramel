@@ -17,8 +17,9 @@ var docxSplitCmd = &cobra.Command{
 	Long: `Cria um arquivo DOCX por segmento separado por uma quebra manual de página ou por uma quebra de seção.
 DOCX não possui paginação fixa: o comando não divide por páginas visuais nem usa quebras renderizadas pelo Word.
 
-Por padrão, as partes são gravadas em uma pasta <nome>_split ao lado do documento, com nomes sequenciais.
-Use --output-dir para escolher outra pasta. O arquivo original não é alterado e saídas existentes não são substituídas.
+Com a biblioteca configurada, as partes ficam no diário de resultados; sem ela, são gravadas em
+uma pasta <nome>_split ao lado do documento. Use --output-dir para escolher outra pasta. O arquivo
+original não é alterado e saídas existentes não são substituídas.
 As quebras precisam estar em parágrafos de nível superior; quebras dentro de tabelas ou blocos aninhados retornam erro.
 
 📚 QUANDO USAR:
@@ -30,20 +31,38 @@ caramel docx split apostila.docx
 caramel docx split apostila.docx --output-dir ./capitulos`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
 
-		paths, err := docx.SplitDOCX(args[0], docxSplitOutputDir)
+		targetDir := docxSplitOutputDir
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output-dir") {
+			plan, err = libraryOutputPlan(cmd, "docx", output.ShapeBundle, outputStem(args[0], "_split"), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetDir = plan.WorkPath()
+			}
+		}
+
+		paths, err := docx.SplitDOCX(args[0], targetDir)
+		if err != nil {
+			return err
+		}
+		paths, err = publishOutputPlan(plan, paths)
 		if err != nil {
 			return err
 		}
 		return renderer.Result(output.Result{
-			Status:  output.StateSuccess,
-			Summary: fmt.Sprintf("DOCX dividido: %d arquivo(s) gerado(s).", len(paths)),
-			Count:   len(paths),
-			Outputs: paths,
+			Status:        output.StateSuccess,
+			Summary:       fmt.Sprintf("DOCX dividido: %d arquivo(s) gerado(s).", len(paths)),
+			Count:         len(paths),
+			Outputs:       paths,
+			PrimaryOutput: bundlePrimaryOutput(plan, paths),
 		})
 	},
 }

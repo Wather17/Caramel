@@ -58,3 +58,29 @@ func TestRendererQuietMantemErrosNoStderr(t *testing.T) {
 		t.Fatalf("quiet deveria manter erros em stderr, obtido stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
+
+func TestRendererHumanShowsPrimaryWhileJSONKeepsAllOutputs(t *testing.T) {
+	result := Result{Status: StateSuccess, PrimaryOutput: "/resultados/pacote", Outputs: []string{"/resultados/pacote/a", "/resultados/pacote/b"}}
+	var human bytes.Buffer
+	renderer, err := New(Options{}, &human, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Result(result); err != nil {
+		t.Fatal(err)
+	}
+	if human.String() != "/resultados/pacote\n" {
+		t.Fatalf("saída humana inesperada: %q", human.String())
+	}
+	var structured bytes.Buffer
+	renderer, err = New(Options{JSON: true}, &structured, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Result(result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(structured.String(), `"outputs":["/resultados/pacote/a","/resultados/pacote/b"]`) {
+		t.Fatalf("JSON perdeu outputs: %s", structured.String())
+	}
+}

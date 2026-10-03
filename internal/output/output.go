@@ -23,6 +23,7 @@ type Options struct {
 	Verbose bool
 	Quiet   bool
 	JSON    bool
+	Observe func(*Result)
 }
 
 // Validate rejeita combinações de modos que não possuem semântica inequívoca.
@@ -67,14 +68,15 @@ type Event struct {
 
 // Result contém o resumo serializável de uma operação.
 type Result struct {
-	Status   State                `json:"status"`
-	Summary  string               `json:"summary,omitempty"`
-	Count    int                  `json:"count,omitempty"`
-	Data     interface{}          `json:"data,omitempty"`
-	Outputs  []string             `json:"outputs,omitempty"`
-	Warnings []string             `json:"warnings,omitempty"`
-	Errors   []string             `json:"errors,omitempty"`
-	Attempts []ai.AttemptMetadata `json:"attempts,omitempty"`
+	Status        State                `json:"status"`
+	Summary       string               `json:"summary,omitempty"`
+	Count         int                  `json:"count,omitempty"`
+	Data          interface{}          `json:"data,omitempty"`
+	Outputs       []string             `json:"outputs,omitempty"`
+	PrimaryOutput string               `json:"primary_output,omitempty"`
+	Warnings      []string             `json:"warnings,omitempty"`
+	Errors        []string             `json:"errors,omitempty"`
+	Attempts      []ai.AttemptMetadata `json:"attempts,omitempty"`
 }
 
 // Renderer separa resultado, progresso e diagnóstico nos canais apropriados.
@@ -141,6 +143,9 @@ func (r *Renderer) Result(result Result) error {
 	if r == nil {
 		return fmt.Errorf("renderer de output não inicializado")
 	}
+	if r.options.Observe != nil {
+		r.options.Observe(&result)
+	}
 	if r.options.JSON {
 		return json.NewEncoder(r.out).Encode(result)
 	}
@@ -157,7 +162,11 @@ func (r *Renderer) Result(result Result) error {
 			return err
 		}
 	}
-	for _, path := range result.Outputs {
+	paths := result.Outputs
+	if result.PrimaryOutput != "" {
+		paths = []string{result.PrimaryOutput}
+	}
+	for _, path := range paths {
 		if _, err := fmt.Fprintln(r.out, path); err != nil {
 			return err
 		}

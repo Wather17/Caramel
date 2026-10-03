@@ -58,7 +58,7 @@ caramel print 2up ./fichas_estudo -f cover
 caramel print 2up ./atividades --size small`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -121,6 +121,18 @@ caramel print 2up ./atividades --size small`,
 				outputPath = pdfOutputDir
 			}
 		}
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output") {
+			base := strings.TrimSuffix(filepath.Base(defaultPdfName), filepath.Ext(defaultPdfName))
+			plan, err = libraryOutputPlan(cmd, "impressao", output.ShapeSingle, base, ".pdf")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				outputPath = plan.WorkPath()
+			}
+		}
 
 		opts := pdf.Options{
 			DrawCutLine:     pdfDrawCutLine,
@@ -140,12 +152,16 @@ caramel print 2up ./atividades --size small`,
 		if err := pdf.Generate2UpPDF(imagePaths, outputPath, opts); err != nil {
 			return fmt.Errorf("falha ao gerar PDF 2-up: %w", err)
 		}
+		paths, err := publishOutputPlan(plan, []string{outputPath})
+		if err != nil {
+			return err
+		}
 
 		return renderer.Result(output.Result{
 			Status:  output.StateSuccess,
 			Summary: fmt.Sprintf("PDF 2-up gerado: %d imagem(ns).", len(imagePaths)),
 			Count:   len(imagePaths),
-			Outputs: []string{outputPath},
+			Outputs: paths,
 		})
 	},
 }

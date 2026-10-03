@@ -43,6 +43,7 @@ func init() {
 		imageGenerateCmd.Annotations = make(map[string]string)
 	}
 	imageGenerateCmd.Annotations[vaultInputAnnotation] = "flag:file"
+	registerDomainExecution(imageGenerateCmd)
 }
 
 func registerIndexedInputs(cmd *cobra.Command, extensions []string) {
@@ -51,6 +52,7 @@ func registerIndexedInputs(cmd *cobra.Command, extensions []string) {
 		cmd.Annotations = make(map[string]string)
 	}
 	cmd.Annotations[vaultInputAnnotation] = "args"
+	registerDomainExecution(cmd)
 }
 
 func completeVaultFiles(extensions ...string) cobra.CompletionFunc {

@@ -28,7 +28,7 @@ func TestPDFImagesExtractCommandUsesOutputDirectory(t *testing.T) {
 		t.Fatalf("pdf images extract falhou: %v", err)
 	}
 	output := filepath.Join(outputDir, "lesson_page_001_image_001.png")
-	if !strings.Contains(stdout, output) || !strings.Contains(stdout, "1 arquivo(s)") {
+	if !strings.Contains(stdout, outputDir) || !strings.Contains(stdout, "1 arquivo(s)") {
 		t.Errorf("resultado da CLI não informa saída e quantidade: %q", stdout)
 	}
 	if _, err := os.Stat(output); err != nil {

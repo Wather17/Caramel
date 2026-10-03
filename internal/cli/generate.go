@@ -83,7 +83,7 @@ caramel image generate -f ./itens.txt -s coloring
 # Reutilizar imagens salvas na biblioteca local
 caramel image generate --items "bolo, pão" --reuse-cache`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -173,6 +173,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		// Define a pasta final antes da síntese para que acertos locais possam ser copiados
 		// para a saída sem depender de uma chamada ao modelo de texto.
 		targetDir := genOutputDir
+		var plan *output.Plan
 		if targetDir == "" {
 			themeSlug := "itens"
 			if genTheme != "" {
@@ -181,6 +182,14 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 				themeSlug = ai.SanitizeSlug(1, rawItems[0])
 			}
 			targetDir = fmt.Sprintf("./imagens_%s", themeSlug)
+			plan, err = libraryOutputPlan(cmd, "imagens", output.ShapeBundle, filepath.Base(targetDir), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetDir = plan.WorkPath()
+			}
 		}
 
 		useImageCache := genReuseCache || genRefreshCache
@@ -246,7 +255,18 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 			if renderer.Options().Verbose && errors.As(err, &contractErr) {
 				renderer.Diagnostic("%s\n", contractErr.Diagnostic())
 			}
-			return err
+			hasArtifact := false
+			for _, result := range results {
+				if result.Status == "done" && result.ImagePath != "" {
+					hasArtifact = true
+					break
+				}
+			}
+			if !hasArtifact {
+				return err
+			}
+			generationWarnings = append(generationWarnings, fmt.Sprintf("a geração terminou parcialmente: %v", err))
+			renderer.Diagnostic("geração parcial: %v\n", err)
 		}
 		cacheWarnings = append(cacheWarnings, generationWarnings...)
 
@@ -272,6 +292,7 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		}
 
 		artifacts := []string{targetDir}
+		artifacts = append(artifacts, successfulPaths...)
 		warnings := cacheWarnings
 		if failCount > 0 {
 			warnings = append(warnings, fmt.Sprintf("%d imagem(ns) falharam durante a geração", failCount))
@@ -332,6 +353,21 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 			}
 		}
 
+		if plan != nil && successCount > 0 {
+			artifacts, err = publishOutputPlan(plan, artifacts)
+			if err != nil {
+				return err
+			}
+			for index := range results {
+				results[index].ImagePath = plan.Translate(results[index].ImagePath)
+			}
+			for index := range successfulPaths {
+				successfulPaths[index] = plan.Translate(successfulPaths[index])
+			}
+		} else if plan != nil {
+			artifacts = nil
+		}
+
 		status := output.StateSuccess
 		if len(warnings) > 0 || successCount == 0 {
 			status = output.StateWarning
@@ -340,14 +376,19 @@ caramel image generate --items "bolo, pão" --reuse-cache`,
 		if useImageCache {
 			summary = fmt.Sprintf("Geração concluída: %d gerada(s); %d reutilizada(s); %d falha(s).", generatedCount, reusedCount, failCount)
 		}
+		primaryOutput := plannedPrimaryOutputFor(plan, artifacts)
+		if primaryOutput == "" && len(artifacts) > 0 {
+			primaryOutput = artifacts[0]
+		}
 		return renderer.Result(output.Result{
-			Status:   status,
-			Summary:  summary,
-			Count:    successCount,
-			Data:     results,
-			Outputs:  artifacts,
-			Warnings: warnings,
-			Attempts: attempts.Snapshot(),
+			Status:        status,
+			Summary:       summary,
+			Count:         successCount,
+			Data:          results,
+			Outputs:       artifacts,
+			PrimaryOutput: primaryOutput,
+			Warnings:      warnings,
+			Attempts:      attempts.Snapshot(),
 		})
 	},
 }

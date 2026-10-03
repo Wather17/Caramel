@@ -21,7 +21,8 @@ var pdfPagesRenderCmd = &cobra.Command{
 	Long: "Renderiza todas as páginas, incluindo texto, desenhos vetoriais e imagens, como arquivos raster\n" +
 		"numerados na ordem original. O padrão é PNG em 150 DPI; --format aceita png ou jpg e --dpi\n" +
 		"permite escolher outra resolução positiva até 1200 DPI, respeitando um limite de pixels por página.\n\n" +
-		"Por padrão, as imagens são salvas na pasta <nome_do_pdf>_rendered_pages ao lado da entrada. Use\n" +
+		"Com a biblioteca configurada, as imagens ficam no diário de resultados; sem ela, são salvas\n" +
+		"na pasta <nome_do_pdf>_rendered_pages ao lado da entrada. Use\n" +
 		"--output-dir para escolher outra pasta. A renderização é local e usa um backend WebAssembly sem\n" +
 		"dependências de sistema.\n\n" +
 		"📚 QUANDO USAR:\n" +
@@ -33,21 +34,38 @@ var pdfPagesRenderCmd = &cobra.Command{
 		"caramel pdf pages render apostila.pdf --format jpg --dpi 300 --output-dir ./paginas",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
 
-		outputPaths, err := pdf.RenderPDFPages(args[0], pdfPagesOutputDir, pdfPagesFormat, pdfPagesDPI)
+		targetDir := pdfPagesOutputDir
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output-dir") {
+			plan, err = libraryOutputPlan(cmd, "pdf", output.ShapeBundle, outputStem(args[0], "_rendered_pages"), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetDir = plan.WorkPath()
+			}
+		}
+		outputPaths, err := pdf.RenderPDFPages(args[0], targetDir, pdfPagesFormat, pdfPagesDPI)
+		if err != nil {
+			return err
+		}
+		outputPaths, err = publishOutputPlan(plan, outputPaths)
 		if err != nil {
 			return err
 		}
 		renderer.Diagnostic("renderizadas %d páginas de %s\n", len(outputPaths), args[0])
 		return renderer.Result(output.Result{
-			Status:  output.StateSuccess,
-			Summary: fmt.Sprintf("Páginas renderizadas: %d imagem(ns).", len(outputPaths)),
-			Count:   len(outputPaths),
-			Outputs: outputPaths,
+			Status:        output.StateSuccess,
+			Summary:       fmt.Sprintf("Páginas renderizadas: %d imagem(ns).", len(outputPaths)),
+			Count:         len(outputPaths),
+			Outputs:       outputPaths,
+			PrimaryOutput: bundlePrimaryOutput(plan, outputPaths),
 		})
 	},
 }

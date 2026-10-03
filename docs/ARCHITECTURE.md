@@ -80,6 +80,10 @@ recursivo e incremental. Objetos imutáveis, cache e SQLite permanecem no diret�
 O autocomplete do PowerShell consulta esse índice, sincroniza fontes com estado mais antigo
 que 30 segundos e aplica filtro de formato antes do ranking textual e temporal. Falhas nessa
 consulta retornam silenciosamente ao completador nativo de arquivos.
+O planejador de `internal/output` recebe categoria, formato e nome-base, produz em staging e
+publica em `resultados/YYYY-MM-DD` com política determinística de colisão. Runs tradicionais da
+CLI usam `run_input_paths`, `run_output_paths` e `path_derivations`; outputs publicados sob uma
+fonte conhecida são sincronizados antes da renderização do resumo.
 
 O pacote `workspace` permanece como camada de compatibilidade para os manifestos JSON do
 MVP. Na abertura da TUI, projetos antigos são migrados automaticamente para coleções e

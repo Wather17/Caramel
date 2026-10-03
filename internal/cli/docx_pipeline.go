@@ -68,6 +68,17 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 	if cfg.OpenRouterAPIKey == "" {
 		return fmt.Errorf("chave de API do OpenRouter não configurada. Use 'caramel config setup' ou 'caramel config set openrouter_key <sua-chave>'")
 	}
+	var outputPlan *output.Plan
+	if strings.TrimSpace(opts.OutputDir) == "" {
+		outputPlan, err = libraryOutputPlanContext(opts.Context, "imagens", output.ShapeBundle, outputStem(docxPath, "_colorized"), "")
+		if err != nil {
+			return err
+		}
+		if outputPlan != nil {
+			defer outputPlan.Cleanup()
+			opts.OutputDir = outputPlan.WorkPath()
+		}
+	}
 
 	modelName := opts.ModelName
 	if modelName == "" {
@@ -143,12 +154,18 @@ func RunProcessDocx(opts ProcessDocxOptions) error {
 		if err != nil {
 			return err
 		}
+		if err := publishDocxPipeline(outputPlan, res); err != nil {
+			return err
+		}
 		return renderDocxPipelineResult(renderer, res, true)
 	}
 
 	// Execução Automatizada Padrão (Colora todas as imagens mantidas pelo filtro minSize)
 	res, err := pipeline.RunDocxPipelineWithOptions(docxPath, opts.OutputDir, cfg.OpenRouterAPIKey, modelName, minSizeBytes, pipeline.PipelineOptions{Context: opts.Context, MaxWorkers: opts.MaxWorkers, ModelFallbacks: cfg.ModelImageFallbacks, TriageModelFallbacks: cfg.ModelTriageFallbacks, Verbose: opts.Output.Verbose, DiagnosticWriter: stderr}, opts.TriageModel, opts.NoTriage)
 	if err != nil {
+		return err
+	}
+	if err := publishDocxPipeline(outputPlan, res); err != nil {
 		return err
 	}
 	return renderDocxPipelineResult(renderer, res, false)
@@ -214,5 +231,39 @@ func renderDocxPipelineResult(renderer *output.Renderer, res *pipeline.PipelineR
 	if res.OutputDir != "" {
 		outputs = append(outputs, res.OutputDir)
 	}
-	return renderer.Result(output.Result{Status: status, Summary: summary, Count: res.TotalColorized, Outputs: outputs, Warnings: warnings})
+	for _, result := range res.Results {
+		if result.ColorizedPath != "" {
+			outputs = append(outputs, result.ColorizedPath)
+		}
+	}
+	return renderer.Result(output.Result{Status: status, Summary: summary, Count: res.TotalColorized, Outputs: outputs, PrimaryOutput: res.OutputDir, Warnings: warnings})
+}
+
+func publishDocxPipeline(plan *output.Plan, res *pipeline.PipelineResult) error {
+	if plan == nil || res == nil {
+		return nil
+	}
+	if res.TotalColorized == 0 {
+		res.OutputDir = ""
+		res.RebuiltDocxPath = ""
+		return nil
+	}
+	paths := []string{res.OutputDir}
+	if res.RebuiltDocxPath != "" {
+		paths = append(paths, res.RebuiltDocxPath)
+	}
+	for _, result := range res.Results {
+		if result.ColorizedPath != "" {
+			paths = append(paths, result.ColorizedPath)
+		}
+	}
+	if _, err := plan.Publish(paths); err != nil {
+		return err
+	}
+	res.OutputDir = plan.FinalPath()
+	res.RebuiltDocxPath = plan.Translate(res.RebuiltDocxPath)
+	for index := range res.Results {
+		res.Results[index].ColorizedPath = plan.Translate(res.Results[index].ColorizedPath)
+	}
+	return nil
 }

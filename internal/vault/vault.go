@@ -22,7 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -261,6 +261,22 @@ CREATE TABLE IF NOT EXISTS run_outputs (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE RESTRICT,
     PRIMARY KEY(run_id, material_id)
+);
+CREATE TABLE IF NOT EXISTS run_input_paths (
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    PRIMARY KEY(run_id, path)
+);
+CREATE TABLE IF NOT EXISTS run_output_paths (
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    PRIMARY KEY(run_id, path)
+);
+CREATE TABLE IF NOT EXISTS path_derivations (
+    parent_path TEXT NOT NULL,
+    child_path TEXT NOT NULL,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    PRIMARY KEY(parent_path, child_path, run_id)
 );
 CREATE TABLE IF NOT EXISTS run_attempts (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -604,9 +620,94 @@ func (v *Vault) StartRun(ctx context.Context, collectionID, operation string, op
 	return Run{ID: id, CollectionID: collectionID, Operation: operation, Status: "running", Options: options, Inputs: inputs, StartedAt: parseTime(started)}, nil
 }
 
+// StartPathRun registra uma execução da CLI usando caminhos, sem copiar arquivos para o vault.
+func (v *Vault) StartPathRun(ctx context.Context, operation string, options map[string]string, inputs []string) (Run, error) {
+	if v == nil || v.db == nil {
+		return Run{}, errors.New("vault não está aberto")
+	}
+	id := fmt.Sprintf("run-%d", time.Now().UnixNano())
+	data, _ := json.Marshal(options)
+	started := nowString()
+	tx, err := v.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Run{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "INSERT INTO runs(id,collection_id,operation,status,options_json,started_at) VALUES (?,NULL,?,?,?,?)", id, operation, "running", string(data), started); err != nil {
+		return Run{}, err
+	}
+	cleanInputs := cleanRunPaths(inputs)
+	for _, path := range cleanInputs {
+		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO run_input_paths(run_id,path) VALUES (?,?)", id, path); err != nil {
+			return Run{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Run{}, err
+	}
+	return Run{ID: id, Operation: operation, Status: "running", Options: options, Inputs: cleanInputs, StartedAt: parseTime(started)}, nil
+}
+
 // FinishRun fecha a execução e registra seus outputs.
 func (v *Vault) FinishRun(ctx context.Context, runID, status string, outputs []string, runErr error) error {
 	return v.FinishRunWithAttempts(ctx, runID, status, outputs, runErr, nil)
+}
+
+// FinishPathRun conclui uma execução da CLI e liga cada entrada aos outputs publicados.
+func (v *Vault) FinishPathRun(ctx context.Context, runID, status string, inputs, outputs []string, runErr error) error {
+	if v == nil || v.db == nil {
+		return errors.New("vault não está aberto")
+	}
+	message := ""
+	if runErr != nil {
+		message = runErr.Error()
+	}
+	tx, err := v.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "UPDATE runs SET status=?,error=?,finished_at=? WHERE id=?", status, message, nowString(), runID); err != nil {
+		return err
+	}
+	cleanInputs := cleanRunPaths(inputs)
+	cleanOutputs := cleanRunPaths(outputs)
+	for _, path := range cleanOutputs {
+		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO run_output_paths(run_id,path) VALUES (?,?)", runID, path); err != nil {
+			return err
+		}
+	}
+	for _, parent := range cleanInputs {
+		for _, child := range cleanOutputs {
+			if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO path_derivations(parent_path,child_path,run_id) VALUES (?,?,?)", parent, child, runID); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+func cleanRunPaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if absolute, err := filepath.Abs(path); err == nil {
+			path = filepath.Clean(absolute)
+		} else {
+			path = filepath.Clean(path)
+		}
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // FinishRunWithAttempts fecha a execução e registra metadados redigidos de API.

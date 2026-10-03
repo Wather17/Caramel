@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDOCXMergeCommandUsesOutputFlagAndReportsResult(t *testing.T) {
@@ -41,11 +42,35 @@ func TestDOCXMergeCommandUsesOutputFlagAndReportsResult(t *testing.T) {
 
 func TestDOCXMergeCommandRequiresTwoInputsAndOutput(t *testing.T) {
 	configureDOCXMergeTest(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CARAMEL_LIBRARY_DIR", "")
 	if err := docxMergeCmd.Args(docxMergeCmd, []string{"one.docx"}); err == nil {
 		t.Fatal("docx merge deveria exigir dois argumentos")
 	}
-	if err := docxMergeCmd.ValidateRequiredFlags(); err == nil {
-		t.Fatal("docx merge deveria exigir --output/-o")
+	if err := docxMergeCmd.RunE(docxMergeCmd, []string{"one.docx", "two.docx"}); err == nil || !strings.Contains(err.Error(), "--output") {
+		t.Fatalf("docx merge deveria exigir --output/-o sem biblioteca, erro=%v", err)
+	}
+}
+
+func TestDOCXMergeCommandUsesLibraryDefault(t *testing.T) {
+	configureDOCXMergeTest(t)
+	defer configureDOCXMergeTest(t)
+	library := t.TempDir()
+	t.Setenv("CARAMEL_LIBRARY_DIR", library)
+	t.Setenv("CARAMEL_VAULT_DIR", filepath.Join(t.TempDir(), "vault"))
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.docx")
+	second := filepath.Join(dir, "second.docx")
+	writeCLIForMergeDOCX(t, first, "um")
+	writeCLIForMergeDOCX(t, second, "dois")
+	var stdout bytes.Buffer
+	docxMergeCmd.SetOut(&stdout)
+	if err := docxMergeCmd.RunE(docxMergeCmd, []string{first, second}); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("resultados", time.Now().Format("2006-01-02"), "docx", "first_merged.docx")
+	if !strings.Contains(stdout.String(), want) {
+		t.Fatalf("destino diário não informado: %q", stdout.String())
 	}
 }
 

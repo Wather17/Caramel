@@ -21,8 +21,9 @@ var pdfSplitCmd = &cobra.Command{
 por página ou intervalo informado, usando índices inclusivos iniciados em 1. Intervalos inválidos
 são rejeitados antes de qualquer arquivo de saída ser criado.
 
-Por padrão, os arquivos são gravados em uma pasta <nome_do_pdf>_split ao lado da entrada. Use
---output-dir para escolher outra pasta. O PDF original não é alterado.
+Com a biblioteca configurada, os arquivos ficam no diário de resultados; sem ela, são gravados
+em uma pasta <nome_do_pdf>_split ao lado da entrada. Use --output-dir para escolher outra pasta.
+O PDF original não é alterado.
 
 📚 QUANDO USAR:
 Use para separar páginas de um material ou salvar capítulos selecionados em PDFs independentes.
@@ -37,7 +38,7 @@ caramel pdf split apostila.pdf --ranges 1-3,4-6
 caramel pdf split apostila.pdf --ranges 1-3,5,7-9 --output-dir ./capitulos`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -46,17 +47,34 @@ caramel pdf split apostila.pdf --ranges 1-3,5,7-9 --output-dir ./capitulos`,
 		if cmd.Flags().Changed("ranges") {
 			rangeSpec = &pdfSplitRanges
 		}
-		outputPaths, err := pdf.SplitPDF(args[0], pdfSplitOutputDir, rangeSpec)
+		targetDir := pdfSplitOutputDir
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output-dir") {
+			plan, err = libraryOutputPlan(cmd, "pdf", output.ShapeBundle, outputStem(args[0], "_split"), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetDir = plan.WorkPath()
+			}
+		}
+		outputPaths, err := pdf.SplitPDF(args[0], targetDir, rangeSpec)
+		if err != nil {
+			return err
+		}
+		outputPaths, err = publishOutputPlan(plan, outputPaths)
 		if err != nil {
 			return err
 		}
 
 		renderer.Diagnostic("gerados %d arquivo(s) PDF a partir de %s\n", len(outputPaths), args[0])
 		return renderer.Result(output.Result{
-			Status:  output.StateSuccess,
-			Summary: fmt.Sprintf("PDF dividido: %d arquivo(s) gerado(s).", len(outputPaths)),
-			Count:   len(outputPaths),
-			Outputs: outputPaths,
+			Status:        output.StateSuccess,
+			Summary:       fmt.Sprintf("PDF dividido: %d arquivo(s) gerado(s).", len(outputPaths)),
+			Count:         len(outputPaths),
+			Outputs:       outputPaths,
+			PrimaryOutput: bundlePrimaryOutput(plan, outputPaths),
 		})
 	},
 }

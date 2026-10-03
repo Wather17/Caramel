@@ -34,7 +34,7 @@ func TestPDFPagesRenderCommandUsesFormatDPIAndOutputDirectory(t *testing.T) {
 	}
 
 	output := filepath.Join(outputDir, "sample_page_001.jpg")
-	if !strings.Contains(stdout.String(), output) || !strings.Contains(stdout.String(), "1 imagem(ns)") {
+	if !strings.Contains(stdout.String(), outputDir) || !strings.Contains(stdout.String(), "1 imagem(ns)") {
 		t.Errorf("resultado da CLI não informa saída e quantidade: %q", stdout.String())
 	}
 	file, err := os.Open(output)
