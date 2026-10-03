@@ -34,6 +34,9 @@ Para mais informações sobre os comandos disponíveis, use:
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return outputOptions().Validate()
 	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		touchIndexedInputs(cmd, args)
+	},
 	// Uncomment the following line if your bare application has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
 }

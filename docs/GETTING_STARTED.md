@@ -51,6 +51,18 @@ caramel vault sync
 Use `CARAMEL_LIBRARY_DIR` para substituir a biblioteca visível. Essa variável é independente de
 `CARAMEL_VAULT_DIR`, que continua reservado ao banco, cache e objetos internos.
 
+Ative o autocomplete contextual na sessão atual do PowerShell:
+
+```powershell
+caramel completion powershell | Out-String | Invoke-Expression
+```
+
+Para tornar a configuração permanente, acrescente essa linha ao `$PROFILE`. Ao pressionar
+`Tab` nos argumentos de DOCX, PDF, imagem, impressão ou rotina, o Caramel atualiza índices
+com mais de 30 segundos e sugere apenas extensões aceitas pelo comando. O ranking considera
+texto, descoberta/modificação/último uso e nome. Em caso de falha do vault, o PowerShell volta
+ao autocomplete comum de arquivos sem imprimir diagnóstico na lista de sugestões.
+
 ---
 
 ### 3. Compilação Multiplataforma (Linux + Windows)
