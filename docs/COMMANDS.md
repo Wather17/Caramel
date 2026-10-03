@@ -120,6 +120,7 @@ explicitamente continua sendo processado mesmo que use esse prefixo.
 | `MODEL_IMAGE_FALLBACKS` | Primeiro fallback de imagem, separado por vírgulas | vazio |
 | `MODEL_TEXT_FALLBACKS` | Primeiro fallback de texto, separado por vírgulas | vazio |
 | `MODEL_TRIAGE_FALLBACKS` | Primeiro fallback de triagem, separado por vírgulas | vazio |
+| `CARAMEL_LIBRARY_DIR` | Biblioteca visível com `materiais` e `resultados` | `Documents/Caramel` |
 
 **Prioridade de resolução dos modelos:** flag no comando (`-m`, `--text-model`, `--triage-model`) > valor salvo no `.env` > padrão de fábrica.
 
@@ -142,6 +143,10 @@ caramel config set model_text_fallbacks openai/gpt-oss-120b
 | :--- | :--- |
 | `caramel guide` | Guia didático: lista comandos ou busca por termo |
 | `caramel workspace` | Abre a inbox do acervo global para pesquisar materiais e encadear fluxos |
+| `caramel vault init` | Configura a biblioteca visível e cria `materiais`/`resultados` |
+| `caramel vault source add/list` | Vincula ou lista fontes externas sem copiar arquivos |
+| `caramel vault sync` | Atualiza o índice incrementalmente (`--full` recalcula hashes) |
+| `caramel vault status` | Exibe fontes, contagens e última sincronização |
 | `caramel install` | Instala o Caramel CLI globalmente |
 | `caramel version` | Exibe a versão atual do executável |
 

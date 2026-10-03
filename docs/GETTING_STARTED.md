@@ -39,6 +39,18 @@ importados são deduplicados por hash e as saídas ficam registradas no vault, s
 pastas de trabalho no diretório atual. Para escolher outro local, defina
 `CARAMEL_VAULT_DIR` antes de iniciar.
 
+Para configurar arquivos visíveis em `Documents/Caramel` e indexar um acervo existente sem
+movê-lo:
+
+```powershell
+caramel vault init
+caramel vault source add "C:\Users\55689\Documents\docs-mãe"
+caramel vault sync
+```
+
+Use `CARAMEL_LIBRARY_DIR` para substituir a biblioteca visível. Essa variável é independente de
+`CARAMEL_VAULT_DIR`, que continua reservado ao banco, cache e objetos internos.
+
 ---
 
 ### 3. Compilação Multiplataforma (Linux + Windows)
