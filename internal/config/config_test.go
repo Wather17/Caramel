@@ -81,6 +81,29 @@ func TestSaveAndLoadModels(t *testing.T) {
 	}
 }
 
+func TestLibraryDirConfigAndEnvironmentPriority(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	persisted := filepath.Join(tempDir, "persistida")
+	fromEnv := filepath.Join(tempDir, "ambiente")
+	if err := config.SaveConfigValue("CARAMEL_LIBRARY_DIR", persisted); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg.LibraryDir != persisted {
+		t.Fatalf("biblioteca persistida inesperada: %#v, %v", cfg, err)
+	}
+	t.Setenv("CARAMEL_LIBRARY_DIR", fromEnv)
+	cfg, err = config.LoadConfig()
+	if err != nil || cfg.LibraryDir != fromEnv {
+		t.Fatalf("ambiente deveria ter prioridade: %#v, %v", cfg, err)
+	}
+	resolved, err := config.ResolveLibraryDir(cfg)
+	if err != nil || resolved != fromEnv {
+		t.Fatalf("caminho resolvido inesperado: %q, %v", resolved, err)
+	}
+}
+
 func TestEnvModelPriority(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tempDir)

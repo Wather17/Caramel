@@ -184,6 +184,23 @@ Execute em um terminal interativo com suporte a cores ANSI. Na inbox, use `/` pa
 
 O acervo é armazenado por padrão em `~/.local/share/caramel` no Linux e em `%LOCALAPPDATA%\caramel` no Windows. No Linux, `XDG_DATA_HOME` é respeitado; em qualquer plataforma, **`CARAMEL_VAULT_DIR`** permite escolher outro local. Os materiais são deduplicados por hash e as operações mantêm sua proveniência.
 
+### Configurar a biblioteca visível
+
+O banco e o cache continuam no diretório interno acima, enquanto os arquivos do usuário podem
+ficar em uma biblioteca visível e configurável. No primeiro uso:
+
+```powershell
+caramel vault init "C:\Users\55689\Documents\Caramel"
+caramel vault source add "C:\Users\55689\Documents\docs-mãe"
+caramel vault sync
+caramel vault status
+```
+
+`vault init` cria `materiais` e `resultados`. Fontes adicionadas são apenas indexadas: o Caramel
+não move, renomeia nem apaga seus arquivos. A sincronização normal compara metadados e recalcula
+hash somente para arquivos novos ou alterados; `caramel vault sync --full` força uma verificação
+completa para diagnóstico.
+
 ## Exemplos de uso
 
 ### Extrair imagens de um DOCX

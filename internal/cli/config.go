@@ -66,6 +66,8 @@ caramel config set openrouter_key sk-or-v1-suachaveaqui`,
 			key = "MODEL_TEXT_FALLBACKS"
 		case "MODEL_TRIAGE_FALLBACKS", "TRIAGE_FALLBACKS", "TRIAGE_MODEL_FALLBACKS":
 			key = "MODEL_TRIAGE_FALLBACKS"
+		case "LIBRARY", "LIBRARY_DIR", "CARAMEL_LIBRARY_DIR":
+			key = "CARAMEL_LIBRARY_DIR"
 		}
 
 		if err := config.SaveConfigValue(key, val); err != nil {
@@ -101,6 +103,10 @@ caramel config show`,
 		if err != nil {
 			return err
 		}
+		libraryDir, err := config.ResolveLibraryDir(cfg)
+		if err != nil {
+			return err
+		}
 
 		apiConfigured := cfg.OpenRouterAPIKey != ""
 		modelSummary := fmt.Sprintf("image=%s, text=%s, triage=%s; fallbacks: image=%d, text=%d, triage=%d", orDefault(cfg.ModelImage, ai.DefaultModel), orDefault(cfg.ModelText, ai.DefaultTextModel), orDefault(cfg.ModelTriage, ai.DefaultTriageModel), len(cfg.ModelImageFallbacks), len(cfg.ModelTextFallbacks), len(cfg.ModelTriageFallbacks))
@@ -124,6 +130,7 @@ caramel config show`,
 				ModelImageFallbacks  []string `json:"model_image_fallbacks,omitempty"`
 				ModelTextFallbacks   []string `json:"model_text_fallbacks,omitempty"`
 				ModelTriageFallbacks []string `json:"model_triage_fallbacks,omitempty"`
+				LibraryDir           string   `json:"library_dir"`
 			}{
 				APIKeyConfigured:     apiConfigured,
 				APIKeyMasked:         maskedKeyOrEmpty(cfg.OpenRouterAPIKey),
@@ -133,6 +140,7 @@ caramel config show`,
 				ModelImageFallbacks:  cfg.ModelImageFallbacks,
 				ModelTextFallbacks:   cfg.ModelTextFallbacks,
 				ModelTriageFallbacks: cfg.ModelTriageFallbacks,
+				LibraryDir:           libraryDir,
 			},
 			Outputs:  []string{envPath},
 			Warnings: warnings,

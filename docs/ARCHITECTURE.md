@@ -72,6 +72,12 @@ do sistema (`~/.local/share/caramel` no Linux). A TUI importa, pesquisa, selecio
 geração, coloração e impressão sem criar pastas no diretório atual. Materiais arquivados
 continuam preservados e podem ser incluídos explicitamente nas buscas.
 
+A biblioteca visível é uma camada distinta, configurada por `caramel vault init` ou
+`CARAMEL_LIBRARY_DIR`. Por padrão usa `Documents/Caramel`, com `materiais/` e `resultados/`.
+`indexed_sources` registra a biblioteca e fontes externas; `indexed_files` mantém caminhos,
+metadados, hashes e disponibilidade sem copiar ou assumir posse desses arquivos. O sync é
+recursivo e incremental. Objetos imutáveis, cache e SQLite permanecem no diretório interno.
+
 O pacote `workspace` permanece como camada de compatibilidade para os manifestos JSON do
 MVP. Na abertura da TUI, projetos antigos são migrados automaticamente para coleções e
 materiais do vault, sem apagar os diretórios legados. Os comandos CLI existentes preservam

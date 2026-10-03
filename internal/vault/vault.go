@@ -22,7 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -294,6 +294,33 @@ CREATE TABLE IF NOT EXISTS generated_image_cache (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS indexed_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    last_scanned_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS indexed_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id INTEGER NOT NULL REFERENCES indexed_sources(id) ON DELETE CASCADE,
+    path TEXT NOT NULL UNIQUE,
+    relative_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    extension TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    modified_at TEXT NOT NULL,
+    content_hash TEXT NOT NULL DEFAULT '',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_used_at TEXT,
+    available INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_indexed_files_source ON indexed_files(source_id);
+CREATE INDEX IF NOT EXISTS idx_indexed_files_extension ON indexed_files(extension);
+CREATE INDEX IF NOT EXISTS idx_indexed_files_available ON indexed_files(available);
+CREATE INDEX IF NOT EXISTS idx_indexed_files_hash ON indexed_files(content_hash);
 `
 
 // ImportFile copia um arquivo para o vault e deduplica por hash de conteúdo.

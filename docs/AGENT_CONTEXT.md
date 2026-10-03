@@ -63,6 +63,8 @@ caramel <comando> --help
   deve ser tratado como uma lista manual completa de comandos.
 - A workspace usa um vault global, normalmente no diretório de dados do
   usuário. `CARAMEL_VAULT_DIR` pode redirecioná-lo.
+- A biblioteca visível é configurada separadamente por `CARAMEL_LIBRARY_DIR` ou
+  `caramel vault init`; fontes vinculadas são indexadas sem serem movidas ou apagadas.
 - Materiais do vault são deduplicados por hash, armazenados uma vez e
   indexados; coleções referenciam materiais e execuções registram
   proveniência, saídas e derivações.
@@ -97,4 +99,3 @@ duplicação cria versões divergentes.
 Quando a tarefa depender de comportamento real, confirme a implementação no
 código e valide com a CLI ou os testes. Este documento é um mapa de navegação,
 não uma autorização para presumir que uma capacidade existe.
-

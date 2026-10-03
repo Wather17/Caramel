@@ -12,12 +12,34 @@ import (
 // Config armazena as configurações e chaves de API da aplicação
 type Config struct {
 	OpenRouterAPIKey     string
+	LibraryDir           string   // Biblioteca visível do usuário (CARAMEL_LIBRARY_DIR)
 	ModelImage           string   // Modelo de IA para geração/coloração de imagens (MODEL_IMAGE)
 	ModelText            string   // Modelo de IA para síntese de texto/prompts (MODEL_TEXT)
 	ModelTriage          string   // Modelo de IA de visão para a triagem de economia (MODEL_TRIAGE)
 	ModelImageFallbacks  []string // Cadeia opcional de fallback para imagens
 	ModelTextFallbacks   []string // Cadeia opcional de fallback para texto
 	ModelTriageFallbacks []string // Cadeia opcional de fallback para triagem
+}
+
+// DefaultLibraryDir retorna a pasta visível sugerida para materiais do usuário.
+func DefaultLibraryDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("não foi possível obter o diretório pessoal do usuário: %w", err)
+	}
+	return filepath.Join(homeDir, "Documents", "Caramel"), nil
+}
+
+// ResolveLibraryDir aplica configuração e fallback sem criar diretórios.
+func ResolveLibraryDir(cfg *Config) (string, error) {
+	if cfg != nil && strings.TrimSpace(cfg.LibraryDir) != "" {
+		path, err := filepath.Abs(strings.TrimSpace(cfg.LibraryDir))
+		if err != nil {
+			return "", fmt.Errorf("caminho da biblioteca inválido: %w", err)
+		}
+		return filepath.Clean(path), nil
+	}
+	return DefaultLibraryDir()
 }
 
 // GetConfigDir retorna o caminho absoluto da pasta de configuração do usuário no sistema operacional
@@ -71,6 +93,9 @@ func LoadConfig() (*Config, error) {
 	// 3. Variáveis do SO têm prioridade máxima
 	if envVal := os.Getenv("OPENROUTER_API_KEY"); envVal != "" {
 		cfg.OpenRouterAPIKey = envVal
+	}
+	if envVal := os.Getenv("CARAMEL_LIBRARY_DIR"); envVal != "" {
+		cfg.LibraryDir = envVal
 	}
 	if envVal := os.Getenv("MODEL_IMAGE"); envVal != "" {
 		cfg.ModelImage = envVal
@@ -160,6 +185,8 @@ func loadEnvFileToMap(filePath string, cfg *Config) {
 			switch k {
 			case "OPENROUTER_API_KEY":
 				cfg.OpenRouterAPIKey = v
+			case "CARAMEL_LIBRARY_DIR":
+				cfg.LibraryDir = v
 			case "MODEL_IMAGE":
 				cfg.ModelImage = v
 			case "MODEL_TEXT":
