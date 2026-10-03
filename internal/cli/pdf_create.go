@@ -36,7 +36,7 @@ caramel pdf create capa.png atividade.png respostas.png --output apostila.pdf
 caramel pdf create ./atividades`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -49,18 +49,34 @@ caramel pdf create ./atividades`,
 		if outputPath == "" {
 			outputPath = defaultPDFCreateOutput(args, imagePaths, firstInput, firstStat)
 		}
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output") {
+			base := strings.TrimSuffix(filepath.Base(outputPath), filepath.Ext(outputPath))
+			plan, err = libraryOutputPlan(cmd, "pdf", output.ShapeSingle, base, ".pdf")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				outputPath = plan.WorkPath()
+			}
+		}
 
 		renderer.Diagnostic("criando PDF com %d imagem(ns)\n", len(imagePaths))
 		pageCount, err := pdf.GenerateImagePDF(imagePaths, outputPath, pdf.DefaultOptions())
 		if err != nil {
 			return fmt.Errorf("falha ao criar PDF a partir das imagens: %w", err)
 		}
+		paths, err := publishOutputPlan(plan, []string{outputPath})
+		if err != nil {
+			return err
+		}
 
 		return renderer.Result(output.Result{
 			Status:  output.StateSuccess,
 			Summary: fmt.Sprintf("PDF criado: %d imagem(ns), %d página(s).", len(imagePaths), pageCount),
 			Count:   pageCount,
-			Outputs: []string{outputPath},
+			Outputs: paths,
 		})
 	},
 }

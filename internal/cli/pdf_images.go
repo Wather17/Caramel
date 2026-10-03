@@ -23,8 +23,9 @@ em imagens; para exportar cada página completa, incluindo texto e vetores, use 
 Recursos que o extrator não consegue decodificar são ignorados com aviso. Arquivos existentes nunca
 são sobrescritos.
 
-Por padrão, as imagens são salvas em <nome_do_pdf>_embedded_images ao lado do PDF. Use --output-dir
-para escolher outra pasta. A operação é local e não usa serviços externos.`,
+Com a biblioteca configurada, as imagens ficam no diário de resultados; sem ela, são salvas em
+<nome_do_pdf>_embedded_images ao lado do PDF. Use --output-dir para escolher outra pasta. A operação
+é local e não usa serviços externos.`,
 	Example: `# Extrair imagens embutidas
 caramel pdf images extract apostila.pdf
 
@@ -32,14 +33,32 @@ caramel pdf images extract apostila.pdf
 caramel pdf images extract apostila.pdf --output-dir ./imagens`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
 
-		paths, warnings, err := pdf.ExtractEmbeddedImages(args[0], pdfImagesOutputDir)
+		targetDir := pdfImagesOutputDir
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output-dir") {
+			plan, err = libraryOutputPlan(cmd, "pdf", output.ShapeBundle, outputStem(args[0], "_embedded_images"), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetDir = plan.WorkPath()
+			}
+		}
+		paths, warnings, err := pdf.ExtractEmbeddedImages(args[0], targetDir)
 		if err != nil {
 			return err
+		}
+		if len(paths) > 0 {
+			paths, err = publishOutputPlan(plan, paths)
+			if err != nil {
+				return err
+			}
 		}
 		status := output.StateSuccess
 		summary := fmt.Sprintf("Imagens embutidas extraídas: %d arquivo(s).", len(paths))
@@ -51,11 +70,12 @@ caramel pdf images extract apostila.pdf --output-dir ./imagens`,
 			status = output.StateWarning
 		}
 		return renderer.Result(output.Result{
-			Status:   status,
-			Summary:  summary,
-			Count:    len(paths),
-			Outputs:  paths,
-			Warnings: warnings,
+			Status:        status,
+			Summary:       summary,
+			Count:         len(paths),
+			Outputs:       paths,
+			PrimaryOutput: bundlePrimaryOutput(plan, paths),
+			Warnings:      warnings,
 		})
 	},
 }

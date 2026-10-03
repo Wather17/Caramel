@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/phpdave11/gofpdf"
-	"github.com/spf13/cobra"
 )
 
 func TestPDFMergeCommand(t *testing.T) {
@@ -18,10 +17,6 @@ func TestPDFMergeCommand(t *testing.T) {
 	if merge.Flags().Lookup("output") == nil {
 		t.Fatal("pdf merge deveria expor --output")
 	}
-	if _, required := merge.Flags().Lookup("output").Annotations[cobra.BashCompOneRequiredFlag]; !required {
-		t.Fatal("pdf merge deveria exigir --output")
-	}
-
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.pdf")
 	second := filepath.Join(dir, "second.pdf")
@@ -43,6 +38,17 @@ func TestPDFMergeCommand(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), output) {
 		t.Errorf("resumo não informa o caminho de saída: %q", stdout.String())
+	}
+}
+
+func TestPDFMergeRequiresOutputWithoutLibrary(t *testing.T) {
+	merge := pdfMergeCmd
+	pdfMergeOutput = ""
+	merge.Flags().Lookup("output").Changed = false
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CARAMEL_LIBRARY_DIR", "")
+	if err := merge.RunE(merge, []string{"first.pdf", "second.pdf"}); err == nil || !strings.Contains(err.Error(), "--output") {
+		t.Fatalf("pdf merge deveria exigir --output sem biblioteca, erro=%v", err)
 	}
 }
 

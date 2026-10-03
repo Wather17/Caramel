@@ -135,7 +135,12 @@ func processExtractedImages(ctx context.Context, tempExtractDir, targetDir, apiK
 	}
 
 	if batchErr != nil {
-		return processed, batchErr
+		if len(processed.colorizedResults) == 0 {
+			return processed, batchErr
+		}
+		warning := fmt.Sprintf("o processamento terminou parcialmente: %v", batchErr)
+		processed.warnings = append(processed.warnings, warning)
+		diagnosticf(options, "⚠️ Aviso: %s\n", warning)
 	}
 	return processed, nil
 }

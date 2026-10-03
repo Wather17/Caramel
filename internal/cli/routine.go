@@ -106,7 +106,7 @@ caramel routine process ./abril/
 caramel routine process rotina_semana_1.docx`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -275,7 +275,20 @@ caramel routine process rotina_semana_1.docx`,
 		})
 
 		// 5. Gera o arquivo de destino
+		finalDocxName := fmt.Sprintf("%s%s.docx", routineReportPrefix, time.Now().Format("02-01-2006"))
 		targetOutDir := routineOutputDir
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output") {
+			base := strings.TrimSuffix(finalDocxName, filepath.Ext(finalDocxName))
+			plan, err = libraryOutputPlan(cmd, "rotinas", output.ShapeSingle, base, ".docx")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				targetOutDir = plan.StageDir()
+			}
+		}
 		if targetOutDir == "" {
 			if targetIsDir {
 				targetOutDir = targetPath
@@ -284,7 +297,6 @@ caramel routine process rotina_semana_1.docx`,
 			}
 		}
 
-		finalDocxName := fmt.Sprintf("%s%s.docx", routineReportPrefix, time.Now().Format("02-01-2006"))
 		finalDocxPath := filepath.Join(targetOutDir, finalDocxName)
 
 		renderer.Diagnostic("gerando relatório final em paisagem\n")
@@ -296,6 +308,11 @@ caramel routine process rotina_semana_1.docx`,
 		if err := os.WriteFile(finalDocxPath, docxBytes, 0644); err != nil {
 			return fmt.Errorf("erro ao gravar arquivo final no disco: %w", err)
 		}
+		publishedPaths, err := publishOutputPlan(plan, []string{finalDocxPath})
+		if err != nil {
+			return err
+		}
+		finalDocxPath = publishedPaths[0]
 
 		status := output.StateSuccess
 		warnings := []string{}

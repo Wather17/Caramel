@@ -20,6 +20,7 @@ Quando aplicável, um resultado pode conter:
 | `count` | Totais da operação, quando houver múltiplos itens. |
 | `data` | Dados estruturados específicos do comando. |
 | `outputs` | Arquivos e artefatos gerados. |
+| `primary_output` | Arquivo ou pasta principal exibido no modo humano. |
 | `warnings` | Avisos não fatais. |
 | `errors` | Falhas, incluindo falhas parciais. |
 
@@ -33,6 +34,24 @@ Quando aplicável, um resultado pode conter:
 - Comandos interativos rejeitam `--quiet` e `--json` quando o modo solicitado impediria a interação.
 
 Os códigos de saída continuam compatíveis com o contrato existente: `0` para sucesso, `1` para erro de uso ou execução e códigos específicos já definidos pelo comando.
+
+## Diário de resultados
+
+Quando `CARAMEL_LIBRARY_DIR` está configurado e não há destino explícito, o comando usa a data
+local do início da execução e publica em `resultados/YYYY-MM-DD/<categoria>`. As categorias são
+`docx`, `imagens`, `impressao`, `pdf` e `rotinas`, criadas somente quando há artefatos válidos.
+
+- Outputs únicos ficam diretamente na categoria.
+- Pacotes ficam em uma subpasta nomeada pela origem e operação.
+- Colisões recebem os sufixos `-2`, `-3` e seguintes.
+- A produção acontece em staging descartável; a publicação ocorre somente depois do sucesso.
+- `--output` e `--output-dir` mantêm precedência e semântica exata.
+- Sem biblioteca configurada, os defaults legados não mudam.
+- Cada execução registra entradas, outputs, status e derivações no vault; arquivos sob fontes
+  conhecidas entram no índice antes do resumo final.
+
+No modo humano, pacotes mostram apenas `primary_output`. Em `--json`, `outputs` preserva todos os
+caminhos publicados para automação.
 
 ## Estados
 

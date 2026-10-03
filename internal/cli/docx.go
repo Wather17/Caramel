@@ -59,7 +59,7 @@ caramel docx extract atividade.docx -o ./imagens_atividade
 caramel docx extract mapa_biologia.docx -c`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -104,8 +104,17 @@ caramel docx extract mapa_biologia.docx -c`,
 
 		// Se a flag -o / --output não foi passada explicitamente, gera o nome de pasta dinâmico e higienizado
 		targetDir := outputDir
+		var outputPlan *output.Plan
 		if !cmd.Flags().Changed("output") {
 			targetDir = docx.SanitizeFolderName(docxPath)
+			outputPlan, err = libraryOutputPlan(cmd, "docx", output.ShapeBundle, outputStem(docxPath, "_images"), "")
+			if err != nil {
+				return err
+			}
+			if outputPlan != nil {
+				defer outputPlan.Cleanup()
+				targetDir = outputPlan.WorkPath()
+			}
 		}
 
 		cfg, err := config.LoadConfig()
@@ -155,7 +164,9 @@ caramel docx extract mapa_biologia.docx -c`,
 				if err != nil {
 					return err
 				}
-
+				if err := publishDocxPipeline(outputPlan, pipeRes); err != nil {
+					return err
+				}
 				return renderDocxPipelineResult(renderer, pipeRes, true)
 			}
 
@@ -163,7 +174,9 @@ caramel docx extract mapa_biologia.docx -c`,
 			if err != nil {
 				return err
 			}
-
+			if err := publishDocxExtraction(outputPlan, res); err != nil {
+				return err
+			}
 			return renderDocxExtractionResult(renderer, res, skippedImages, minSizeStr)
 		}
 
@@ -177,6 +190,9 @@ caramel docx extract mapa_biologia.docx -c`,
 			if err != nil {
 				return err
 			}
+			if err := publishDocxPipeline(outputPlan, pipeRes); err != nil {
+				return err
+			}
 			return renderDocxPipelineResult(renderer, pipeRes, false)
 		}
 
@@ -185,8 +201,30 @@ caramel docx extract mapa_biologia.docx -c`,
 		if err != nil {
 			return err
 		}
+		if err := publishDocxExtraction(outputPlan, res); err != nil {
+			return err
+		}
 		return renderDocxExtractionResult(renderer, res, res.SkippedImages, minSizeStr)
 	},
+}
+
+func publishDocxExtraction(plan *output.Plan, res *docx.ExtractionResult) error {
+	if plan == nil || res == nil {
+		return nil
+	}
+	if res.TotalExtracted == 0 {
+		res.OutputDir = ""
+		return nil
+	}
+	paths := make([]string, 0, len(res.Images))
+	for _, image := range res.Images {
+		paths = append(paths, filepath.Join(res.OutputDir, image.OriginalName))
+	}
+	if _, err := plan.Publish(paths); err != nil {
+		return err
+	}
+	res.OutputDir = plan.FinalPath()
+	return nil
 }
 
 func renderDocxExtractionResult(renderer *output.Renderer, res *docx.ExtractionResult, skipped []docx.ExtractedImage, minSizeStr string) error {
@@ -212,13 +250,21 @@ func renderDocxExtractionResult(renderer *output.Renderer, res *docx.ExtractionR
 		summary = fmt.Sprintf("Nenhuma imagem atende ao tamanho mínimo de %s.", minSizeStr)
 	}
 
+	outputs := []string{}
+	if res.OutputDir != "" {
+		outputs = append(outputs, res.OutputDir)
+		for _, image := range res.Images {
+			outputs = append(outputs, filepath.Join(res.OutputDir, image.OriginalName))
+		}
+	}
 	return renderer.Result(output.Result{
-		Status:   status,
-		Summary:  summary,
-		Count:    res.TotalExtracted,
-		Data:     res.Images,
-		Outputs:  []string{res.OutputDir},
-		Warnings: warnings,
+		Status:        status,
+		Summary:       summary,
+		Count:         res.TotalExtracted,
+		Data:          res.Images,
+		Outputs:       outputs,
+		PrimaryOutput: res.OutputDir,
+		Warnings:      warnings,
 	})
 }
 

@@ -58,7 +58,7 @@ caramel print cards ./animais/ -c 3 -r 3 -t "Coleção da Fazenda"
 caramel print cards ./imagens_frutas/ --html`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -136,6 +136,18 @@ caramel print cards ./imagens_frutas/ --html`,
 				outPath = cardsOutputDir
 			}
 		}
+		var plan *output.Plan
+		if !cmd.Flags().Changed("output") {
+			base := strings.TrimSuffix(filepath.Base(defaultOutPath), filepath.Ext(defaultOutPath))
+			plan, err = libraryOutputPlan(cmd, "impressao", output.ShapeSingle, base, "."+outputExt())
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				outPath = plan.WorkPath()
+			}
+		}
 
 		opts := cards.SheetOptions{
 			Columns:   cardsCols,
@@ -150,23 +162,31 @@ caramel print cards ./imagens_frutas/ --html`,
 			if err := cards.GenerateCardsHTML(cardItems, outPath, opts); err != nil {
 				return fmt.Errorf("falha ao gerar fichas HTML: %w", err)
 			}
+			paths, err := publishOutputPlan(plan, []string{outPath})
+			if err != nil {
+				return err
+			}
 			return renderer.Result(output.Result{
 				Status:  output.StateSuccess,
 				Summary: fmt.Sprintf("Fichas geradas: %d imagem(ns) em HTML.", len(cardItems)),
 				Count:   len(cardItems),
-				Outputs: []string{outPath},
+				Outputs: paths,
 			})
 		}
 
 		if err := cards.GenerateCardsPDF(cardItems, outPath, opts); err != nil {
 			return fmt.Errorf("falha ao gerar fichas PDF: %w", err)
 		}
+		paths, err := publishOutputPlan(plan, []string{outPath})
+		if err != nil {
+			return err
+		}
 
 		return renderer.Result(output.Result{
 			Status:  output.StateSuccess,
 			Summary: fmt.Sprintf("Fichas geradas: %d imagem(ns) em PDF.", len(cardItems)),
 			Count:   len(cardItems),
-			Outputs: []string{outPath},
+			Outputs: paths,
 		})
 	},
 }

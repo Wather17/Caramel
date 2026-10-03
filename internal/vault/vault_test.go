@@ -310,6 +310,40 @@ func TestVaultImportSearchCollectionAndArchive(t *testing.T) {
 	}
 }
 
+func TestPathRunRecordsInputsOutputsAndDerivations(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", filepath.Join(t.TempDir(), "vault"))
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	input := filepath.Join(t.TempDir(), "entrada.docx")
+	output := filepath.Join(t.TempDir(), "saida.pdf")
+	run, err := v.StartPathRun(context.Background(), "pdf create", map[string]string{"shape": "single"}, []string{input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.FinishPathRun(context.Background(), run.ID, "completed", []string{input}, []string{output}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var status, storedInput, storedOutput, parent, child string
+	if err := v.db.QueryRow("SELECT status FROM runs WHERE id=?", run.ID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.db.QueryRow("SELECT path FROM run_input_paths WHERE run_id=?", run.ID).Scan(&storedInput); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.db.QueryRow("SELECT path FROM run_output_paths WHERE run_id=?", run.ID).Scan(&storedOutput); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.db.QueryRow("SELECT parent_path,child_path FROM path_derivations WHERE run_id=?", run.ID).Scan(&parent, &child); err != nil {
+		t.Fatal(err)
+	}
+	if status != "completed" || storedInput != input || storedOutput != output || parent != input || child != output {
+		t.Fatalf("registro inesperado: status=%s input=%s output=%s derivação=%s->%s", status, storedInput, storedOutput, parent, child)
+	}
+}
+
 func TestMigrateLegacyProjectsIsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CARAMEL_WORKSPACE_DIR", filepath.Join(root, "legacy"))

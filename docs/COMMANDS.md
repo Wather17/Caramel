@@ -32,6 +32,10 @@ caramel docx merge capa.docx atividades.docx respostas.docx --output apostila.do
 caramel docx split apostila.docx
 ```
 
+Com a biblioteca configurada, `docx merge` e `pdf merge` também aceitam a omissão de `--output` e
+publicam o arquivo único na categoria diária correspondente. Fora desse modo, a flag permanece
+obrigatória.
+
 `docx merge` preserva texto, tabelas, imagens, estilos, listas e configurações comuns de página;
 cada documento começa em uma nova seção/página e o destino não é sobrescrito.
 Comentários, notas de rodapé/fim, revisões controladas e objetos incorporados não são suportados.

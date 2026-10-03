@@ -2,21 +2,24 @@
 
 Esta matriz é a referência rápida para revisar a saída dos comandos públicos.
 
-| Área/comando | Sucesso e artefato | Operação longa ou `--verbose` | Vazio, aviso ou falha parcial |
+| Área/comando | Categoria e formato | Sucesso e artefato | Vazio, aviso ou falha parcial |
 | --- | --- | --- | --- |
-| `docx images list` | Quantidade e lista compacta de imagens. | Metadados por imagem em `stderr`. | Resultado vazio explícito; falhas de leitura identificadas. |
-| `docx images extract` | Quantidade e diretório de saída. | Progresso e falhas por item em `stderr`. | `warning` quando apenas parte dos itens falhar. |
-| `image colorize` | Arquivo de saída e resumo da etapa. | Etapas e diagnósticos do pipeline. | `failed` com causa curta; sem conteúdo bruto por padrão. |
-| `image generate` | Arquivo(s) gerado(s) e parâmetros essenciais. | Progresso e resposta detalhada do provedor. | `failed` com causa acionável e artefatos parciais, se houver. |
-| `print 2up` | Arquivo PDF gerado e contagem de páginas. | Detalhes de layout e validação. | Aviso para entradas vazias ou páginas ignoradas. |
-| `print cards` | Arquivo de cartões e contagem. | Detalhes de agrupamento e itens. | Resumo de itens ignorados e falhas parciais. |
-| `routine consolidate` | Resumo agregado da consolidação. | Eventos e diagnóstico por etapa. | `warning` para fontes ausentes ou consolidação parcial. |
-| `config show` | Configuração segura e status. | Diagnóstico de resolução de configuração. | Nunca expõe segredos; informa valores ausentes. |
-| `config models list/select` | Modelos ou modelo selecionado. | Detalhes de descoberta e validação. | Aviso quando nenhum modelo estiver disponível. |
-| `install` | Confirmação curta da instalação. | Comandos e passos executados. | Falha com próximo passo sugerido. |
-| `version` | Versão em uma linha. | Informações adicionais de build. | — |
-| `guide` | Guia solicitado sem ruído adicional. | Conteúdo expandido apenas quando solicitado. | Comando ou tópico desconhecido com orientação. |
-| `workspace` | Resumo da operação e artefatos. | Eventos detalhados por etapa. | Estados explícitos para aviso, cancelamento e falha. |
+| `docx images list` | Sem output | Quantidade e lista compacta de imagens. | Resultado vazio explícito; falhas de leitura identificadas. |
+| `docx images extract` / `docx extract` | `docx`, pacote | Quantidade e pasta principal. | Sem imagens não publica pasta; parcial retorna `warning`. |
+| `docx split` | `docx`, pacote | Pasta com todas as partes. | Falha descarta staging. |
+| `docx merge` | `docx`, único | DOCX final; destino pode ser omitido no modo biblioteca. | Fora do modo biblioteca, destino continua obrigatório. |
+| `image colorize` | `imagens`; único para uma imagem, pacote para pasta/DOCX | Arquivo ou pasta principal. | Artefatos válidos são preservados com `warning`. |
+| `image generate` | `imagens`, pacote sempre | Pasta da coleção, mesmo com um item. | Sem artefatos não publica pasta. |
+| `print 2up` / `print cards` | `impressao`, único | PDF ou HTML final. | Falha descarta staging. |
+| `pdf create` / `pdf merge` | `pdf`, único | PDF final. | Merge sem destino só funciona no modo biblioteca. |
+| `pdf split` / `pdf pages render` / `pdf images extract` | `pdf`, pacote | Pasta principal; JSON contém arquivos. | Sem artefatos não publica pasta; parcial retorna `warning`. |
+| `routine consolidate` | `rotinas`, único | Relatório DOCX consolidado. | `warning` para consolidação parcial. |
+| `config show` | — | Configuração segura e status. | Nunca expõe segredos; informa valores ausentes. |
+| `config models list/select` | — | Modelos ou modelo selecionado. | Aviso quando nenhum modelo estiver disponível. |
+| `install` | — | Confirmação curta da instalação. | Falha com próximo passo sugerido. |
+| `version` | — | Versão em uma linha. | — |
+| `guide` | — | Guia solicitado sem ruído adicional. | Comando ou tópico desconhecido com orientação. |
+| `workspace` | — | Resumo da operação e artefatos. | Estados explícitos para aviso, cancelamento e falha. |
 
 ## Regras de revisão manual
 

@@ -32,7 +32,12 @@ criação de atividades e utilitários de desenvolvimento pedagógico.
 Para mais informações sobre os comandos disponíveis, use:
   caramel --help`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		return outputOptions().Validate()
+		if err := outputOptions().Validate(); err != nil {
+			return err
+		}
+		markCommandStarted(cmd)
+		startCLIExecution(cmd, args)
+		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		touchIndexedInputs(cmd, args)

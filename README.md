@@ -219,6 +219,26 @@ digitado e a atividade recente. Caminhos com espaços e acentos são inseridos p
 PowerShell. Se o índice estiver indisponível, o completador normal do sistema de arquivos
 continua funcionando.
 
+Com a biblioteca configurada, os comandos que produzem arquivos usam por padrão um diário de
+resultados. Por exemplo, uma execução em 3 de outubro de 2026 fica sob:
+
+```text
+Caramel/
+└── resultados/
+    └── 2026-10-03/
+        ├── docx/
+        ├── imagens/
+        ├── impressao/
+        ├── pdf/
+        └── rotinas/
+```
+
+Arquivos únicos ficam diretamente na categoria; conjuntos, como páginas renderizadas ou imagens
+extraídas, permanecem juntos em uma subpasta. Repetições recebem `-2`, `-3` e assim por diante,
+sem sobrescrever resultados anteriores. Uma flag `--output` ou `--output-dir` continua vencendo
+e usa exatamente o destino informado. Sem biblioteca configurada, os destinos antigos ao lado da
+entrada são preservados.
+
 ## Exemplos de uso
 
 ### Extrair imagens de um DOCX

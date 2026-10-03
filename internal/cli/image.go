@@ -60,7 +60,7 @@ caramel colorize avaliacao.docx
 caramel colorize atividade.docx -i`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ caramel colorize atividade.docx -i`,
 				NoTriage:    imgNoTriage,
 				MaxWorkers:  imgWorkers,
 				Context:     cmd.Context(),
-				Output:      outputOptions(),
+				Output:      outputOptionsFor(cmd),
 				Out:         cmd.OutOrStdout(),
 				Err:         cmd.ErrOrStderr(),
 			})
@@ -162,8 +162,25 @@ caramel colorize atividade.docx -i`,
 		defaultOutputDir := filepath.Dir(inputPath)
 
 		targetDir := imgOutputDir
+		var plan *output.Plan
+		plannedShape := output.ShapeBundle
 		if !cmd.Flags().Changed("output") || targetDir == "" {
 			targetDir = defaultOutputDir
+			if !info.IsDir() && len(selectedImages) == 1 {
+				plannedShape = output.ShapeSingle
+			}
+			plan, err = libraryOutputPlan(cmd, "imagens", plannedShape, outputStem(inputPath, "_colorida"), "")
+			if err != nil {
+				return err
+			}
+			if plan != nil {
+				defer plan.Cleanup()
+				if plannedShape == output.ShapeSingle {
+					targetDir = plan.StageDir()
+				} else {
+					targetDir = plan.WorkPath()
+				}
+			}
 		}
 		renderer.Diagnostic("colorizando %d imagem(ns) com o modelo %s\n", len(selectedImages), modelName)
 
@@ -191,11 +208,7 @@ caramel colorize atividade.docx -i`,
 				renderer.Text("[%d/%d] colorizando %s\n", event.Index+1, event.Total, filepath.Base(selectedImages[event.Index]))
 			}
 		})
-		if batchErr != nil {
-			return batchErr
-		}
-
-		for index, batch := range batchResults {
+		for _, batch := range batchResults {
 			imgPath := batch.Path
 			res := batch.Result
 			err := batch.Err
@@ -220,7 +233,47 @@ caramel colorize atividade.docx -i`,
 
 			successCount++
 			colorized = append(colorized, *res)
-			attempts.AnnotateItem(index+1, res.ColorizedPath, false)
+		}
+		if batchErr != nil {
+			if successCount == 0 {
+				return batchErr
+			}
+			warnings = append(warnings, fmt.Sprintf("a colorização terminou parcialmente: %v", batchErr))
+			renderer.Diagnostic("colorização parcial: %v\n", batchErr)
+		}
+
+		resultOutputs := make([]string, 0, len(colorized)+1)
+		if plannedShape == output.ShapeBundle && len(colorized) > 0 {
+			resultOutputs = append(resultOutputs, targetDir)
+		}
+		for _, result := range colorized {
+			resultOutputs = append(resultOutputs, result.ColorizedPath)
+		}
+		if plan != nil && successCount > 0 {
+			produced := make([]string, 0, len(colorized)+1)
+			if plannedShape == output.ShapeBundle {
+				produced = append(produced, targetDir)
+			}
+			for _, result := range colorized {
+				produced = append(produced, result.ColorizedPath)
+			}
+			published, publishErr := publishOutputPlan(plan, produced)
+			if publishErr != nil {
+				return publishErr
+			}
+			resultOutputs = published
+			for index := range colorized {
+				colorized[index].ColorizedPath = plan.Translate(colorized[index].ColorizedPath)
+			}
+		} else if plan != nil {
+			resultOutputs = nil
+		}
+		for index, result := range colorized {
+			attempts.AnnotateItem(index+1, result.ColorizedPath, false)
+		}
+		primaryOutput := plannedPrimaryOutputFor(plan, resultOutputs)
+		if primaryOutput == "" && len(resultOutputs) > 0 {
+			primaryOutput = resultOutputs[0]
 		}
 
 		status := output.StateSuccess
@@ -228,13 +281,14 @@ caramel colorize atividade.docx -i`,
 			status = output.StateWarning
 		}
 		return renderer.Result(output.Result{
-			Status:   status,
-			Summary:  fmt.Sprintf("Colorização concluída: %d colorizada(s); %d pulada(s); %d falha(s).", successCount, skipCount, failCount),
-			Count:    successCount,
-			Data:     colorized,
-			Outputs:  []string{targetDir},
-			Warnings: warnings,
-			Attempts: attempts.Snapshot(),
+			Status:        status,
+			Summary:       fmt.Sprintf("Colorização concluída: %d colorizada(s); %d pulada(s); %d falha(s).", successCount, skipCount, failCount),
+			Count:         successCount,
+			Data:          colorized,
+			Outputs:       resultOutputs,
+			PrimaryOutput: primaryOutput,
+			Warnings:      warnings,
+			Attempts:      attempts.Snapshot(),
 		})
 	},
 }
