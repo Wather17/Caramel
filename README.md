@@ -201,22 +201,19 @@ não move, renomeia nem apaga seus arquivos. A sincronização normal compara me
 hash somente para arquivos novos ou alterados; `caramel vault sync --full` força uma verificação
 completa para diagnóstico.
 
-Para ativar as sugestões contextuais no PowerShell durante a sessão atual:
+No Windows, `caramel vault init` pergunta ao fim de uma inicialização interativa se deve ativar
+o autocomplete permanente. A integração preserva as demais personalizações dos perfis PowerShell
+7 e Windows PowerShell 5.1 e pode ser administrada manualmente:
 
 ```powershell
-caramel completion powershell | Out-String | Invoke-Expression
-```
-
-Para carregar o autocomplete em todas as novas sessões, adicione a mesma linha ao perfil:
-
-```powershell
-New-Item -ItemType Directory -Force (Split-Path -Parent $PROFILE) | Out-Null
-'caramel completion powershell | Out-String | Invoke-Expression' | Add-Content $PROFILE
+caramel shell enable powershell
+caramel shell status powershell
+caramel shell disable powershell
 ```
 
 Depois disso, `Tab` sugere primeiro os arquivos compatíveis do índice, considerando o texto
-digitado e a atividade recente. Caminhos com espaços e acentos são inseridos pelo próprio
-PowerShell. Se o índice estiver indisponível, o completador normal do sistema de arquivos
+digitado e a atividade recente. Caminhos com espaços e acentos são inseridos entre aspas simples
+e em UTF-8. Se o índice estiver indisponível, o completador normal do sistema de arquivos
 continua funcionando.
 
 Com a biblioteca configurada, os comandos que produzem arquivos usam por padrão um diário de
