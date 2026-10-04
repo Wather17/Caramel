@@ -35,6 +35,9 @@ Para mais informações sobre os comandos disponíveis, use:
 		if err := outputOptions().Validate(); err != nil {
 			return err
 		}
+		if openRequested(cmd) && (jsonFlag || quietFlag) {
+			return fmt.Errorf("a flag --open não pode ser usada com --json ou --quiet")
+		}
 		markCommandStarted(cmd)
 		startCLIExecution(cmd, args)
 		return nil

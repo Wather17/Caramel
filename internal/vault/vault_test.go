@@ -3,6 +3,7 @@ package vault
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -341,6 +342,89 @@ func TestPathRunRecordsInputsOutputsAndDerivations(t *testing.T) {
 	}
 	if status != "completed" || storedInput != input || storedOutput != output || parent != input || child != output {
 		t.Fatalf("registro inesperado: status=%s input=%s output=%s derivação=%s->%s", status, storedInput, storedOutput, parent, child)
+	}
+}
+
+func TestLastPathResultReturnsNewestSuccessfulRunWithMetadata(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", filepath.Join(t.TempDir(), "vault"))
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	ctx := context.Background()
+	if _, err := v.LastPathResult(ctx); !errors.Is(err, ErrNoPathResult) {
+		t.Fatalf("vault vazio deveria retornar ErrNoPathResult: %v", err)
+	}
+
+	first, err := v.StartPathRun(ctx, "pdf create", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstOutput := filepath.Join(t.TempDir(), "primeiro.pdf")
+	if err := v.FinishPathRunResult(ctx, first.ID, "completed", nil, []string{firstOutput}, firstOutput, PathResultSingle, nil); err != nil {
+		t.Fatal(err)
+	}
+	second, err := v.StartPathRun(ctx, "docx split", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(t.TempDir(), "ação com espaço")
+	children := []string{filepath.Join(bundle, "parte 1.docx"), filepath.Join(bundle, "parte 2.docx")}
+	if err := v.FinishPathRunResult(ctx, second.ID, "warning", nil, children, bundle, PathResultBundle, nil); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := v.StartPathRun(ctx, "pdf split", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.FinishPathRunResult(ctx, failed.ID, "failed", nil, []string{"/mais-novo.pdf"}, "/mais-novo.pdf", PathResultSingle, errors.New("falhou")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.Exec("UPDATE runs SET finished_at='2026-10-03T10:00:00Z' WHERE id=?", first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.Exec("UPDATE runs SET finished_at='2026-10-03T11:00:00Z' WHERE id=?", second.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.Exec("UPDATE runs SET finished_at='2026-10-03T12:00:00Z' WHERE id=?", failed.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := v.LastPathResult(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID != second.ID || got.PrimaryPath != bundle || got.Shape != PathResultBundle || got.Status != "warning" {
+		t.Fatalf("último resultado inesperado: %+v", got)
+	}
+	if len(got.Outputs) != 2 || got.Outputs[0] != children[0] || got.Outputs[1] != children[1] {
+		t.Fatalf("outputs inesperados: %#v", got.Outputs)
+	}
+}
+
+func TestLastPathResultInfersLegacyBundleWithoutMetadata(t *testing.T) {
+	t.Setenv("CARAMEL_VAULT_DIR", filepath.Join(t.TempDir(), "vault"))
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	bundle := filepath.Join(t.TempDir(), "pacote")
+	outputs := []string{bundle, filepath.Join(bundle, "um.png"), filepath.Join(bundle, "dois.png")}
+	run, err := v.StartPathRun(context.Background(), "pdf pages render", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.FinishPathRun(context.Background(), run.ID, "completed", nil, outputs, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := v.LastPathResult(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PrimaryPath != bundle || got.Shape != PathResultBundle {
+		t.Fatalf("fallback legado inesperado: %+v", got)
 	}
 }
 

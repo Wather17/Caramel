@@ -22,7 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 6
+const schemaVersion = 7
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -67,6 +67,28 @@ type Run struct {
 	FinishedAt   *time.Time
 	Attempts     []ai.AttemptMetadata
 }
+
+// PathResultShape descreve se o resultado principal é um arquivo ou um pacote.
+type PathResultShape string
+
+const (
+	PathResultSingle PathResultShape = "single"
+	PathResultBundle PathResultShape = "bundle"
+)
+
+// PathResult representa o resultado publicado por uma execucao da CLI.
+type PathResult struct {
+	RunID       string          `json:"run_id"`
+	Operation   string          `json:"operation"`
+	Status      string          `json:"status"`
+	PrimaryPath string          `json:"primary_path"`
+	Shape       PathResultShape `json:"shape"`
+	Outputs     []string        `json:"outputs"`
+	FinishedAt  time.Time       `json:"finished_at"`
+}
+
+// ErrNoPathResult indica que ainda não existe uma execução concluída com output.
+var ErrNoPathResult = errors.New("nenhum resultado concluído foi registrado no vault")
 
 // SearchOptions define a busca na inbox/biblioteca.
 type SearchOptions struct {
@@ -271,6 +293,11 @@ CREATE TABLE IF NOT EXISTS run_output_paths (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     path TEXT NOT NULL,
     PRIMARY KEY(run_id, path)
+);
+CREATE TABLE IF NOT EXISTS run_result_metadata (
+    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    primary_path TEXT NOT NULL,
+    shape TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS path_derivations (
     parent_path TEXT NOT NULL,
@@ -655,6 +682,11 @@ func (v *Vault) FinishRun(ctx context.Context, runID, status string, outputs []s
 
 // FinishPathRun conclui uma execução da CLI e liga cada entrada aos outputs publicados.
 func (v *Vault) FinishPathRun(ctx context.Context, runID, status string, inputs, outputs []string, runErr error) error {
+	return v.FinishPathRunResult(ctx, runID, status, inputs, outputs, "", "", runErr)
+}
+
+// FinishPathRunResult conclui uma execução e registra o destino principal do resultado.
+func (v *Vault) FinishPathRunResult(ctx context.Context, runID, status string, inputs, outputs []string, primaryPath string, shape PathResultShape, runErr error) error {
 	if v == nil || v.db == nil {
 		return errors.New("vault não está aberto")
 	}
@@ -672,6 +704,7 @@ func (v *Vault) FinishPathRun(ctx context.Context, runID, status string, inputs,
 	}
 	cleanInputs := cleanRunPaths(inputs)
 	cleanOutputs := cleanRunPaths(outputs)
+	cleanPrimary := cleanRunPaths([]string{primaryPath})
 	for _, path := range cleanOutputs {
 		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO run_output_paths(run_id,path) VALUES (?,?)", runID, path); err != nil {
 			return err
@@ -684,7 +717,83 @@ func (v *Vault) FinishPathRun(ctx context.Context, runID, status string, inputs,
 			}
 		}
 	}
+	if len(cleanPrimary) > 0 {
+		if shape != PathResultSingle && shape != PathResultBundle {
+			return fmt.Errorf("formato de resultado inválido: %s", shape)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO run_result_metadata(run_id,primary_path,shape)
+			VALUES (?,?,?) ON CONFLICT(run_id) DO UPDATE SET primary_path=excluded.primary_path,shape=excluded.shape`, runID, cleanPrimary[0], string(shape)); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// LastPathResult retorna a execução concluída mais recente que publicou um output.
+func (v *Vault) LastPathResult(ctx context.Context) (PathResult, error) {
+	if v == nil || v.db == nil {
+		return PathResult{}, errors.New("vault não está aberto")
+	}
+	var result PathResult
+	var primaryPath, shape sql.NullString
+	var finished string
+	err := v.db.QueryRowContext(ctx, `SELECT r.id,r.operation,r.status,r.finished_at,m.primary_path,m.shape
+		FROM runs r
+		LEFT JOIN run_result_metadata m ON m.run_id=r.id
+		WHERE r.status IN ('completed','warning')
+		  AND EXISTS (SELECT 1 FROM run_output_paths o WHERE o.run_id=r.id)
+		ORDER BY r.finished_at DESC,r.started_at DESC,r.id DESC
+		LIMIT 1`).Scan(&result.RunID, &result.Operation, &result.Status, &finished, &primaryPath, &shape)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PathResult{}, ErrNoPathResult
+	}
+	if err != nil {
+		return PathResult{}, err
+	}
+	result.FinishedAt = parseTime(finished)
+	rows, err := v.db.QueryContext(ctx, "SELECT path FROM run_output_paths WHERE run_id=? ORDER BY path", result.RunID)
+	if err != nil {
+		return PathResult{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return PathResult{}, err
+		}
+		result.Outputs = append(result.Outputs, path)
+	}
+	if err := rows.Err(); err != nil {
+		return PathResult{}, err
+	}
+	if primaryPath.Valid && strings.TrimSpace(primaryPath.String) != "" {
+		result.PrimaryPath = filepath.Clean(primaryPath.String)
+		result.Shape = PathResultShape(shape.String)
+	} else {
+		result.PrimaryPath, result.Shape = inferPathResult(result.Outputs)
+	}
+	return result, nil
+}
+
+func inferPathResult(outputs []string) (string, PathResultShape) {
+	if len(outputs) == 0 {
+		return "", ""
+	}
+	if len(outputs) == 1 {
+		if info, err := os.Stat(outputs[0]); err == nil && info.IsDir() {
+			return outputs[0], PathResultBundle
+		}
+		return outputs[0], PathResultSingle
+	}
+	for _, candidate := range outputs {
+		prefix := filepath.Clean(candidate) + string(filepath.Separator)
+		for _, other := range outputs {
+			if strings.HasPrefix(filepath.Clean(other), prefix) {
+				return filepath.Clean(candidate), PathResultBundle
+			}
+		}
+	}
+	return filepath.Dir(outputs[0]), PathResultBundle
 }
 
 func cleanRunPaths(paths []string) []string {

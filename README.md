@@ -239,6 +239,18 @@ sem sobrescrever resultados anteriores. Uma flag `--output` ou `--output-dir` co
 e usa exatamente o destino informado. Sem biblioteca configurada, os destinos antigos ao lado da
 entrada são preservados.
 
+Para voltar imediatamente ao que acabou de ser produzido:
+
+```powershell
+caramel open last       # abre o arquivo no app padrão ou a pasta do pacote
+caramel reveal last     # seleciona o arquivo no Explorer ou abre a pasta do pacote
+caramel pdf create .\imagens --open
+```
+
+`--open` está disponível nos comandos que produzem arquivos e só inicia o aplicativo depois da
+publicação e do registro da execução. A flag é incompatível com `--json` e `--quiet`; sem ela,
+nenhum aplicativo gráfico é iniciado.
+
 ## Exemplos de uso
 
 ### Extrair imagens de um DOCX
