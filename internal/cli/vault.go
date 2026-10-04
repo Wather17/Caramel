@@ -70,6 +70,9 @@ caramel vault init "C:\Users\55689\Documents\Caramel"`,
 			return err
 		}
 		warnings := append([]string(nil), report.Warnings...)
+		if err := offerPowerShellIntegration(cmd, renderer); err != nil {
+			warnings = append(warnings, fmt.Sprintf("integração do PowerShell não foi ativada: %v", err))
+		}
 		return renderer.Result(output.Result{
 			Status:   stateForWarnings(warnings),
 			Summary:  fmt.Sprintf("Biblioteca inicializada com %d fonte(s).", len(sources)),
