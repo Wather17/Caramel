@@ -151,9 +151,16 @@ caramel config set model_text_fallbacks openai/gpt-oss-120b
 | `caramel vault source add/list` | Vincula ou lista fontes externas sem copiar arquivos |
 | `caramel vault sync` | Atualiza o índice incrementalmente (`--full` recalcula hashes) |
 | `caramel vault status` | Exibe fontes, contagens e última sincronização |
+| `caramel open last` | Abre o último arquivo ou pacote publicado |
+| `caramel reveal last` | Seleciona o último arquivo ou abre a pasta do pacote |
 | `caramel completion powershell` | Gera o script que habilita sugestões contextuais com `Tab` |
 | `caramel install` | Instala o Caramel CLI globalmente |
 | `caramel version` | Exibe a versão atual do executável |
+
+Os comandos produtores aceitam `--open` para abrir o resultado principal somente depois de sua
+publicação e persistência no vault. Outputs únicos abrem no aplicativo padrão; pacotes abrem no
+gerenciador de arquivos. `--open` não pode ser combinado com `--json` ou `--quiet`, e uma falha do
+aplicativo externo não remove o output nem altera o histórico da execução produtora.
 
 ---
 

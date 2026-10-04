@@ -63,7 +63,7 @@ func aliasViolations(root *cobra.Command) []string {
 }
 
 func TestRootCommandTree(t *testing.T) {
-	wantGroups := []string{"docx", "image", "print", "pdf", "routine", "config", "vault", "workspace", "guide", "version"}
+	wantGroups := []string{"docx", "image", "print", "pdf", "routine", "config", "vault", "open", "reveal", "workspace", "guide", "version"}
 	registered := make(map[string]bool, len(RootCmd.Commands()))
 	for _, sub := range RootCmd.Commands() {
 		registered[strings.Fields(sub.Use)[0]] = true

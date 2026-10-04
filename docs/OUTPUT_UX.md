@@ -31,6 +31,8 @@ Quando aplicável, um resultado pode conter:
 - `--quiet`: suprime sucesso e progresso; erros continuam em `stderr`.
 - `--json`: emite exatamente um resultado JSON em `stdout`; diagnósticos continuam em `stderr`.
 - `--quiet --json` é inválido, pois combina dois contratos incompatíveis.
+- `--open` é opt-in nos comandos produtores e é incompatível com `--quiet` e `--json` para evitar
+  efeitos gráficos inesperados em automações.
 - Comandos interativos rejeitam `--quiet` e `--json` quando o modo solicitado impediria a interação.
 
 Os códigos de saída continuam compatíveis com o contrato existente: `0` para sucesso, `1` para erro de uso ou execução e códigos específicos já definidos pelo comando.
@@ -53,6 +55,13 @@ local do início da execução e publica em `resultados/YYYY-MM-DD/<categoria>`.
 No modo humano, pacotes mostram apenas `primary_output`. Em `--json`, `outputs` preserva todos os
 caminhos publicados para automação.
 
+Cada run concluída também registra seu caminho principal e o formato `single` ou `bundle`.
+`caramel open last` abre o arquivo único no aplicativo padrão ou a pasta do pacote;
+`caramel reveal last` seleciona o arquivo no Explorer do Windows ou abre a pasta do pacote.
+Se o caminho mais recente tiver sido removido, o Caramel identifica a run e recomenda
+`caramel vault sync` sem pular silenciosamente para um resultado antigo. Falhas do aplicativo
+externo não alteram o status da run que produziu o artefato.
+
 ## Estados
 
 - `success`: operação concluída sem ressalvas.
@@ -69,6 +78,7 @@ Os caminhos canônicos são:
 - `caramel image colorize` e `caramel image generate`
 - `caramel print 2up` e `caramel print cards`
 - `caramel routine consolidate`
+- `caramel open last` e `caramel reveal last`
 - `caramel config show`, `caramel config models list` e `caramel config models select`
 - `caramel install`, `caramel version`, `caramel guide` e `caramel workspace`
 

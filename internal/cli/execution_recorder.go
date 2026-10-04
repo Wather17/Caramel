@@ -43,10 +43,10 @@ func registerDomainExecution(cmd *cobra.Command) {
 			return err
 		}
 		if err != nil {
-			_ = recorder.finish(cmd.Context(), output.StateFailed, nil, err)
+			_, _ = recorder.finish(cmd.Context(), output.StateFailed, nil, err)
 			return err
 		}
-		_ = recorder.finish(cmd.Context(), output.StateSuccess, nil, nil)
+		_, _ = recorder.finish(cmd.Context(), output.StateSuccess, nil, nil)
 		return nil
 	}
 }
@@ -86,11 +86,22 @@ func startCLIExecution(cmd *cobra.Command, args []string) {
 func outputOptionsFor(cmd *cobra.Command) output.Options {
 	options := outputOptions()
 	recorder := executionRecorderFrom(cmd)
-	if recorder != nil {
+	if recorder != nil || openRequested(cmd) {
 		options.Observe = func(result *output.Result) {
-			if warning := recorder.finish(cmd.Context(), result.Status, result.Outputs, nil); warning != "" {
+			persisted := recorder == nil
+			warning := ""
+			if recorder != nil {
+				warning, persisted = recorder.finish(cmd.Context(), result.Status, result, nil)
+			}
+			if warning != "" {
 				result.Warnings = append(result.Warnings, warning)
 				if result.Status == output.StateSuccess {
+					result.Status = output.StateWarning
+				}
+			}
+			if persisted && openRequested(cmd) && (result.Status == output.StateSuccess || result.Status == output.StateWarning) {
+				if warning := openPublishedResult(result); warning != "" {
+					result.Warnings = append(result.Warnings, warning)
 					result.Status = output.StateWarning
 				}
 			}
@@ -107,21 +118,21 @@ func executionRecorderFrom(cmd *cobra.Command) *cliExecutionRecorder {
 	return recorder
 }
 
-func (r *cliExecutionRecorder) finish(ctx context.Context, state output.State, outputs []string, runErr error) string {
+func (r *cliExecutionRecorder) finish(ctx context.Context, state output.State, result *output.Result, runErr error) (string, bool) {
 	if r == nil {
-		return ""
+		return "", true
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.finished {
-		return ""
+		return "", true
 	}
 	r.finished = true
 	if r.startErr != nil {
-		return fmt.Sprintf("não foi possível registrar a execução no vault: %v", r.startErr)
+		return fmt.Sprintf("não foi possível registrar a execução no vault: %v", r.startErr), false
 	}
 	if r.store == nil {
-		return ""
+		return "", false
 	}
 	defer r.store.Close()
 	if ctx == nil {
@@ -133,18 +144,28 @@ func (r *cliExecutionRecorder) finish(ctx context.Context, state output.State, o
 	} else if state != "" && state != output.StateSuccess {
 		status = string(state)
 	}
+	var outputs []string
+	var primary string
+	var shape vault.PathResultShape
+	if result != nil {
+		outputs = result.Outputs
+		primary, shape = describePublishedResult(result)
+		if primary != "" {
+			outputs = append(append([]string(nil), outputs...), primary)
+		}
+	}
 	paths := publishedRunPaths(outputs)
-	if err := r.store.FinishPathRun(ctx, r.runID, status, r.inputs, paths, runErr); err != nil {
-		return fmt.Sprintf("não foi possível concluir o registro da execução: %v", err)
+	if err := r.store.FinishPathRunResult(ctx, r.runID, status, r.inputs, paths, primary, shape, runErr); err != nil {
+		return fmt.Sprintf("não foi possível concluir o registro da execução: %v", err), false
 	}
 	if len(paths) > 0 {
 		if report, err := r.store.Sync(ctx, false); err != nil {
-			return fmt.Sprintf("outputs publicados, mas o índice não pôde ser atualizado: %v", err)
+			return fmt.Sprintf("outputs publicados, mas o índice não pôde ser atualizado: %v", err), true
 		} else if len(report.Warnings) > 0 {
-			return "outputs publicados; uma fonte do índice não pôde ser atualizada"
+			return "outputs publicados; uma fonte do índice não pôde ser atualizada", true
 		}
 	}
-	return ""
+	return "", true
 }
 
 func existingRunPaths(paths []string) []string {
