@@ -53,8 +53,7 @@ issues/
 
 .agent/
 openspec/
-tests/*
-!tests/TODO.md
+tests/
 .opencode/
 # AI agent configuration files
 agents/issue-architect.md
