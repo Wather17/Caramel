@@ -10,6 +10,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"caramel/internal/ui"
+
+	"github.com/spf13/cobra"
 )
 
 func TestDOCXMergeCommandUsesOutputFlagAndReportsResult(t *testing.T) {
@@ -52,6 +56,62 @@ func TestDOCXMergeCommandRequiresTwoInputsAndOutput(t *testing.T) {
 	}
 }
 
+func TestDOCXMergeArgsAllowPickerOnlyInInteractiveHumanMode(t *testing.T) {
+	configureDOCXMergeTest(t)
+	previousInteractive := interactiveInput
+	interactiveInput = func(io.Reader) bool { return true }
+	t.Cleanup(func() { interactiveInput = previousInteractive })
+	command := &cobra.Command{}
+	command.SetIn(strings.NewReader(""))
+	if err := validateDOCXMergeArgs(command, nil); err != nil {
+		t.Fatalf("argumentos vazios deveriam abrir o seletor: %v", err)
+	}
+
+	jsonFlag = true
+	if err := validateDOCXMergeArgs(command, nil); err == nil {
+		t.Fatalf("modo JSON deveria exigir argumentos explícitos: %v", err)
+	}
+}
+
+func TestDOCXMergePickRejectsNonInteractiveAndExplicitFiles(t *testing.T) {
+	configureDOCXMergeTest(t)
+	docxMergePick = true
+	command := &cobra.Command{}
+	command.SetIn(strings.NewReader(""))
+	if err := validateDOCXMergeArgs(command, []string{"one.docx", "two.docx"}); err == nil || !strings.Contains(err.Error(), "não pode") {
+		t.Fatalf("--pick deveria rejeitar arquivos explícitos: %v", err)
+	}
+	if err := validateDOCXMergeArgs(command, nil); err == nil || !strings.Contains(err.Error(), "terminal interativo") {
+		t.Fatalf("--pick deveria rejeitar entrada não interativa: %v", err)
+	}
+}
+
+func TestDOCXMergePickerRevealDoesNotMerge(t *testing.T) {
+	configureDOCXMergeTest(t)
+	previousInteractive := interactiveInput
+	interactiveInput = func(io.Reader) bool { return true }
+	t.Cleanup(func() { interactiveInput = previousInteractive })
+	docxMergePick = true
+	docxMergePicker = func(*cobra.Command) (ui.FilePickerResult, error) {
+		return ui.FilePickerResult{Action: ui.FilePickerReveal, RevealPath: `C:\docs\atividade.docx`}, nil
+	}
+	fake := &fakeResultOpener{}
+	previousOpener := docxMergeOpener
+	docxMergeOpener = fake
+	t.Cleanup(func() { docxMergeOpener = previousOpener })
+	var stdout bytes.Buffer
+	docxMergeCmd.SetOut(&stdout)
+	if err := docxMergeCmd.RunE(docxMergeCmd, nil); err != nil {
+		t.Fatalf("revelar pelo picker falhou: %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].action != "reveal" || fake.calls[0].path != `C:\docs\atividade.docx` || fake.calls[0].bundle {
+		t.Fatalf("chamada de reveal inesperada: %#v", fake.calls)
+	}
+	if !strings.Contains(stdout.String(), "atividade.docx") {
+		t.Fatalf("saída deveria informar o arquivo revelado: %q", stdout.String())
+	}
+}
+
 func TestDOCXMergeCommandUsesLibraryDefault(t *testing.T) {
 	configureDOCXMergeTest(t)
 	defer configureDOCXMergeTest(t)
@@ -77,7 +137,10 @@ func TestDOCXMergeCommandUsesLibraryDefault(t *testing.T) {
 func configureDOCXMergeTest(t *testing.T) {
 	t.Helper()
 	docxMergeOutput = ""
+	docxMergePick = false
+	docxMergePicker = pickDOCXMergeFiles
 	docxMergeCmd.Flags().Lookup("output").Changed = false
+	docxMergeCmd.Flags().Lookup("pick").Changed = false
 	verboseFlag = false
 	quietFlag = false
 	jsonFlag = false
