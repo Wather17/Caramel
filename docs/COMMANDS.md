@@ -30,7 +30,17 @@ Os comandos são agrupados por **fluxo pedagógico**, não por tipo de arquivo:
 ```bash
 caramel docx merge capa.docx atividades.docx respostas.docx --output apostila.docx
 caramel docx split apostila.docx
+
+# Abrir o seletor de DOCX indexados pelo vault
+caramel docx merge --pick
 ```
+
+Em um terminal interativo, `caramel docx merge` sem argumentos abre o mesmo seletor
+automaticamente. Digite para buscar por nome ou caminho, use Espaço para marcar os documentos
+na ordem desejada e Enter para confirmar. `Ctrl+O` revela o arquivo destacado no gerenciador de
+arquivos e encerra sem executar a junção. Esc cancela sem produzir saída. O seletor não é aberto
+em `--json`, `--quiet` ou quando a entrada não é um terminal; nesses modos, informe os caminhos
+explicitamente.
 
 Com a biblioteca configurada, `docx merge` e `pdf merge` também aceitam a omissão de `--output` e
 publicam o arquivo único na categoria diária correspondente. Fora desse modo, a flag permanece
