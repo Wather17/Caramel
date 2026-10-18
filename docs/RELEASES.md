@@ -18,6 +18,8 @@ Antes de gerar uma nova tag e disparar o build automatizado, garanta que todos o
    ```bash
    ./scripts/build.sh
    ```
+5. **Instalador Linux**: O instalador deve continuar detectando `amd64` e `arm64`, instalando sem
+   privilégios administrativos e preservando aliases existentes.
 
 ---
 
@@ -50,4 +52,5 @@ git push origin v0.2.0
 ### 3. Acompanhar e Baixar
 1. Acesse a aba **Actions** do seu repositório no GitHub para ver o progresso do build.
 2. Assim que concluir (aproximadamente 1-2 minutos), vá na aba **Releases**.
-3. Baixe o executável correspondente ao seu sistema (ex: `caramel-windows-amd64.exe`).
+3. Baixe o executável correspondente ao seu sistema ou use o instalador Linux publicado no repositório.
+   O arquivo `SHA256SUMS` é publicado junto dos binários para validação.

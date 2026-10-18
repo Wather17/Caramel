@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -76,6 +77,11 @@ caramel install`,
 
 		renderer.Diagnostic("binário copiado para: %s\n", targetPath)
 		warnings := []string{}
+		if warning, err := installMelAlias(installDir, binaryName); err != nil {
+			warnings = append(warnings, err.Error())
+		} else if warning != "" {
+			warnings = append(warnings, warning)
+		}
 
 		// 4. Configura o PATH com base no Sistema Operacional
 		if runtime.GOOS == "windows" {
@@ -107,6 +113,10 @@ caramel install`,
 
 // copyFile copia o conteúdo do arquivo src para o arquivo dst
 func copyFile(src, dst string) error {
+	if samePath(src, dst) {
+		return nil
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -126,6 +136,72 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Sync()
+}
+
+func samePath(left, right string) bool {
+	leftAbs, leftErr := filepath.Abs(left)
+	rightAbs, rightErr := filepath.Abs(right)
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+}
+
+const managedWindowsMelLauncher = "REM Caramel managed launcher for mel"
+
+// installMelAlias cria o atalho curto sem substituir arquivos que o usuário
+// já possua no mesmo diretório.
+func installMelAlias(installDir, binaryName string) (string, error) {
+	aliasName := "mel"
+	if runtime.GOOS == "windows" {
+		aliasName = "mel.cmd"
+	}
+	aliasPath := filepath.Join(installDir, aliasName)
+
+	info, err := os.Lstat(aliasPath)
+	if errors.Is(err, os.ErrNotExist) {
+		if runtime.GOOS == "windows" {
+			content := fmt.Sprintf("@echo off\r\n%s\r\n\"%%~dp0%s\" %%*\r\nexit /b %%ERRORLEVEL%%\r\n", managedWindowsMelLauncher, binaryName)
+			if err := os.WriteFile(aliasPath, []byte(content), 0644); err != nil {
+				return "", fmt.Errorf("criar alias %s: %w", aliasName, err)
+			}
+		} else if err := os.Symlink(binaryName, aliasPath); err != nil {
+			return "", fmt.Errorf("criar alias %s: %w", aliasName, err)
+		}
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspecionar alias %s: %w", aliasName, err)
+	}
+
+	if runtime.GOOS == "windows" {
+		if info.IsDir() {
+			return fmt.Sprintf("o caminho '%s' já existe como diretório; mantido sem alteração", aliasPath), nil
+		}
+		contents, readErr := os.ReadFile(aliasPath)
+		if readErr != nil {
+			return "", fmt.Errorf("ler alias %s: %w", aliasName, readErr)
+		}
+		if !strings.Contains(string(contents), managedWindowsMelLauncher) {
+			return fmt.Sprintf("o arquivo '%s' já existe e não é gerenciado pelo Caramel; mantido sem alteração", aliasPath), nil
+		}
+		content := fmt.Sprintf("@echo off\r\n%s\r\n\"%%~dp0%s\" %%*\r\nexit /b %%ERRORLEVEL%%\r\n", managedWindowsMelLauncher, binaryName)
+		if err := os.WriteFile(aliasPath, []byte(content), 0644); err != nil {
+			return "", fmt.Errorf("atualizar alias %s: %w", aliasName, err)
+		}
+		return "", nil
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, readErr := os.Readlink(aliasPath)
+		if readErr != nil {
+			return "", fmt.Errorf("ler alias %s: %w", aliasName, readErr)
+		}
+		if target == binaryName || target == filepath.Join(installDir, binaryName) {
+			return "", nil
+		}
+	}
+	return fmt.Sprintf("o caminho '%s' já existe e não é gerenciado pelo Caramel; mantido sem alteração", aliasPath), nil
 }
 
 // addPathWindows altera a variável PATH de usuário no registro do Windows usando PowerShell

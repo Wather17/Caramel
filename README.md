@@ -44,31 +44,26 @@ Os binários publicados nas [releases](https://github.com/Wather17/Caramel/relea
 
 No WSL, use o procedimento de **Linux** dentro da distribuição. O fluxo de releases publica binários para os sistemas e arquiteturas da tabela.
 
-### Linux / WSL: baixar a release
+### Linux / WSL: instalação recomendada
 
-Você precisa de `curl`. Confira a arquitetura com `uname -m`: `x86_64` corresponde a `amd64`; `aarch64` ou `arm64` corresponde a `arm64`.
-
-Em uma pasta de downloads, escolha a arquitetura e execute:
+O instalador detecta a arquitetura, baixa a release mais recente, valida o checksum quando disponível,
+instala em **`~/.local/bin`**, cria o atalho `mel` e configura o PATH do shell do usuário. Ele suporta
+Linux `amd64` e `arm64` e não precisa de Go:
 
 ```bash
-# Use arm64 se o seu sistema for ARM64.
-caramel_arch=amd64
-
-curl -fL "https://github.com/Wather17/Caramel/releases/latest/download/caramel-linux-${caramel_arch}" \
-  -o "caramel-linux-${caramel_arch}"
-chmod +x "caramel-linux-${caramel_arch}"
-"./caramel-linux-${caramel_arch}" install
+curl -fsSL https://raw.githubusercontent.com/Wather17/Caramel/main/scripts/install-linux.sh | bash
 ```
 
-O comando copia o executável para **`~/.local/bin/caramel`**. Para disponibilizá-lo no terminal atual:
+Depois, abra um novo terminal ou carregue o perfil atual. Em `zsh`:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+source ~/.zshrc
 caramel version
 caramel --help
 ```
 
-Para manter o PATH nas próximas sessões, adicione a linha `export PATH="$HOME/.local/bin:$PATH"` ao arquivo de configuração do seu shell, como `~/.bashrc` ou `~/.zshrc`, e reabra o terminal.
+Em `bash`, use `source ~/.bashrc`. Para escolher uma versão específica ou outro diretório de instalação,
+defina `CARAMEL_VERSION` ou `CARAMEL_INSTALL_DIR` antes de executar o instalador.
 
 ### Windows: via Scoop
 
@@ -114,19 +109,13 @@ cd Caramel
 
 ```bash
 bash scripts/install.sh
-export PATH="$HOME/.local/bin:$PATH"
+source ~/.bashrc  # ou source ~/.zshrc
 caramel --help
 mel --help
 ```
 
-O script usa `dist/caramel-linux-amd64` quando esse arquivo existe; caso contrário, compila para o sistema atual. Em **Linux ARM64**, compile explicitamente o binário para sua máquina e instale a cópia recém compilada:
-
-```bash
-go build -o caramel-local ./cmd/caramel
-./caramel-local install
-export PATH="$HOME/.local/bin:$PATH"
-caramel --help
-```
+O script escolhe `dist/caramel-linux-amd64` ou `dist/caramel-linux-arm64` conforme a máquina. Caso o
+binário correspondente não exista, ele compila para o sistema atual.
 
 **Windows**, a partir da raiz do repositório no PowerShell:
 
@@ -138,7 +127,8 @@ mel --help
 
 O script usa `dist\caramel-windows-amd64.exe` quando disponível e compila com Go quando o arquivo não existe. A instalação fica em `%USERPROFILE%\.caramel\bin`.
 
-Os scripts locais criam o atalho `mel` quando o caminho está disponível e preservam atalhos existentes que não sejam gerenciados pelo Caramel. O comando `install` embutido no executável instala o nome `caramel`; `mel` é disponibilizado pelo Scoop e pelos scripts locais.
+Os scripts locais criam o atalho `mel` e preservam atalhos existentes que não sejam gerenciados pelo
+Caramel. O comando `install` embutido no executável também cria esse atalho.
 
 ### Atualizar
 
@@ -150,7 +140,16 @@ scoop update caramel
 caramel version
 ```
 
-Para instalação por download, repita o procedimento da sua plataforma com a release mais recente, executando `install` a partir do **arquivo recém baixado na pasta de downloads**. Para uma compilação própria, atualize o checkout e recompile; os scripts locais dão preferência ao binário existente em `dist/`, então esse arquivo precisa estar atualizado se for usado.
+Para instalação manual por download no Windows, repita o procedimento com a release mais recente,
+executando `install` a partir do **arquivo recém baixado na pasta de downloads**. Para uma compilação
+própria, atualize o checkout e recompile; os scripts locais dão preferência ao binário existente em `dist/`,
+então esse arquivo precisa estar atualizado se for usado.
+
+No Linux, a atualização recomendada é repetir o instalador:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Wather17/Caramel/main/scripts/install-linux.sh | bash
+```
 
 ## Primeiros passos
 

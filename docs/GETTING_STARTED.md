@@ -90,13 +90,27 @@ Os seguintes arquivos serão gerados na pasta `dist/`:
 ## 💻 Instalando o Executável
 
 ### No Linux:
-Execute o script de instalação para mover o binário para `~/.local/bin`:
+Para instalar a release mais recente sem Go, execute:
+
 ```bash
-chmod +x scripts/install.sh
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/Wather17/Caramel/main/scripts/install-linux.sh | bash
 ```
 
-A instalação cria também o alias curto `mel`, apontando para o mesmo executável:
+O instalador detecta `amd64` ou `arm64`, instala o binário em `~/.local/bin`, cria o alias `mel` e
+adiciona esse diretório ao perfil do shell quando necessário. Abra um novo terminal ou carregue o perfil:
+
+```bash
+source ~/.bashrc  # ou source ~/.zshrc
+```
+
+Para instalar a partir do checkout local, use o script abaixo. Ele usa o binário correspondente em `dist/`
+ou compila o executável para a arquitetura atual:
+
+```bash
+bash scripts/install.sh
+```
+
+As duas formas criam também o alias curto `mel`, apontando para o mesmo executável:
 
 ```bash
 mel --help

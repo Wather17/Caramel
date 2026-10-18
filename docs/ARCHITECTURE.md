@@ -33,7 +33,8 @@ Caramel/
 ├── dist/                    # Binários gerados pela compilação (ignorado no git)
 ├── scripts/                 # Scripts automatizados
 │   ├── build.sh             # Compilação cross-platform (Linux & Windows)
-│   ├── install.sh           # Instalador automático para Linux
+│   ├── install.sh           # Instalador local para Linux
+│   ├── install-linux.sh     # Instalador de releases para Linux
 │   └── install.ps1          # Instalador automático para Windows (PowerShell)
 ├── go.mod                   # Gerenciador de módulos Go
 ├── go.sum

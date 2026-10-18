@@ -51,6 +51,11 @@ jobs:
           # Windows AMD64
           GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/caramel-windows-amd64.exe ./cmd/caramel
 
+          (cd dist && sha256sum \
+            caramel-linux-amd64 \
+            caramel-linux-arm64 \
+            caramel-windows-amd64.exe > SHA256SUMS)
+
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -63,6 +68,7 @@ jobs:
             dist/caramel-linux-amd64
             dist/caramel-linux-arm64
             dist/caramel-windows-amd64.exe
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

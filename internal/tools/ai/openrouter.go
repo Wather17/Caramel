@@ -836,6 +836,9 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 	resp, err := c.HTTPClient.Do(req)
 	release()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		transportErr := &retryableError{err: fmt.Errorf("failed to contact OpenRouter API: %w", err)}
 		attemptEvent.ErrorClass = ErrorClass(transportErr)
 		return "", transportErr
@@ -853,7 +856,13 @@ func (c *Client) AnalyzeRoutineContext(ctx context.Context, routineText string, 
 
 	bodyBytes, err := readLimitedBody(resp.Body, resp.ContentLength, DefaultMaxResponseBodyBytes, "resposta da API")
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		return "", fmt.Errorf("failed to read API response: %w", err)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", ctxErr
 	}
 
 	c.debugf("🔍 [DEBUG] Resposta Raw de rotina do OpenRouter (%d bytes; trecho):\n%s\n\n", len(bodyBytes), truncateForError(string(bodyBytes)))

@@ -1,43 +1,42 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-INSTALL_DIR="${HOME}/.local/bin"
-BINARY_NAME="caramel"
-ALIAS_NAME="mel"
-ALIAS_PATH="${INSTALL_DIR}/${ALIAS_NAME}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-echo "🍬 Instalando Caramel CLI..."
+case "${CARAMEL_ARCH:-$(uname -m)}" in
+    x86_64|amd64)
+        ARCH="amd64"
+        ;;
+    aarch64|arm64)
+        ARCH="arm64"
+        ;;
+    *)
+        echo "Erro: arquitetura não suportada: $(uname -m). Use Linux amd64 ou arm64." >&2
+        exit 1
+        ;;
+esac
 
-# Ensure target directory exists
-mkdir -p "${INSTALL_DIR}"
-
-# Build binary for Linux if dist doesn't exist
-if [ ! -f "dist/caramel-linux-amd64" ]; then
-    echo " └─ Compilando executável..."
-    go build -o "${INSTALL_DIR}/${BINARY_NAME}" ./cmd/caramel
-else
-    echo " └─ Copiando binário de dist/..."
-    cp dist/caramel-linux-amd64 "${INSTALL_DIR}/${BINARY_NAME}"
-fi
-
-chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-
-# Cria um alias seguro para o mesmo executável, sem substituir arquivos existentes.
-if [ -L "${ALIAS_PATH}" ]; then
-    if [ "$(readlink "${ALIAS_PATH}" 2>/dev/null || true)" = "${BINARY_NAME}" ]; then
-        echo " └─ Alias '${ALIAS_NAME}' já está configurado."
-    else
-        echo " ⚠️  Alias '${ALIAS_NAME}' já existe e não é gerenciado pelo Caramel; mantido sem alteração." >&2
+SOURCE_PATH="${PROJECT_ROOT}/dist/caramel-linux-${ARCH}"
+BUILD_DIR=""
+cleanup() {
+    if [[ -n "${BUILD_DIR}" ]]; then
+        rm -rf "${BUILD_DIR}"
     fi
-elif [ -e "${ALIAS_PATH}" ]; then
-    echo " ⚠️  Arquivo '${ALIAS_PATH}' já existe e não é gerenciado pelo Caramel; mantido sem alteração." >&2
+}
+trap cleanup EXIT
+
+if [[ ! -f "${SOURCE_PATH}" ]]; then
+    if ! command -v go >/dev/null 2>&1; then
+        echo "Erro: ${SOURCE_PATH} não existe e o Go não está instalado." >&2
+        exit 1
+    fi
+    BUILD_DIR="$(mktemp -d)"
+    SOURCE_PATH="${BUILD_DIR}/caramel"
+    echo "🍬 Compilando Caramel CLI para Linux (${ARCH})..."
+    (cd "${PROJECT_ROOT}" && go build -o "${SOURCE_PATH}" ./cmd/caramel)
 else
-    ln -s "${BINARY_NAME}" "${ALIAS_PATH}"
-    echo " └─ Alias '${ALIAS_NAME}' criado para '${BINARY_NAME}'."
+    echo "🍬 Instalando Caramel CLI a partir de dist/caramel-linux-${ARCH}..."
 fi
 
-echo "✅ Caramel instalado com sucesso em: ${INSTALL_DIR}/${BINARY_NAME}"
-echo "   Use 'caramel' ou 'mel' para executar o CLI."
-echo ""
-echo "Certifique-se de que '${INSTALL_DIR}' está no seu PATH no ~/.bashrc ou ~/.zshrc:"
-echo '  export PATH="$HOME/.local/bin:$PATH"'
+CARAMEL_SOURCE_PATH="${SOURCE_PATH}" bash "${SCRIPT_DIR}/install-linux.sh"
