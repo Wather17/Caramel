@@ -6,11 +6,14 @@ set -euo pipefail
 #
 # CARAMEL_SOURCE_PATH permite que scripts/install.sh reutilize toda a lógica de
 # instalação quando estiver instalando um binário compilado localmente.
+# CARAMEL_RELEASE_BASE é um override de teste para uma fixture local; usuários
+# normais continuam usando as URLs de release derivadas do repositório/versão.
 
 REPOSITORY="${CARAMEL_REPOSITORY:-Wather17/Caramel}"
 INSTALL_DIR="${CARAMEL_INSTALL_DIR:-${HOME}/.local/bin}"
 SOURCE_PATH="${CARAMEL_SOURCE_PATH:-}"
 REQUESTED_VERSION="${CARAMEL_VERSION:-latest}"
+CUSTOM_RELEASE_BASE="${CARAMEL_RELEASE_BASE:-}"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
     echo "Erro: este instalador é destinado ao Linux." >&2
@@ -30,7 +33,7 @@ case "${CARAMEL_ARCH:-$(uname -m)}" in
         ARCH="arm64"
         ;;
     *)
-        echo "Erro: arquitetura não suportada: $(uname -m). Use Linux amd64 ou arm64." >&2
+        echo "Erro: arquitetura não suportada: ${CARAMEL_ARCH:-$(uname -m)}. Use Linux amd64 ou arm64." >&2
         exit 1
         ;;
 esac
@@ -55,7 +58,9 @@ else
         exit 1
     fi
 
-    if [[ "${REQUESTED_VERSION}" == "latest" ]]; then
+    if [[ -n "${CUSTOM_RELEASE_BASE}" ]]; then
+        RELEASE_BASE="${CUSTOM_RELEASE_BASE%/}"
+    elif [[ "${REQUESTED_VERSION}" == "latest" ]]; then
         RELEASE_BASE="https://github.com/${REPOSITORY}/releases/latest/download"
     else
         VERSION_WITHOUT_V="${REQUESTED_VERSION#v}"

@@ -25,6 +25,10 @@ Antes de gerar uma nova tag e disparar o build automatizado, garanta que todos o
    ```bash
    bash scripts/test-install.sh
    ```
+   O harness também cobre reinstalação, atualização, PATH idempotente, assets ausentes,
+   checksum inválido e arquitetura incompatível usando fixtures locais. O workflow de tag executa
+   `CARAMEL_ARTIFACT_DIR=dist bash scripts/test-install.sh` depois de gerar `SHA256SUMS` e antes de
+   publicar os artefatos.
 
 ---
 
@@ -66,7 +70,7 @@ git push origin v0.2.0
 | Fluxo | Validado automaticamente | Ainda exige validação manual |
 | --- | --- | --- |
 | Pull request | Testes Go com race, vet, build Linux amd64/arm64 e Windows amd64, além do smoke test do instalador Linux em `HOME` temporário | Experiência visual em uma sessão Linux Mint e execução real em hardware ARM64 |
-| Tag `v*` | Build dos três artefatos, geração de `SHA256SUMS`, publicação da release e atualização do manifesto Scoop | Conferir download, checksum e abertura de uma nova sessão em cada ambiente suportado |
+| Tag `v*` | Build dos três artefatos, smoke test de `dist`, geração de `SHA256SUMS`, publicação da release e atualização do manifesto Scoop | Conferir download, checksum e abertura de uma nova sessão em cada ambiente suportado |
 | Linux ARM64 | Formato ELF, nome do artefato e arquitetura cruzada são verificados; o smoke test não executa o binário ARM64 no host amd64 | Execução real em ARM64 nativo ou emulação, quando o comportamento de runtime for relevante |
 | Windows | Compilação amd64 e manifesto Scoop são produzidos | Instalação PowerShell, `caramel`/`mel`, PATH e integração do PowerShell em runner Windows |
 
