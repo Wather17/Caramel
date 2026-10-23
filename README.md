@@ -272,7 +272,7 @@ Para voltar imediatamente ao que acabou de ser produzido:
 
 ```powershell
 caramel open last       # abre o arquivo no app padrão ou a pasta do pacote
-caramel reveal last     # seleciona o arquivo no Explorer ou abre a pasta do pacote
+caramel reveal last     # Windows seleciona; Linux abre a pasta pai; pacotes abrem como pasta
 caramel pdf create .\imagens --open
 ```
 

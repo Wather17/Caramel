@@ -57,7 +57,9 @@ caminhos publicados para automação.
 
 Cada run concluída também registra seu caminho principal e o formato `single` ou `bundle`.
 `caramel open last` abre o arquivo único no aplicativo padrão ou a pasta do pacote;
-`caramel reveal last` seleciona o arquivo no Explorer do Windows ou abre a pasta do pacote.
+`caramel reveal last` seleciona o arquivo no Explorer do Windows; no Linux abre a pasta pai do
+arquivo; pacotes abrem como pasta. A seleção visual de um arquivo não é garantida entre os
+gerenciadores de arquivos Linux.
 Se o caminho mais recente tiver sido removido, o Caramel identifica a run e recomenda
 `caramel vault sync` sem pular silenciosamente para um resultado antigo. Falhas do aplicativo
 externo não alteram o status da run que produziu o artefato.
