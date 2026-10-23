@@ -37,6 +37,34 @@ func TestShellCommandsManagePowerShellProfiles(t *testing.T) {
 	}
 }
 
+func TestShellCommandsManageLinuxProfiles(t *testing.T) {
+	home := t.TempDir()
+	previousOS := currentOperatingSystem
+	previousHome := currentUserHomeDir
+	currentOperatingSystem = "linux"
+	currentUserHomeDir = func() (string, error) { return home, nil }
+	t.Setenv("ZDOTDIR", filepath.Join(home, "zsh"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Cleanup(func() {
+		currentOperatingSystem = previousOS
+		currentUserHomeDir = previousHome
+	})
+
+	for _, name := range []string{"bash", "zsh", "fish"} {
+		t.Run(name, func(t *testing.T) {
+			if result := runShellCommandForTest(t, shellStatusCmd, []string{name}); !strings.Contains(result, "0/1 perfil(is) ativo(s)") {
+				t.Fatalf("status inicial inesperado: %q", result)
+			}
+			if result := runShellCommandForTest(t, shellEnableCmd, []string{name}); !strings.Contains(result, "1/1 perfil(is) ativo(s)") {
+				t.Fatalf("ativação inesperada: %q", result)
+			}
+			if result := runShellCommandForTest(t, shellDisableCmd, []string{name}); !strings.Contains(result, "0/1 perfil(is) ativo(s)") {
+				t.Fatalf("remoção inesperada: %q", result)
+			}
+		})
+	}
+}
+
 func TestShellCommandsRejectUnsupportedShellAndPlatform(t *testing.T) {
 	fakeWindowsShellRuntime(t)
 	if err := shellStatusCmd.RunE(shellStatusCmd, []string{"zsh"}); err == nil || !strings.Contains(err.Error(), "shell não suportado") {

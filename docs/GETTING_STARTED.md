@@ -69,6 +69,17 @@ mais de 30 segundos e sugere apenas extensões aceitas pelo comando. O ranking c
 descoberta/modificação/último uso e nome. Em caso de falha do vault, o PowerShell volta ao
 autocomplete comum de arquivos sem imprimir diagnóstico na lista de sugestões.
 
+No Linux, a integração equivalente é explícita e suporta Bash, Zsh e Fish:
+
+```bash
+caramel shell enable bash  # ou zsh/fish
+caramel shell status bash
+caramel shell disable bash
+```
+
+Os perfis chamam `caramel completion <shell>` dinamicamente em novas sessões. Se o vault falhar,
+o completion nativo do shell continua funcionando sem misturar diagnósticos às sugestões.
+
 ---
 
 ### 3. Compilação Multiplataforma (Linux + Windows)

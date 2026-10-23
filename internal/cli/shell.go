@@ -30,16 +30,28 @@ var shellCmd = &cobra.Command{
 var shellEnableCmd = &cobra.Command{
 	Use:   "enable <shell>",
 	Short: "Ativa uma integração de shell",
-	Long: `Instala um bloco gerenciado de autocomplete nos perfis PowerShell 7 e Windows PowerShell 5.1.
-O restante dos perfis é preservado e uma nova execução apenas atualiza o mesmo bloco.
+	Long: `Instala um bloco gerenciado de autocomplete no perfil do shell escolhido.
+No Linux, Bash, Zsh e Fish são suportados; no Windows, a integração do PowerShell é preservada.
+O restante do perfil é preservado e uma nova execução apenas atualiza o mesmo bloco.
 
 📚 QUANDO USAR:
 Use depois de instalar o Caramel ou quando quiser ativar Tab para buscar arquivos indexados de qualquer pasta.`,
-	Example: `# Ativar autocomplete permanente nos perfis PowerShell
-caramel shell enable powershell`,
+	Example: `# Ativar autocomplete permanente no Bash
+caramel shell enable bash`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := currentPowerShellManager(args[0])
+		if strings.EqualFold(strings.TrimSpace(args[0]), "powershell") {
+			manager, err := currentPowerShellManager(args[0])
+			if err != nil {
+				return err
+			}
+			states, err := manager.Enable()
+			if err != nil {
+				return err
+			}
+			return renderProfileStates(cmd, states, "Integração do PowerShell ativada")
+		}
+		manager, err := currentCompletionManager(args[0])
 		if err != nil {
 			return err
 		}
@@ -47,22 +59,33 @@ caramel shell enable powershell`,
 		if err != nil {
 			return err
 		}
-		return renderPowerShellStates(cmd, states, "Integração do PowerShell ativada")
+		return renderProfileStates(cmd, states, "Integração de completion ativada")
 	},
 }
 
 var shellStatusCmd = &cobra.Command{
 	Use:   "status <shell>",
 	Short: "Mostra o estado de uma integração de shell",
-	Long: `Informa quais perfis PowerShell do usuário estão ausentes, não configurados ou com o bloco do Caramel ativo.
+	Long: `Informa se o perfil do shell está ausente, não configurado, ativo ou inválido.
 
 📚 QUANDO USAR:
 Use para confirmar se o autocomplete está disponível antes de abrir uma nova janela do terminal.`,
-	Example: `# Verificar a integração do PowerShell
-caramel shell status powershell`,
+	Example: `# Verificar a integração do Bash
+caramel shell status bash`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := currentPowerShellManager(args[0])
+		if strings.EqualFold(strings.TrimSpace(args[0]), "powershell") {
+			manager, err := currentPowerShellManager(args[0])
+			if err != nil {
+				return err
+			}
+			states, err := manager.Status()
+			if err != nil {
+				return err
+			}
+			return renderProfileStates(cmd, states, "Estado da integração do PowerShell")
+		}
+		manager, err := currentCompletionManager(args[0])
 		if err != nil {
 			return err
 		}
@@ -70,23 +93,34 @@ caramel shell status powershell`,
 		if err != nil {
 			return err
 		}
-		return renderPowerShellStates(cmd, states, "Estado da integração do PowerShell")
+		return renderProfileStates(cmd, states, "Estado da integração de completion")
 	},
 }
 
 var shellDisableCmd = &cobra.Command{
 	Use:   "disable <shell>",
 	Short: "Remove uma integração gerenciada de shell",
-	Long: `Remove somente o bloco delimitado que o Caramel instalou nos perfis PowerShell.
+	Long: `Remove somente o bloco delimitado que o Caramel gerencia no perfil do shell.
 Linhas e personalizações externas permanecem intactas.
 
 📚 QUANDO USAR:
 Use se quiser desativar o autocomplete permanente sem apagar ou editar o perfil manualmente.`,
-	Example: `# Remover a integração gerenciada do PowerShell
-caramel shell disable powershell`,
+	Example: `# Remover a integração gerenciada do Bash
+caramel shell disable bash`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := currentPowerShellManager(args[0])
+		if strings.EqualFold(strings.TrimSpace(args[0]), "powershell") {
+			manager, err := currentPowerShellManager(args[0])
+			if err != nil {
+				return err
+			}
+			states, err := manager.Disable()
+			if err != nil {
+				return err
+			}
+			return renderProfileStates(cmd, states, "Integração do PowerShell removida")
+		}
+		manager, err := currentCompletionManager(args[0])
 		if err != nil {
 			return err
 		}
@@ -94,7 +128,7 @@ caramel shell disable powershell`,
 		if err != nil {
 			return err
 		}
-		return renderPowerShellStates(cmd, states, "Integração do PowerShell removida")
+		return renderProfileStates(cmd, states, "Integração de completion removida")
 	},
 }
 
@@ -109,7 +143,21 @@ func currentPowerShellManager(shellName string) (shell.PowerShellManager, error)
 	return shell.NewPowerShellManager(homeDir, currentOperatingSystem), nil
 }
 
-func renderPowerShellStates(cmd *cobra.Command, states []shell.ProfileState, summary string) error {
+func currentCompletionManager(shellName string) (shell.CompletionManager, error) {
+	if !shell.IsSupportedShell(shellName) {
+		return shell.CompletionManager{}, fmt.Errorf("shell não suportado: %s (use bash, zsh ou fish)", shellName)
+	}
+	if currentOperatingSystem != "linux" {
+		return shell.CompletionManager{}, fmt.Errorf("shell não suportado nesta plataforma: %s (a integração Bash/Zsh/Fish está disponível apenas no Linux)", shellName)
+	}
+	homeDir, err := currentUserHomeDir()
+	if err != nil {
+		return shell.CompletionManager{}, fmt.Errorf("localizar diretório do usuário: %w", err)
+	}
+	return shell.NewCompletionManager(homeDir, shellName, os.Getenv("ZDOTDIR"), os.Getenv("XDG_CONFIG_HOME")), nil
+}
+
+func renderProfileStates(cmd *cobra.Command, states []shell.ProfileState, summary string) error {
 	renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	if err != nil {
 		return err

@@ -149,6 +149,16 @@ func normalizeShellName(shellName string) string {
 	return strings.ToLower(filepath.Base(shellName))
 }
 
+// IsSupportedShell reports whether a profile manager can target the shell.
+func IsSupportedShell(shellName string) bool {
+	switch normalizeShellName(shellName) {
+	case "bash", "zsh", "fish":
+		return true
+	default:
+		return false
+	}
+}
+
 func profileContainsPath(contents, shellName, homeDir, installDir string) bool {
 	for _, rawLine := range strings.Split(contents, "\n") {
 		line := strings.TrimSpace(strings.TrimSuffix(rawLine, "\r"))
@@ -292,4 +302,21 @@ func installManagedBlockFor(contents, startMarker, endMarker, block string) (str
 		return block, nil
 	}
 	return contents + lineEndingFor(contents) + block, nil
+}
+
+func removeManagedBlockFor(contents, startMarker, endMarker string) (string, error) {
+	start, end, found, err := managedBlockRangeFor(contents, startMarker, endMarker)
+	if err != nil || !found {
+		return contents, err
+	}
+	if start >= 2 && contents[start-2:start] == "\r\n" {
+		if start >= 4 && contents[start-4:start-2] == "\r\n" {
+			start -= 2
+		}
+	} else if start >= 1 && contents[start-1:start] == "\n" {
+		if start >= 2 && contents[start-2:start-1] == "\n" {
+			start--
+		}
+	}
+	return contents[:start] + contents[end:], nil
 }
