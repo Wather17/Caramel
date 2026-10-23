@@ -11,6 +11,7 @@ type fakeRunner struct {
 	missing string
 	name    string
 	args    []string
+	runErr  error
 }
 
 func (r *fakeRunner) LookPath(name string) (string, error) {
@@ -23,7 +24,7 @@ func (r *fakeRunner) LookPath(name string) (string, error) {
 func (r *fakeRunner) Run(name string, args ...string) error {
 	r.name = name
 	r.args = append([]string(nil), args...)
-	return nil
+	return r.runErr
 }
 
 func TestWindowsOpenerPassesUnicodePathAsSeparateArgument(t *testing.T) {
@@ -66,10 +67,58 @@ func TestPlatformOpenerUsesNativeBundleCommands(t *testing.T) {
 	}
 }
 
+func TestLinuxOpenerUsesXDGOpenWithSafeArguments(t *testing.T) {
+	path := "/tmp/ação com espaço/resultado final.pdf"
+	tests := []struct {
+		name   string
+		reveal bool
+		bundle bool
+		want   string
+	}{
+		{name: "open file", want: path},
+		{name: "reveal file", reveal: true, want: "/tmp/ação com espaço"},
+		{name: "open bundle", bundle: true, want: path},
+		{name: "reveal bundle", reveal: true, bundle: true, want: path},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			opener := NewOpenerFor("linux", runner)
+			var err error
+			if test.reveal {
+				err = opener.Reveal(path, test.bundle)
+			} else {
+				err = opener.Open(path, test.bundle)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if runner.name != "resolved/xdg-open" || !reflect.DeepEqual(runner.args, []string{test.want}) {
+				t.Fatalf("comando Linux inesperado: %q %#v", runner.name, runner.args)
+			}
+		})
+	}
+}
+
 func TestPlatformOpenerReportsMissingApplication(t *testing.T) {
 	runner := &fakeRunner{missing: "xdg-open"}
 	err := NewOpenerFor("linux", runner).Open("/tmp/resultado.pdf", false)
 	if err == nil || !strings.Contains(err.Error(), "xdg-open") || !strings.Contains(err.Error(), "não está disponível") {
 		t.Fatalf("erro pouco útil: %v", err)
+	}
+}
+
+func TestPlatformOpenerReportsExecutionFailure(t *testing.T) {
+	runner := &fakeRunner{runErr: errors.New("sessão gráfica indisponível")}
+	err := NewOpenerFor("linux", runner).Open("/tmp/resultado.pdf", false)
+	if err == nil || !strings.Contains(err.Error(), "xdg-open") || !strings.Contains(err.Error(), "não foi possível iniciar") {
+		t.Fatalf("erro de execução pouco útil: %v", err)
+	}
+}
+
+func TestPlatformOpenerReportsUnsupportedPlatform(t *testing.T) {
+	err := NewOpenerFor("plan9", &fakeRunner{}).Reveal("/tmp/resultado.pdf", false)
+	if err == nil || !strings.Contains(err.Error(), "não é suportado em plan9") {
+		t.Fatalf("erro de plataforma pouco útil: %v", err)
 	}
 }
