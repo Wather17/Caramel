@@ -23,6 +23,7 @@ Caramel/
 │   ├── ui/                  # Componentes TUI, tema, previews e workspace
 │   ├── vault/               # Acervo global SQLite, objetos e migração legada
 │   ├── workspace/           # Compatibilidade com projetos JSON do MVP
+│   ├── shell/               # Perfis gerenciados e integrações de completion
 │   ├── workflow/            # Orquestração compartilhada pela CLI e pela TUI
 │   └── tools/               # Módulos e motores das ferramentas pedagógicas
 │       ├── ai/              # Clientes OpenRouter, triagem e geração
@@ -78,9 +79,10 @@ A biblioteca visível é uma camada distinta, configurada por `caramel vault ini
 `indexed_sources` registra a biblioteca e fontes externas; `indexed_files` mantém caminhos,
 metadados, hashes e disponibilidade sem copiar ou assumir posse desses arquivos. O sync é
 recursivo e incremental. Objetos imutáveis, cache e SQLite permanecem no diretório interno.
-O autocomplete do PowerShell consulta esse índice, sincroniza fontes com estado mais antigo
-que 30 segundos e aplica filtro de formato antes do ranking textual e temporal. Falhas nessa
-consulta retornam silenciosamente ao completador nativo de arquivos.
+O autocomplete do Bash, Zsh, Fish e PowerShell consulta esse índice, sincroniza fontes com estado
+mais antigo que 30 segundos e aplica filtro de formato antes do ranking textual e temporal. Falhas
+nessa consulta retornam silenciosamente ao completador nativo de arquivos. As integrações persistentes
+são blocos delimitados nos perfis e chamam `caramel completion <shell>` dinamicamente.
 O planejador de `internal/output` recebe categoria, formato e nome-base, produz em staging e
 publica em `resultados/YYYY-MM-DD` com política determinística de colisão. Runs tradicionais da
 CLI usam `run_input_paths`, `run_output_paths` e `path_derivations`; outputs publicados sob uma
@@ -94,6 +96,19 @@ seus próprios contratos e destinos.
 Chamadas a serviços externos seguem o contrato documentado em
 [`API_INTEGRATIONS.md`](API_INTEGRATIONS.md), que cobre transporte, classes de falha,
 retry, workers, rate limit, custo, saída, fallback, persistência e segurança.
+
+### Plataformas e caminhos
+
+Linux Mint amd64/arm64 é a plataforma Linux inicial. O instalador de release é por usuário, instala
+em `~/.local/bin`, não exige `sudo` nem Go e valida `SHA256SUMS` quando a release oferece o arquivo.
+Windows amd64 continua mantido com o instalador PowerShell e o manifesto Scoop. WSL executa o fluxo
+Linux dentro da distribuição, mas não altera a política de suporte do Linux nativo.
+
+No Linux, o vault privado usa `${XDG_DATA_HOME:-$HOME/.local/share}/caramel` e a configuração usa
+`${XDG_CONFIG_HOME:-$HOME/.config}/caramel`. A biblioteca visível padrão é `$HOME/Documents/Caramel`;
+`caramel vault init "$HOME/caramel-biblioteca"` persiste uma pasta customizada em `CARAMEL_LIBRARY_DIR`.
+`materiais/` e `resultados/` são criados nessa biblioteca, enquanto fontes externas são apenas indexadas:
+seus arquivos não são copiados, movidos, renomeados ou apagados pelo vault.
 
 ---
 

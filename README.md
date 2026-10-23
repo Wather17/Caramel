@@ -38,13 +38,15 @@ Os binários publicados nas [releases](https://github.com/Wather17/Caramel/relea
 
 | Sistema | Arquitetura | Arquivo da release |
 | --- | --- | --- |
-| Linux / WSL | x86_64 / AMD64 | `caramel-linux-amd64` |
-| Linux / WSL | ARM64 / aarch64 | `caramel-linux-arm64` |
+| Linux Mint nativo | x86_64 / AMD64 | `caramel-linux-amd64` |
+| Linux Mint nativo | ARM64 / aarch64 | `caramel-linux-arm64` |
+| WSL | x86_64 / AMD64 ou ARM64 | use o binário Linux correspondente dentro da distribuição |
 | Windows | x86_64 / AMD64 | `caramel-windows-amd64.exe` |
 
-No WSL, use o procedimento de **Linux** dentro da distribuição. O fluxo de releases publica binários para os sistemas e arquiteturas da tabela.
+Linux Mint amd64/arm64 é o suporte Linux inicial. Windows continua sendo uma plataforma mantida,
+com binário amd64; WSL usa o fluxo Linux dentro da distribuição e não substitui a validação do Linux nativo.
 
-### Linux / WSL: instalação recomendada
+### Linux Mint nativo: instalação recomendada
 
 O instalador detecta a arquitetura, baixa a release mais recente, valida o checksum quando disponível,
 instala em **`~/.local/bin`**, cria o atalho `mel` e configura o PATH do shell do usuário. Ele suporta
@@ -64,6 +66,11 @@ caramel --help
 
 Em `bash`, use `source ~/.bashrc`. Para escolher uma versão específica ou outro diretório de instalação,
 defina `CARAMEL_VERSION` ou `CARAMEL_INSTALL_DIR` antes de executar o instalador.
+
+### WSL
+
+No WSL, execute o instalador Linux dentro da distribuição e use o binário correspondente à arquitetura
+informada por `uname -m`. A biblioteca, o vault e os perfis de shell ficam dentro do ambiente Linux do WSL.
 
 ### Windows: via Scoop
 
@@ -105,7 +112,7 @@ git clone https://github.com/Wather17/Caramel.git
 cd Caramel
 ```
 
-**Linux AMD64**, a partir da raiz do repositório:
+**Linux Mint amd64/arm64**, a partir da raiz do repositório:
 
 ```bash
 bash scripts/install.sh
@@ -189,9 +196,13 @@ O acervo é armazenado por padrão em `~/.local/share/caramel` no Linux e em `%L
 O banco e o cache continuam no diretório interno acima, enquanto os arquivos do usuário podem
 ficar em uma biblioteca visível e configurável. No primeiro uso:
 
-```powershell
-caramel vault init "C:\Users\55689\Documents\Caramel"
-caramel vault source add "C:\Users\55689\Documents\docs-mãe"
+No Linux Mint, use o padrão ou escolha uma pasta existente sem mover os arquivos:
+
+```bash
+caramel vault init
+# Alternativa: usar uma biblioteca já existente
+caramel vault init "$HOME/caramel-biblioteca"
+caramel vault source add "$HOME/documentos/docs-mae"
 caramel vault sync
 caramel vault status
 ```
@@ -200,6 +211,15 @@ caramel vault status
 não move, renomeia nem apaga seus arquivos. A sincronização normal compara metadados e recalcula
 hash somente para arquivos novos ou alterados; `caramel vault sync --full` força uma verificação
 completa para diagnóstico.
+
+No Windows, mantenha os caminhos em uma seção própria:
+
+```powershell
+caramel vault init "$env:USERPROFILE\Documents\Caramel"
+caramel vault source add "$env:USERPROFILE\Documents\docs-mae"
+caramel vault sync
+caramel vault status
+```
 
 No Windows, `caramel vault init` pergunta ao fim de uma inicialização interativa se deve ativar
 o autocomplete permanente. A integração preserva as demais personalizações dos perfis PowerShell
