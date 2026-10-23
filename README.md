@@ -115,7 +115,8 @@ mel --help
 ```
 
 O script escolhe `dist/caramel-linux-amd64` ou `dist/caramel-linux-arm64` conforme a máquina. Caso o
-binário correspondente não exista, ele compila para o sistema atual.
+binário correspondente não exista, ele compila para Linux na arquitetura selecionada. Para testar ou
+forçar outra arquitetura suportada no checkout, use `CARAMEL_ARCH=amd64` ou `CARAMEL_ARCH=arm64`.
 
 **Windows**, a partir da raiz do repositório no PowerShell:
 

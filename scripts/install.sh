@@ -34,7 +34,7 @@ if [[ ! -f "${SOURCE_PATH}" ]]; then
     BUILD_DIR="$(mktemp -d)"
     SOURCE_PATH="${BUILD_DIR}/caramel"
     echo "🍬 Compilando Caramel CLI para Linux (${ARCH})..."
-    (cd "${PROJECT_ROOT}" && go build -o "${SOURCE_PATH}" ./cmd/caramel)
+    (cd "${PROJECT_ROOT}" && GOOS=linux GOARCH="${ARCH}" go build -o "${SOURCE_PATH}" ./cmd/caramel)
 else
     echo "🍬 Instalando Caramel CLI a partir de dist/caramel-linux-${ARCH}..."
 fi
