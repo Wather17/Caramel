@@ -216,6 +216,18 @@ digitado e a atividade recente. Caminhos com espaços e acentos são inseridos e
 e em UTF-8. Se o índice estiver indisponível, o completador normal do sistema de arquivos
 continua funcionando.
 
+No Linux, a integração persistente é explícita e suporta Bash, Zsh e Fish:
+
+```bash
+caramel shell enable bash  # ou zsh/fish
+caramel shell status bash
+caramel shell disable bash
+```
+
+O perfil chama `caramel completion <shell>` dinamicamente a cada nova sessão. Assim, atualizações
+do executável não deixam um script de completion estático; se o vault não estiver disponível, o
+completion nativo do shell continua funcionando.
+
 Com a biblioteca configurada, os comandos que produzem arquivos usam por padrão um diário de
 resultados. Por exemplo, uma execução em 3 de outubro de 2026 fica sob:
 
