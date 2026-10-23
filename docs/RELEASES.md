@@ -10,7 +10,9 @@ Antes de gerar uma nova tag e disparar o build automatizado, garanta que todos o
 
 1. **Testes Verificados**: Todos os testes locais devem passar sem falhas:
    ```bash
-   go test -v ./...
+   go test -race ./...
+   go vet ./...
+   CGO_ENABLED=0 go build ./...
    ```
 2. **Ambiente Limpo**: O branch `main` deve estar atualizado e sem alterações pendentes (`git status` limpo).
 3. **Documentação Atualizada**: Se a organização, os fluxos ou as políticas públicas mudaram, atualize o [`docs/COMMANDS.md`](./COMMANDS.md) e os guias afetados. A lista detalhada de comandos é derivada ao vivo pela própria CLI.
@@ -19,7 +21,10 @@ Antes de gerar uma nova tag e disparar o build automatizado, garanta que todos o
    ./scripts/build.sh
    ```
 5. **Instalador Linux**: O instalador deve continuar detectando `amd64` e `arm64`, instalando sem
-   privilégios administrativos e preservando aliases existentes.
+   privilégios administrativos, preservando aliases existentes e passando o smoke test isolado:
+   ```bash
+   bash scripts/test-install.sh
+   ```
 
 ---
 
@@ -35,7 +40,8 @@ O Caramel CLI segue o padrão **Semantic Versioning 2.0.0** (`vMAJOR.MINOR.PATCH
 
 ## 🚀 Passo a Passo para Lançar uma Release
 
-Após validar todos os critérios, siga estes comandos no seu terminal do WSL:
+Após validar todos os critérios, siga estes comandos no Linux Mint ou em um runner Ubuntu. O WSL pode
+ser usado para repetir o fluxo Linux dentro da distribuição, mas não é o caminho principal de suporte.
 
 ### 1. Criar a Tag de Versão
 Crie uma tag anotada descrevendo as principais mudanças:
@@ -54,3 +60,16 @@ git push origin v0.2.0
 2. Assim que concluir (aproximadamente 1-2 minutos), vá na aba **Releases**.
 3. Baixe o executável correspondente ao seu sistema ou use o instalador Linux publicado no repositório.
    O arquivo `SHA256SUMS` é publicado junto dos binários para validação.
+
+## ✅ Matriz de validação automática e manual
+
+| Fluxo | Validado automaticamente | Ainda exige validação manual |
+| --- | --- | --- |
+| Pull request | Testes Go com race, vet, build Linux amd64/arm64 e Windows amd64, além do smoke test do instalador Linux em `HOME` temporário | Experiência visual em uma sessão Linux Mint e execução real em hardware ARM64 |
+| Tag `v*` | Build dos três artefatos, geração de `SHA256SUMS`, publicação da release e atualização do manifesto Scoop | Conferir download, checksum e abertura de uma nova sessão em cada ambiente suportado |
+| Linux ARM64 | Formato ELF, nome do artefato e arquitetura cruzada são verificados; o smoke test não executa o binário ARM64 no host amd64 | Execução real em ARM64 nativo ou emulação, quando o comportamento de runtime for relevante |
+| Windows | Compilação amd64 e manifesto Scoop são produzidos | Instalação PowerShell, `caramel`/`mel`, PATH e integração do PowerShell em runner Windows |
+
+O smoke test Linux usa diretórios temporários e não modifica a máquina nem a biblioteca do usuário.
+Falhas de checksum, arquitetura ou artefato ausente devem ser reproduzidas antes da publicação e
+registradas na issue/PR correspondente.

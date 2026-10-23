@@ -1,6 +1,7 @@
 # 🚀 Guia de Início Rápido (Getting Started)
 
-Este documento instrui como compilar, testar e instalar o **Caramel CLI** localmente em ambientes Linux e Windows.
+Este documento instrui como instalar, configurar e validar o **Caramel CLI** no Linux Mint amd64/arm64.
+Windows continua mantido em uma seção própria; WSL usa o fluxo Linux dentro da distribuição.
 
 ---
 
@@ -39,17 +40,31 @@ importados são deduplicados por hash e as saídas ficam registradas no vault, s
 pastas de trabalho no diretório atual. Para escolher outro local, defina
 `CARAMEL_VAULT_DIR` antes de iniciar.
 
-Para configurar arquivos visíveis em `Documents/Caramel` e indexar um acervo existente sem
-movê-lo:
+No Linux Mint, configure a biblioteca visível padrão ou escolha uma pasta existente sem movê-la:
 
-```powershell
+```bash
 caramel vault init
-caramel vault source add "C:\Users\55689\Documents\docs-mãe"
+# Alternativa: usar uma biblioteca existente
+caramel vault init "$HOME/caramel-biblioteca"
+caramel vault source add "$HOME/documentos/docs-mae"
 caramel vault sync
+caramel vault status
 ```
 
 Use `CARAMEL_LIBRARY_DIR` para substituir a biblioteca visível. Essa variável é independente de
 `CARAMEL_VAULT_DIR`, que continua reservado ao banco, cache e objetos internos.
+
+`vault init` cria `materiais/` e `resultados/`, registra as fontes no índice e preserva os arquivos
+existentes. A sincronização não copia, move, renomeia ou apaga o acervo informado.
+
+No Windows, o mesmo fluxo usa caminhos do PowerShell e permanece separado do Linux:
+
+```powershell
+caramel vault init "$env:USERPROFILE\Documents\Caramel"
+caramel vault source add "$env:USERPROFILE\Documents\docs-mae"
+caramel vault sync
+caramel vault status
+```
 
 No Windows, ao concluir `caramel vault init` em um terminal interativo, o Caramel pergunta se
 deve ativar o autocomplete permanente do PowerShell. A confirmação configura os perfis do
@@ -100,7 +115,7 @@ Os seguintes arquivos serão gerados na pasta `dist/`:
 
 ## 💻 Instalando o Executável
 
-### No Linux:
+### No Linux Mint (amd64/arm64):
 Para instalar a release mais recente sem Go, execute:
 
 ```bash
@@ -108,19 +123,24 @@ curl -fsSL https://raw.githubusercontent.com/Wather17/Caramel/main/scripts/insta
 ```
 
 O instalador detecta `amd64` ou `arm64`, instala o binário em `~/.local/bin`, cria o alias `mel` e
-adiciona esse diretório ao perfil do shell quando necessário. Abra um novo terminal ou carregue o perfil:
+adiciona esse diretório ao perfil Bash ou Zsh quando necessário. Abra um novo terminal ou carregue o perfil:
 
 ```bash
-source ~/.bashrc  # ou source ~/.zshrc
+source ~/.bashrc  # Bash
+source ~/.zshrc   # Zsh; no Fish, abra uma nova sessão
 ```
 
-Para instalar a partir do checkout local, use o script abaixo. Ele usa o binário correspondente em `dist/`
-ou compila o executável para Linux na arquitetura atual. Para selecionar explicitamente uma arquitetura
-suportada, defina `CARAMEL_ARCH=amd64` ou `CARAMEL_ARCH=arm64`:
+Para instalar a partir do checkout local, o script usa `dist/caramel-linux-amd64` ou
+`dist/caramel-linux-arm64` quando o artefato correspondente existe. Sem esse artefato, compila um
+binário Linux para a arquitetura selecionada. Para selecionar explicitamente uma arquitetura suportada:
 
 ```bash
-bash scripts/install.sh
+CARAMEL_ARCH=amd64 bash scripts/install.sh
+CARAMEL_ARCH=arm64 bash scripts/install.sh
 ```
+
+Sem `CARAMEL_ARCH`, a arquitetura é detectada pelo host. O fallback exige Go; releases instaladas por
+`scripts/install-linux.sh` não exigem Go nem `sudo`.
 
 As duas formas criam também o alias curto `mel`, apontando para o mesmo executável:
 
