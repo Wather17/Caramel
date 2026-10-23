@@ -118,6 +118,11 @@ mel --help
 mel version
 ```
 
+Se você usar `caramel install` com um binário já baixado, o Linux persiste `~/.local/bin` no perfil do
+shell reconhecido (`.bashrc`, `${ZDOTDIR:-$HOME}/.zshrc` ou `config.fish`). A saída informa o arquivo
+alterado e o comando `source` correspondente; shells não reconhecidos recebem apenas uma orientação
+manual, sem modificar um perfil escolhido arbitrariamente.
+
 ### No Windows (PowerShell):
 #### Opção A: Via Script Local
 Execute o script de instalação em PowerShell:

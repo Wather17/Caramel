@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"caramel/internal/output"
+	"caramel/internal/shell"
 
 	"github.com/spf13/cobra"
 )
@@ -20,7 +21,7 @@ var selfInstallCmd = &cobra.Command{
 	Aliases: []string{"self-install"},
 	Short:   "Instala o Caramel CLI globalmente no sistema",
 	Long: `Copia o binário do Caramel em execução para um diretório local do usuário
-e adiciona esse diretório ao PATH do sistema operacional (automaticamente no Windows e orientações no Linux).
+e adiciona esse diretório ao PATH do sistema operacional.
 
 📚 QUANDO USAR:
 Use após baixar o binário para instalá-lo globalmente: o comando copia o executável para um
@@ -92,10 +93,27 @@ caramel install`,
 			} else {
 				warnings = append(warnings, "reinicie o terminal ou PowerShell para atualizar o PATH")
 			}
+		} else if runtime.GOOS == "linux" {
+			update, err := configureLinuxPath(
+				homeDir,
+				installDir,
+				os.Getenv("PATH"),
+				os.Getenv("SHELL"),
+				os.Getenv("ZDOTDIR"),
+				os.Getenv("XDG_CONFIG_HOME"),
+			)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("não foi possível atualizar o PATH automaticamente; adicione %s ao PATH e reabra o terminal: %v", installDir, err))
+				renderer.Diagnostic("falha ao atualizar PATH: %v\n", err)
+			} else if update.Updated {
+				warnings = append(warnings, fmt.Sprintf("PATH atualizado em %s; abra um novo terminal ou execute: source %s", update.Profile.Path, update.Profile.Path))
+			} else {
+				renderer.Diagnostic("diretório de instalação já está configurado no PATH\n")
+			}
 		} else {
-			// Linux / macOS
-			pathEnv := os.Getenv("PATH")
-			if !strings.Contains(pathEnv, installDir) {
+			// macOS mantém o comportamento anterior: orientar o usuário sem
+			// editar automaticamente os perfis desta plataforma.
+			if !shell.ContainsPath(os.Getenv("PATH"), installDir) {
 				warnings = append(warnings, fmt.Sprintf("adicione %s ao PATH e reabra o terminal", installDir))
 			} else {
 				renderer.Diagnostic("diretório de instalação já está no PATH\n")
@@ -109,6 +127,18 @@ caramel install`,
 			Warnings: warnings,
 		})
 	},
+}
+
+func configureLinuxPath(homeDir, installDir, pathEnv, shellName, zdotdir, xdgConfigHome string) (shell.PathUpdate, error) {
+	manager := shell.NewProfileManager(homeDir, shellName, zdotdir, xdgConfigHome, installDir)
+	profile, err := manager.Profile()
+	if err != nil {
+		return shell.PathUpdate{}, err
+	}
+	if shell.ContainsPath(pathEnv, installDir) {
+		return shell.PathUpdate{Profile: profile, AlreadyConfigured: true}, nil
+	}
+	return manager.EnsurePath()
 }
 
 // copyFile copia o conteúdo do arquivo src para o arquivo dst

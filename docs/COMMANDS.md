@@ -165,7 +165,7 @@ caramel config set model_text_fallbacks openai/gpt-oss-120b
 | `caramel reveal last` | Seleciona o último arquivo ou abre a pasta do pacote |
 | `caramel completion powershell` | Gera o script que habilita sugestões contextuais com `Tab` |
 | `caramel shell enable/status/disable powershell` | Administra a integração permanente e reversível com os perfis PowerShell |
-| `caramel install` | Instala o Caramel CLI globalmente |
+| `caramel install` | Instala o Caramel CLI globalmente e persiste `~/.local/bin` no perfil Bash, Zsh ou Fish no Linux |
 | `caramel version` | Exibe a versão atual do executável |
 
 Os comandos produtores aceitam `--open` para abrir o resultado principal somente depois de sua
