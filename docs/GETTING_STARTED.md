@@ -104,7 +104,8 @@ source ~/.bashrc  # ou source ~/.zshrc
 ```
 
 Para instalar a partir do checkout local, use o script abaixo. Ele usa o binário correspondente em `dist/`
-ou compila o executável para a arquitetura atual:
+ou compila o executável para Linux na arquitetura atual. Para selecionar explicitamente uma arquitetura
+suportada, defina `CARAMEL_ARCH=amd64` ou `CARAMEL_ARCH=arm64`:
 
 ```bash
 bash scripts/install.sh
