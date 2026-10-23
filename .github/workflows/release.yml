@@ -56,6 +56,9 @@ jobs:
             caramel-linux-arm64 \
             caramel-windows-amd64.exe > SHA256SUMS)
 
+      - name: Smoke Test Release Artifacts
+        run: CARAMEL_ARTIFACT_DIR=dist bash scripts/test-install.sh
+
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
