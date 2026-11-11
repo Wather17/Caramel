@@ -12,6 +12,7 @@ import (
 	"caramel/internal/vault"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const domainExecutionAnnotation = "caramel.io/domain-execution"
@@ -81,6 +82,20 @@ func startCLIExecution(cmd *cobra.Command, args []string) {
 		}
 	}
 	cmd.SetContext(context.WithValue(ctx, executionContextKey{}, recorder))
+}
+
+func recordCLIUsage(cmd *cobra.Command) {
+	if cmd == nil || cmd == usageCmd {
+		return
+	}
+	flags := make([]string, 0)
+	cmd.Flags().Visit(func(flag *pflag.Flag) { flags = append(flags, flag.Name) })
+	store, err := vault.Open()
+	if err != nil {
+		return
+	}
+	defer store.Close()
+	_ = store.RecordCLIUsage(cmd.Context(), cmd.CommandPath(), flags)
 }
 
 func outputOptionsFor(cmd *cobra.Command) output.Options {

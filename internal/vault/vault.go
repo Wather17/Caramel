@@ -22,7 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 7
+const schemaVersion = 8
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -112,6 +112,19 @@ type MigrationReport struct {
 	Runs      int
 }
 
+// UsageCount agrupa a frequência observada de um comando ou flag.
+type UsageCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// UsageReport contém contagens locais agregadas de uso da CLI.
+type UsageReport struct {
+	Commands []UsageCount `json:"commands"`
+	Flags    []UsageCount `json:"flags"`
+	Total    int          `json:"total"`
+}
+
 // Vault mantém a conexão SQLite e o diretório de objetos imutáveis.
 type Vault struct {
 	db      *sql.DB
@@ -171,6 +184,97 @@ func (v *Vault) Close() error {
 	return v.db.Close()
 }
 
+// RecordCLIUsage registra somente o caminho do comando e nomes de flags explicitamente usados.
+func (v *Vault) RecordCLIUsage(ctx context.Context, command string, flags []string) error {
+	if strings.TrimSpace(command) == "" {
+		return errors.New("caminho do comando vazio")
+	}
+	unique := make(map[string]struct{}, len(flags))
+	cleanFlags := make([]string, 0, len(flags))
+	for _, flag := range flags {
+		flag = strings.TrimSpace(flag)
+		if flag == "" {
+			continue
+		}
+		if _, ok := unique[flag]; ok {
+			continue
+		}
+		unique[flag] = struct{}{}
+		cleanFlags = append(cleanFlags, flag)
+	}
+	sort.Strings(cleanFlags)
+	encoded, err := json.Marshal(cleanFlags)
+	if err != nil {
+		return fmt.Errorf("falha ao serializar flags de uso: %w", err)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_, err = v.db.ExecContext(ctx, "INSERT INTO cli_usage_events(command_path, flags_json, occurred_at) VALUES (?, ?, ?)", command, string(encoded), usageTimestamp(time.Now()))
+	if err != nil {
+		return fmt.Errorf("falha ao registrar uso da CLI: %w", err)
+	}
+	return nil
+}
+
+// CLIUsage agrega eventos locais desde o instante indicado; nil inclui todo o histórico.
+func (v *Vault) CLIUsage(ctx context.Context, since *time.Time) (UsageReport, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := "SELECT command_path, flags_json FROM cli_usage_events"
+	args := []any{}
+	if since != nil {
+		query += " WHERE occurred_at >= ?"
+		args = append(args, usageTimestamp(*since))
+	}
+	rows, err := v.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return UsageReport{}, fmt.Errorf("falha ao ler uso da CLI: %w", err)
+	}
+	defer rows.Close()
+	commands := map[string]int{}
+	flags := map[string]int{}
+	total := 0
+	for rows.Next() {
+		var command, encoded string
+		if err := rows.Scan(&command, &encoded); err != nil {
+			return UsageReport{}, fmt.Errorf("falha ao ler evento de uso: %w", err)
+		}
+		commands[command]++
+		total++
+		var used []string
+		if err := json.Unmarshal([]byte(encoded), &used); err != nil {
+			return UsageReport{}, fmt.Errorf("flags de uso inválidas no vault: %w", err)
+		}
+		for _, flag := range used {
+			flags[flag]++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return UsageReport{}, fmt.Errorf("falha ao finalizar leitura de uso da CLI: %w", err)
+	}
+	return UsageReport{Commands: sortedUsageCounts(commands), Flags: sortedUsageCounts(flags), Total: total}, nil
+}
+
+func usageTimestamp(value time.Time) string {
+	return value.UTC().Format("2006-01-02T15:04:05.000000000Z")
+}
+
+func sortedUsageCounts(counts map[string]int) []UsageCount {
+	result := make([]UsageCount, 0, len(counts))
+	for name, count := range counts {
+		result = append(result, UsageCount{Name: name, Count: count})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Count == result[j].Count {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].Count > result[j].Count
+	})
+	return result
+}
+
 func (v *Vault) configure() error {
 	for _, pragma := range []string{"PRAGMA foreign_keys = ON", "PRAGMA busy_timeout = 5000", "PRAGMA journal_mode = WAL"} {
 		if _, err := v.db.Exec(pragma); err != nil {
@@ -224,6 +328,14 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cli_usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command_path TEXT NOT NULL,
+    flags_json TEXT NOT NULL DEFAULT '[]',
+    occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cli_usage_events_occurred_at ON cli_usage_events(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_cli_usage_events_command ON cli_usage_events(command_path);
 CREATE TABLE IF NOT EXISTS materials (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,

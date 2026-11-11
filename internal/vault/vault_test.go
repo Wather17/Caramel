@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"caramel/internal/workspace"
 )
@@ -495,5 +496,46 @@ func writeVaultPNGColor(t *testing.T, path string, base color.RGBA) {
 	}
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCLIUsageRecordsOnlyNamesAndFiltersByPeriod(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CARAMEL_VAULT_DIR", root)
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	if err := v.RecordCLIUsage(context.Background(), "caramel pdf split", []string{"output", "json", "output"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.Exec("INSERT INTO cli_usage_events(command_path, flags_json, occurred_at) VALUES (?, ?, ?)", "caramel docx split", `["output"]`, usageTimestamp(time.Now().AddDate(0, 0, -45))); err != nil {
+		t.Fatal(err)
+	}
+	recentStart := time.Now().UTC().AddDate(0, 0, -30)
+	recent, err := v.CLIUsage(context.Background(), &recentStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recent.Total != 1 || len(recent.Commands) != 1 || recent.Commands[0] != (UsageCount{Name: "caramel pdf split", Count: 1}) {
+		t.Fatalf("contagens recentes inesperadas: %+v", recent)
+	}
+	if len(recent.Flags) != 2 || recent.Flags[0] != (UsageCount{Name: "json", Count: 1}) || recent.Flags[1] != (UsageCount{Name: "output", Count: 1}) {
+		t.Fatalf("flags explícitas inesperadas: %+v", recent.Flags)
+	}
+	all, err := v.CLIUsage(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.Total != 2 || len(all.Commands) != 2 {
+		t.Fatalf("histórico completo inesperado: %+v", all)
+	}
+	var flagsJSON string
+	if err := v.db.QueryRow("SELECT flags_json FROM cli_usage_events ORDER BY id LIMIT 1").Scan(&flagsJSON); err != nil {
+		t.Fatal(err)
+	}
+	if flagsJSON != `["json","output"]` {
+		t.Fatalf("flags deveriam ser nomes deduplicados e ordenados: %s", flagsJSON)
 	}
 }

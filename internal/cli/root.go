@@ -39,6 +39,7 @@ Para mais informações sobre os comandos disponíveis, use:
 			return fmt.Errorf("a flag --open não pode ser usada com --json ou --quiet")
 		}
 		markCommandStarted(cmd)
+		recordCLIUsage(cmd)
 		startCLIExecution(cmd, args)
 		return nil
 	},
