@@ -91,7 +91,7 @@ func runLastResultAction(cmd *cobra.Command, reveal bool) error {
 	if err != nil {
 		return fmt.Errorf("não foi possível acessar o resultado da run %s: %w", result.RunID, err)
 	}
-	renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}

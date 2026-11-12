@@ -87,6 +87,7 @@ caramel <comando> --help
 | Saída textual, JSON, quiet e verbose | [`OUTPUT_UX.md`](OUTPUT_UX.md) e [`OUTPUT_UX_MATRIX.md`](OUTPUT_UX_MATRIX.md) |
 | IA, integrações, retries e limites | [`API_INTEGRATIONS.md`](API_INTEGRATIONS.md) |
 | Workspace, vault e proveniência | `ARCHITECTURE.md` e `COMMANDS.md` |
+| Evidência de uso para decisões de produto | [`USAGE_DECISIONS.md`](USAGE_DECISIONS.md) |
 | Releases e versionamento | [`RELEASES.md`](RELEASES.md) |
 
 ## Orientação para skills dependentes do Caramel

@@ -539,3 +539,103 @@ func TestCLIUsageRecordsOnlyNamesAndFiltersByPeriod(t *testing.T) {
 		t.Fatalf("flags deveriam ser nomes deduplicados e ordenados: %s", flagsJSON)
 	}
 }
+
+func TestDetailedCLIUsageReportsHealthCoverageInventoryAndSignals(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CARAMEL_VAULT_DIR", root)
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	successID, err := v.StartCLIUsage(context.Background(), "caramel pdf split", []string{"output", "output"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.FinishCLIUsage(context.Background(), successID, UsageStatusSuccess, 1200*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
+	failureID, err := v.StartCLIUsage(context.Background(), "caramel docx split", []string{"output"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.FinishCLIUsage(context.Background(), failureID, UsageStatusFailed, 3000*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
+	legacyAt := time.Now().UTC().AddDate(0, 0, -45)
+	if _, err := v.db.Exec("INSERT INTO cli_usage_events(command_path, flags_json, occurred_at) VALUES (?, ?, ?)", "caramel legacy", `["old"]`, usageTimestamp(legacyAt)); err != nil {
+		t.Fatal(err)
+	}
+
+	since := time.Now().UTC().AddDate(0, 0, -30)
+	report, err := v.DetailedCLIUsage(context.Background(), &since, UsageCatalog{
+		Commands: []string{"caramel pdf split", "caramel docx split", "caramel never"},
+		Flags: []UsageFlagDefinition{
+			{CommandPath: "caramel pdf split", Name: "output"},
+			{CommandPath: "caramel pdf split", Name: "never"},
+			{CommandPath: "caramel docx split", Name: "output"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Total != 2 || !report.Coverage.HasData || report.Coverage.ActiveDays != 1 {
+		t.Fatalf("cobertura inesperada: %+v", report.Coverage)
+	}
+	if len(report.Commands) != 3 {
+		t.Fatalf("inventário de comandos inesperado: %+v", report.Commands)
+	}
+	if report.Commands[0].Name != "caramel docx split" || report.Commands[0].Count != 1 || report.Commands[0].Status.Failed != 1 || report.Commands[0].AverageDurationMS != 3_000 {
+		t.Fatalf("métrica de falha inesperada: %+v", report.Commands[0])
+	}
+	if report.Commands[1].Name != "caramel pdf split" || report.Commands[1].Status.Success != 1 || report.Commands[1].AverageDurationMS != 1_200 {
+		t.Fatalf("métrica de sucesso inesperada: %+v", report.Commands[1])
+	}
+	if report.Commands[2].Name != "caramel never" || report.Commands[2].Count != 0 {
+		t.Fatalf("comando sem uso deveria permanecer no inventário: %+v", report.Commands[2])
+	}
+	if len(report.Flags) != 3 {
+		t.Fatalf("inventário de flags inesperado: %+v", report.Flags)
+	}
+	var foundNeverFlag, foundFailureSignal bool
+	for _, signal := range report.Signals {
+		if signal.Kind == "never_used_flag" && signal.Flag == "never" {
+			foundNeverFlag = true
+		}
+		if signal.Kind == "failed_command" && signal.CommandPath == "caramel docx split" {
+			foundFailureSignal = true
+		}
+	}
+	if !foundNeverFlag || !foundFailureSignal {
+		t.Fatalf("sinais esperados não encontrados: %+v", report.Signals)
+	}
+
+	var flagsJSON string
+	if err := v.db.QueryRow("SELECT flags_json FROM cli_usage_events ORDER BY id LIMIT 1").Scan(&flagsJSON); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(flagsJSON, "secret-value") || strings.Contains(flagsJSON, "/home/") {
+		t.Fatalf("dados privados não deveriam ser persistidos: %s", flagsJSON)
+	}
+}
+
+func TestDetailedCLIUsageReportsInsufficientData(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CARAMEL_VAULT_DIR", root)
+	v, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+
+	report, err := v.DetailedCLIUsage(context.Background(), nil, UsageCatalog{Commands: []string{"caramel unused"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Coverage.HasData || len(report.Signals) == 0 || report.Signals[0].Kind != "insufficient_data" {
+		t.Fatalf("relatório vazio deveria explicitar dados insuficientes: %+v", report)
+	}
+}

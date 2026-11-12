@@ -29,7 +29,7 @@ diretório local do usuário e configura o PATH automaticamente, permitindo usar
 	Example: `# Executar o auto-instalador e configurar o PATH global
 caramel install`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}

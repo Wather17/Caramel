@@ -32,6 +32,7 @@ criação de atividades e utilitários de desenvolvimento pedagógico.
 Para mais informações sobre os comandos disponíveis, use:
   caramel --help`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		beginCLIUsage(cmd)
 		if err := outputOptions().Validate(); err != nil {
 			return err
 		}
@@ -39,7 +40,6 @@ Para mais informações sobre os comandos disponíveis, use:
 			return fmt.Errorf("a flag --open não pode ser usada com --json ou --quiet")
 		}
 		markCommandStarted(cmd)
-		recordCLIUsage(cmd)
 		startCLIExecution(cmd, args)
 		return nil
 	},
@@ -53,7 +53,9 @@ Para mais informações sobre os comandos disponíveis, use:
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
+	cmd, err := RootCmd.ExecuteC()
+	finishCLIUsage(cmd, err)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Erro ao executar o comando: %v\n", err)
 		os.Exit(1)
 	}

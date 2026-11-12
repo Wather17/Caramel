@@ -158,7 +158,7 @@ func currentCompletionManager(shellName string) (shell.CompletionManager, error)
 }
 
 func renderProfileStates(cmd *cobra.Command, states []shell.ProfileState, summary string) error {
-	renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}

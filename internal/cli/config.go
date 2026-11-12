@@ -44,7 +44,7 @@ Use para cadastrar ou trocar a chave de API do OpenRouter de forma direta e auto
 caramel config set openrouter_key sk-or-v1-suachaveaqui`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ salvo no seu sistema — útil para diagnóstico antes de usar comandos com IA.`
 	Example: `# Verificar o status atual das configurações
 caramel config show`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ sem precisar editar arquivos manualmente.`,
 	Example: `# Iniciar o assistente guiado de configuração
 caramel config setup`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -249,7 +249,7 @@ caramel config models list --role image --limit 10
 	# Listar modelos de texto que contenham 'deepseek'
 caramel config models list --role text --search deepseek`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}

@@ -22,7 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 8
+const schemaVersion = 9
 
 // Material é a unidade atômica do acervo global.
 type Material struct {
@@ -125,6 +125,94 @@ type UsageReport struct {
 	Total    int          `json:"total"`
 }
 
+// UsageStatusCounts separa as execuções por resultado observável.
+type UsageStatusCounts struct {
+	Success  int `json:"success"`
+	Warning  int `json:"warning"`
+	Failed   int `json:"failed"`
+	Canceled int `json:"canceled"`
+	Unknown  int `json:"unknown"`
+}
+
+// UsageCommand descreve a adoção e a saúde observadas de um comando.
+type UsageCommand struct {
+	Name              string            `json:"name"`
+	Count             int               `json:"count"`
+	Share             float64           `json:"share"`
+	Status            UsageStatusCounts `json:"status"`
+	FirstUsed         *time.Time        `json:"first_used,omitempty"`
+	LastUsed          *time.Time        `json:"last_used,omitempty"`
+	ActiveDays        int               `json:"active_days"`
+	AverageDurationMS int64             `json:"average_duration_ms,omitempty"`
+	DurationSamples   int               `json:"duration_samples,omitempty"`
+}
+
+// UsageFlag descreve uma flag dentro do comando que a possui.
+type UsageFlag struct {
+	CommandPath string     `json:"command_path"`
+	Name        string     `json:"name"`
+	Count       int        `json:"count"`
+	LastUsed    *time.Time `json:"last_used,omitempty"`
+}
+
+// UsageFlagDefinition representa uma flag disponível na árvore pública da CLI.
+type UsageFlagDefinition struct {
+	CommandPath string
+	Name        string
+}
+
+// UsageCatalog permite que o relatório mostre comandos e flags sem uso.
+type UsageCatalog struct {
+	Commands []string
+	Flags    []UsageFlagDefinition
+}
+
+// UsageTrend agrupa execuções em uma janela semanal relativa ao período consultado.
+type UsageTrend struct {
+	Start  time.Time         `json:"start"`
+	End    time.Time         `json:"end"`
+	Count  int               `json:"count"`
+	Status UsageStatusCounts `json:"status"`
+}
+
+// UsageCoverage descreve o tamanho e a maturidade da evidência disponível.
+type UsageCoverage struct {
+	PeriodStart      *time.Time `json:"period_start,omitempty"`
+	PeriodEnd        time.Time  `json:"period_end"`
+	FirstCollectedAt *time.Time `json:"first_collected_at,omitempty"`
+	LastCollectedAt  *time.Time `json:"last_collected_at,omitempty"`
+	Events           int        `json:"events"`
+	ActiveDays       int        `json:"active_days"`
+	ObservedDays     int        `json:"observed_days"`
+	HasData          bool       `json:"has_data"`
+}
+
+// UsageSignal aponta um fato que merece revisão humana, sem decidir a ação.
+type UsageSignal struct {
+	Kind        string `json:"kind"`
+	CommandPath string `json:"command_path,omitempty"`
+	Flag        string `json:"flag,omitempty"`
+	Detail      string `json:"detail"`
+}
+
+// DetailedUsageReport contém a evidência completa para decisões de produto.
+type DetailedUsageReport struct {
+	Commands []UsageCommand `json:"commands"`
+	Flags    []UsageFlag    `json:"flags"`
+	Coverage UsageCoverage  `json:"coverage"`
+	Trend    []UsageTrend   `json:"trend"`
+	Signals  []UsageSignal  `json:"signals"`
+	Total    int            `json:"total"`
+}
+
+const (
+	UsageStatusSuccess  = "success"
+	UsageStatusWarning  = "warning"
+	UsageStatusFailed   = "failed"
+	UsageStatusCanceled = "canceled"
+	UsageStatusUnknown  = "unknown"
+)
+
 // Vault mantém a conexão SQLite e o diretório de objetos imutáveis.
 type Vault struct {
 	db      *sql.DB
@@ -184,10 +272,10 @@ func (v *Vault) Close() error {
 	return v.db.Close()
 }
 
-// RecordCLIUsage registra somente o caminho do comando e nomes de flags explicitamente usados.
-func (v *Vault) RecordCLIUsage(ctx context.Context, command string, flags []string) error {
+// StartCLIUsage registra uma tentativa local sem armazenar valores ou argumentos.
+func (v *Vault) StartCLIUsage(ctx context.Context, command string, flags []string) (int64, error) {
 	if strings.TrimSpace(command) == "" {
-		return errors.New("caminho do comando vazio")
+		return 0, errors.New("caminho do comando vazio")
 	}
 	unique := make(map[string]struct{}, len(flags))
 	cleanFlags := make([]string, 0, len(flags))
@@ -205,16 +293,59 @@ func (v *Vault) RecordCLIUsage(ctx context.Context, command string, flags []stri
 	sort.Strings(cleanFlags)
 	encoded, err := json.Marshal(cleanFlags)
 	if err != nil {
-		return fmt.Errorf("falha ao serializar flags de uso: %w", err)
+		return 0, fmt.Errorf("falha ao serializar flags de uso: %w", err)
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	_, err = v.db.ExecContext(ctx, "INSERT INTO cli_usage_events(command_path, flags_json, occurred_at) VALUES (?, ?, ?)", command, string(encoded), usageTimestamp(time.Now()))
+	result, err := v.db.ExecContext(ctx, "INSERT INTO cli_usage_events(command_path, flags_json, occurred_at, status) VALUES (?, ?, ?, ?)", command, string(encoded), usageTimestamp(time.Now()), UsageStatusUnknown)
 	if err != nil {
-		return fmt.Errorf("falha ao registrar uso da CLI: %w", err)
+		return 0, fmt.Errorf("falha ao registrar início do uso da CLI: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("falha ao obter identificador do uso da CLI: %w", err)
+	}
+	return id, nil
+}
+
+// FinishCLIUsage conclui uma tentativa local com o estado observado e sua duração.
+func (v *Vault) FinishCLIUsage(ctx context.Context, id int64, status string, duration time.Duration) error {
+	if id <= 0 {
+		return errors.New("identificador de uso inválido")
+	}
+	if !validUsageStatus(status) {
+		return fmt.Errorf("status de uso inválido: %s", status)
+	}
+	if duration < 0 {
+		duration = 0
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_, err := v.db.ExecContext(ctx, "UPDATE cli_usage_events SET status = ?, duration_ms = ? WHERE id = ?", status, duration.Milliseconds(), id)
+	if err != nil {
+		return fmt.Errorf("falha ao concluir uso da CLI: %w", err)
 	}
 	return nil
+}
+
+// RecordCLIUsage mantém a API simples usada por chamadas legadas e testes.
+func (v *Vault) RecordCLIUsage(ctx context.Context, command string, flags []string) error {
+	id, err := v.StartCLIUsage(ctx, command, flags)
+	if err != nil {
+		return err
+	}
+	return v.FinishCLIUsage(ctx, id, UsageStatusSuccess, 0)
+}
+
+func validUsageStatus(status string) bool {
+	switch status {
+	case UsageStatusSuccess, UsageStatusWarning, UsageStatusFailed, UsageStatusCanceled, UsageStatusUnknown:
+		return true
+	default:
+		return false
+	}
 }
 
 // CLIUsage agrega eventos locais desde o instante indicado; nil inclui todo o histórico.
@@ -257,6 +388,277 @@ func (v *Vault) CLIUsage(ctx context.Context, since *time.Time) (UsageReport, er
 	return UsageReport{Commands: sortedUsageCounts(commands), Flags: sortedUsageCounts(flags), Total: total}, nil
 }
 
+// DetailedCLIUsage agrega uso, saúde, cobertura e sinais de revisão humana.
+func (v *Vault) DetailedCLIUsage(ctx context.Context, since *time.Time, catalog UsageCatalog) (DetailedUsageReport, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	periodEnd := time.Now().UTC()
+	var periodStart *time.Time
+	if since != nil {
+		value := since.UTC()
+		periodStart = &value
+	}
+
+	commands := make(map[string]*UsageCommand, len(catalog.Commands))
+	commandDays := make(map[string]map[string]struct{}, len(catalog.Commands))
+	for _, name := range catalog.Commands {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		commands[name] = &UsageCommand{Name: name}
+		commandDays[name] = make(map[string]struct{})
+	}
+	flags := make(map[string]*UsageFlag, len(catalog.Flags))
+	flagDays := make(map[string]map[string]struct{}, len(catalog.Flags))
+	for _, definition := range catalog.Flags {
+		if strings.TrimSpace(definition.CommandPath) == "" || strings.TrimSpace(definition.Name) == "" {
+			continue
+		}
+		key := usageFlagKey(definition.CommandPath, definition.Name)
+		flags[key] = &UsageFlag{CommandPath: definition.CommandPath, Name: definition.Name}
+		flagDays[key] = make(map[string]struct{})
+	}
+
+	query := "SELECT command_path, flags_json, occurred_at, status, duration_ms FROM cli_usage_events"
+	args := []any{}
+	if periodStart != nil {
+		query += " WHERE occurred_at >= ?"
+		args = append(args, usageTimestamp(*periodStart))
+	}
+	query += " ORDER BY occurred_at ASC, id ASC"
+	rows, err := v.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return DetailedUsageReport{}, fmt.Errorf("falha ao ler relatório de uso da CLI: %w", err)
+	}
+	defer rows.Close()
+
+	coverage := UsageCoverage{PeriodStart: periodStart, PeriodEnd: periodEnd}
+	activeDays := make(map[string]struct{})
+	trend := make(map[int]*UsageTrend)
+	var firstEvent time.Time
+	var lastEvent time.Time
+	var trendAnchor time.Time
+
+	for rows.Next() {
+		var command, encodedFlags, occurredAtText, status string
+		var durationMS sql.NullInt64
+		if err := rows.Scan(&command, &encodedFlags, &occurredAtText, &status, &durationMS); err != nil {
+			return DetailedUsageReport{}, fmt.Errorf("falha ao ler evento de uso da CLI: %w", err)
+		}
+		occurredAt, err := time.Parse(time.RFC3339Nano, occurredAtText)
+		if err != nil {
+			return DetailedUsageReport{}, fmt.Errorf("falha ao interpretar data de uso da CLI: %w", err)
+		}
+		occurredAt = occurredAt.UTC()
+		if status == "" {
+			status = UsageStatusUnknown
+		}
+		if !validUsageStatus(status) {
+			status = UsageStatusUnknown
+		}
+		if firstEvent.IsZero() {
+			firstEvent = occurredAt
+			trendAnchor = startOfUsageDay(occurredAt)
+		}
+		lastEvent = occurredAt
+		coverage.Events++
+		coverage.HasData = true
+		activeDays[startOfUsageDay(occurredAt).Format("2006-01-02")] = struct{}{}
+
+		stats, ok := commands[command]
+		if !ok {
+			stats = &UsageCommand{Name: command}
+			commands[command] = stats
+			commandDays[command] = make(map[string]struct{})
+		}
+		stats.Count++
+		addUsageStatus(&stats.Status, status)
+		dayKey := startOfUsageDay(occurredAt).Format("2006-01-02")
+		commandDays[command][dayKey] = struct{}{}
+		if stats.FirstUsed == nil || occurredAt.Before(*stats.FirstUsed) {
+			stats.FirstUsed = usageTimePointer(occurredAt)
+		}
+		if stats.LastUsed == nil || occurredAt.After(*stats.LastUsed) {
+			stats.LastUsed = usageTimePointer(occurredAt)
+		}
+		if durationMS.Valid {
+			stats.DurationSamples++
+			stats.AverageDurationMS += durationMS.Int64
+		}
+
+		var usedFlags []string
+		if err := json.Unmarshal([]byte(encodedFlags), &usedFlags); err != nil {
+			return DetailedUsageReport{}, fmt.Errorf("flags de uso inválidas no vault: %w", err)
+		}
+		for _, flagName := range usedFlags {
+			key := usageFlagKey(command, flagName)
+			flag, ok := flags[key]
+			if !ok {
+				flag = &UsageFlag{CommandPath: command, Name: flagName}
+				flags[key] = flag
+				flagDays[key] = make(map[string]struct{})
+			}
+			flag.Count++
+			flag.LastUsed = usageTimePointer(occurredAt)
+			flagDays[key][dayKey] = struct{}{}
+		}
+
+		bucketIndex := usageTrendBucket(trendAnchor, occurredAt)
+		bucket, ok := trend[bucketIndex]
+		if !ok {
+			bucketStart := trendAnchor.AddDate(0, 0, bucketIndex*7)
+			bucket = &UsageTrend{Start: bucketStart, End: bucketStart.AddDate(0, 0, 7)}
+			if bucket.End.After(periodEnd) {
+				bucket.End = periodEnd
+			}
+			trend[bucketIndex] = bucket
+		}
+		bucket.Count++
+		addUsageStatus(&bucket.Status, status)
+	}
+	if err := rows.Err(); err != nil {
+		return DetailedUsageReport{}, fmt.Errorf("falha ao finalizar relatório de uso da CLI: %w", err)
+	}
+
+	if coverage.HasData {
+		coverage.FirstCollectedAt = usageTimePointer(firstEvent)
+		coverage.LastCollectedAt = usageTimePointer(lastEvent)
+		coverage.ActiveDays = len(activeDays)
+		coverage.ObservedDays = int(startOfUsageDay(lastEvent).Sub(startOfUsageDay(firstEvent)).Hours()/24) + 1
+		if coverage.PeriodStart == nil {
+			coverage.PeriodStart = usageTimePointer(firstEvent)
+		}
+	}
+
+	result := DetailedUsageReport{Coverage: coverage, Total: coverage.Events}
+	for _, stats := range commands {
+		stats.ActiveDays = len(commandDays[stats.Name])
+		if stats.DurationSamples > 0 {
+			stats.AverageDurationMS /= int64(stats.DurationSamples)
+		}
+		if result.Total > 0 {
+			stats.Share = float64(stats.Count) / float64(result.Total)
+		}
+		result.Commands = append(result.Commands, *stats)
+	}
+	for _, flag := range flags {
+		result.Flags = append(result.Flags, *flag)
+	}
+	for _, bucket := range trend {
+		result.Trend = append(result.Trend, *bucket)
+	}
+	sort.Slice(result.Commands, func(i, j int) bool {
+		if result.Commands[i].Count == result.Commands[j].Count {
+			return result.Commands[i].Name < result.Commands[j].Name
+		}
+		return result.Commands[i].Count > result.Commands[j].Count
+	})
+	sort.Slice(result.Flags, func(i, j int) bool {
+		if result.Flags[i].Count == result.Flags[j].Count {
+			if result.Flags[i].CommandPath == result.Flags[j].CommandPath {
+				return result.Flags[i].Name < result.Flags[j].Name
+			}
+			return result.Flags[i].CommandPath < result.Flags[j].CommandPath
+		}
+		return result.Flags[i].Count > result.Flags[j].Count
+	})
+	sort.Slice(result.Trend, func(i, j int) bool { return result.Trend[i].Start.Before(result.Trend[j].Start) })
+	result.Signals = usageReviewSignals(result, periodEnd)
+	return result, nil
+}
+
+func usageFlagKey(commandPath, flagName string) string {
+	return commandPath + "\x00" + flagName
+}
+
+func usageTimePointer(value time.Time) *time.Time {
+	copy := value.UTC()
+	return &copy
+}
+
+func startOfUsageDay(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func usageTrendBucket(anchor, value time.Time) int {
+	days := int(startOfUsageDay(value).Sub(anchor).Hours() / 24)
+	if days < 0 {
+		return 0
+	}
+	return days / 7
+}
+
+func addUsageStatus(counts *UsageStatusCounts, status string) {
+	switch status {
+	case UsageStatusSuccess:
+		counts.Success++
+	case UsageStatusWarning:
+		counts.Warning++
+	case UsageStatusFailed:
+		counts.Failed++
+	case UsageStatusCanceled:
+		counts.Canceled++
+	default:
+		counts.Unknown++
+	}
+}
+
+func usageReviewSignals(report DetailedUsageReport, periodEnd time.Time) []UsageSignal {
+	var signals []UsageSignal
+	for _, command := range report.Commands {
+		if command.Count == 0 {
+			signals = append(signals, UsageSignal{
+				Kind:        "never_used_command",
+				CommandPath: command.Name,
+				Detail:      "nenhuma execução observada no período",
+			})
+			continue
+		}
+		if command.Status.Failed > 0 {
+			signals = append(signals, UsageSignal{
+				Kind:        "failed_command",
+				CommandPath: command.Name,
+				Detail:      fmt.Sprintf("%d execução(ões) terminaram com falha", command.Status.Failed),
+			})
+		}
+		if command.LastUsed != nil && report.Coverage.PeriodStart != nil {
+			midpoint := report.Coverage.PeriodStart.Add(periodEnd.Sub(*report.Coverage.PeriodStart) / 2)
+			if command.LastUsed.Before(midpoint) {
+				signals = append(signals, UsageSignal{
+					Kind:        "older_than_half_window",
+					CommandPath: command.Name,
+					Detail:      "último uso está na primeira metade da janela consultada",
+				})
+			}
+		}
+	}
+	for _, flag := range report.Flags {
+		if flag.Count == 0 {
+			signals = append(signals, UsageSignal{
+				Kind:        "never_used_flag",
+				CommandPath: flag.CommandPath,
+				Flag:        flag.Name,
+				Detail:      "nenhum uso explícito observado no período",
+			})
+		}
+	}
+	if !report.Coverage.HasData {
+		signals = append([]UsageSignal{{Kind: "insufficient_data", Detail: "nenhuma execução foi observada no período"}}, signals...)
+	}
+	sort.SliceStable(signals, func(i, j int) bool {
+		if signals[i].Kind == signals[j].Kind {
+			if signals[i].CommandPath == signals[j].CommandPath {
+				return signals[i].Flag < signals[j].Flag
+			}
+			return signals[i].CommandPath < signals[j].CommandPath
+		}
+		return signals[i].Kind < signals[j].Kind
+	})
+	return signals
+}
+
 func usageTimestamp(value time.Time) string {
 	return value.UTC().Format("2006-01-02T15:04:05.000000000Z")
 }
@@ -285,6 +687,9 @@ func (v *Vault) configure() error {
 		return fmt.Errorf("falha ao criar schema do vault: %w", err)
 	}
 	if err := v.ensureCategoryColumn(); err != nil {
+		return err
+	}
+	if err := v.ensureCLIUsageColumns(); err != nil {
 		return err
 	}
 	if _, err := v.db.Exec("CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)"); err != nil {
@@ -323,6 +728,44 @@ func (v *Vault) ensureCategoryColumn() error {
 	return nil
 }
 
+func (v *Vault) ensureCLIUsageColumns() error {
+	rows, err := v.db.Query("PRAGMA table_info(cli_usage_events)")
+	if err != nil {
+		return fmt.Errorf("falha ao inspecionar schema de uso da CLI: %w", err)
+	}
+	defer rows.Close()
+	hasStatus := false
+	hasDuration := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("falha ao ler schema de uso da CLI: %w", err)
+		}
+		switch name {
+		case "status":
+			hasStatus = true
+		case "duration_ms":
+			hasDuration = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("falha ao finalizar schema de uso da CLI: %w", err)
+	}
+	if !hasStatus {
+		if _, err := v.db.Exec("ALTER TABLE cli_usage_events ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown'"); err != nil {
+			return fmt.Errorf("falha ao migrar status de uso da CLI: %w", err)
+		}
+	}
+	if !hasDuration {
+		if _, err := v.db.Exec("ALTER TABLE cli_usage_events ADD COLUMN duration_ms INTEGER"); err != nil {
+			return fmt.Errorf("falha ao migrar duração de uso da CLI: %w", err)
+		}
+	}
+	return nil
+}
+
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS schema_versions (
     version INTEGER PRIMARY KEY,
@@ -332,7 +775,9 @@ CREATE TABLE IF NOT EXISTS cli_usage_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     command_path TEXT NOT NULL,
     flags_json TEXT NOT NULL DEFAULT '[]',
-    occurred_at TEXT NOT NULL
+    occurred_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    duration_ms INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_cli_usage_events_occurred_at ON cli_usage_events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_cli_usage_events_command ON cli_usage_events(command_path);

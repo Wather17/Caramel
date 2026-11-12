@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"caramel/internal/output"
 	"caramel/internal/vault"
@@ -26,6 +27,17 @@ type cliExecutionRecorder struct {
 	inputs   []string
 	startErr error
 	finished bool
+}
+
+type cliUsageContextKey struct{}
+
+type cliUsageRecorder struct {
+	mu        sync.Mutex
+	store     *vault.Vault
+	eventID   int64
+	startedAt time.Time
+	status    output.State
+	finished  bool
 }
 
 func registerDomainExecution(cmd *cobra.Command) {
@@ -84,25 +96,102 @@ func startCLIExecution(cmd *cobra.Command, args []string) {
 	cmd.SetContext(context.WithValue(ctx, executionContextKey{}, recorder))
 }
 
-func recordCLIUsage(cmd *cobra.Command) {
-	if cmd == nil || cmd == usageCmd {
+func beginCLIUsage(cmd *cobra.Command) {
+	if cmd == nil || cmd.Name() == "usage" {
 		return
 	}
 	flags := make([]string, 0)
-	cmd.Flags().Visit(func(flag *pflag.Flag) { flags = append(flags, flag.Name) })
+	visitUsageFlags(cmd, func(flag *pflag.Flag) { flags = append(flags, flag.Name) })
+	recorder := &cliUsageRecorder{startedAt: time.Now()}
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	store, err := vault.Open()
 	if err != nil {
+		cmd.SetContext(context.WithValue(ctx, cliUsageContextKey{}, recorder))
+		return
+	}
+	eventID, err := store.StartCLIUsage(ctx, canonicalUsagePath(cmd.CommandPath()), flags)
+	if err != nil {
+		_ = store.Close()
+		cmd.SetContext(context.WithValue(ctx, cliUsageContextKey{}, recorder))
+		return
+	}
+	recorder.store = store
+	recorder.eventID = eventID
+	cmd.SetContext(context.WithValue(ctx, cliUsageContextKey{}, recorder))
+}
+
+func cliUsageRecorderFrom(cmd *cobra.Command) *cliUsageRecorder {
+	if cmd == nil || cmd.Context() == nil {
+		return nil
+	}
+	recorder, _ := cmd.Context().Value(cliUsageContextKey{}).(*cliUsageRecorder)
+	return recorder
+}
+
+func observeCLIUsage(cmd *cobra.Command, status output.State) {
+	recorder := cliUsageRecorderFrom(cmd)
+	if recorder == nil {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.status = status
+}
+
+func finishCLIUsage(cmd *cobra.Command, runErr error) {
+	recorder := cliUsageRecorderFrom(cmd)
+	if recorder == nil {
+		return
+	}
+	recorder.mu.Lock()
+	if recorder.finished {
+		recorder.mu.Unlock()
+		return
+	}
+	recorder.finished = true
+	status := recorder.status
+	store := recorder.store
+	eventID := recorder.eventID
+	startedAt := recorder.startedAt
+	recorder.mu.Unlock()
+	if store == nil || eventID <= 0 {
 		return
 	}
 	defer store.Close()
-	_ = store.RecordCLIUsage(cmd.Context(), cmd.CommandPath(), flags)
+	usageStatus := normalizeCLIUsageStatus(status, runErr)
+	_ = store.FinishCLIUsage(cmd.Context(), eventID, usageStatus, time.Since(startedAt))
+}
+
+func normalizeCLIUsageStatus(status output.State, runErr error) string {
+	if runErr != nil {
+		return vault.UsageStatusFailed
+	}
+	switch status {
+	case output.StateSuccess:
+		return vault.UsageStatusSuccess
+	case output.StateWarning, output.StateSkipped:
+		return vault.UsageStatusWarning
+	case output.StateCanceled:
+		return vault.UsageStatusCanceled
+	case output.StateFailed:
+		return vault.UsageStatusFailed
+	default:
+		return vault.UsageStatusUnknown
+	}
 }
 
 func outputOptionsFor(cmd *cobra.Command) output.Options {
 	options := outputOptions()
 	recorder := executionRecorderFrom(cmd)
-	if recorder != nil || openRequested(cmd) {
+	usageRecorder := cliUsageRecorderFrom(cmd)
+	if recorder != nil || usageRecorder != nil || openRequested(cmd) {
 		options.Observe = func(result *output.Result) {
+			if usageRecorder != nil {
+				observeCLIUsage(cmd, result.Status)
+			}
 			persisted := recorder == nil
 			warning := ""
 			if recorder != nil {

@@ -152,7 +152,7 @@ caramel routine process rotina_semana_1.docx`,
 		if err != nil {
 			return err
 		}
-		aiClient.Verbose = outputOptions().Verbose
+		aiClient.Verbose = outputOptionsFor(cmd).Verbose
 		aiClient.DiagnosticWriter = cmd.ErrOrStderr()
 
 		var combinedRows []docx.RoutineRow
