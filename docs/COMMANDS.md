@@ -169,13 +169,14 @@ caramel config set model_text_fallbacks openai/gpt-oss-120b
 | `caramel shell enable/status/disable powershell` | Administra a integração permanente e reversível com os perfis PowerShell |
 | `caramel install` | Instala o Caramel CLI globalmente e persiste `~/.local/bin` no perfil Bash, Zsh ou Fish no Linux |
 | `caramel version` | Exibe a versão atual do executável |
-| `caramel usage` | Resume o uso local de comandos e flags nos últimos 30 dias |
+| `caramel usage` | Resume adoção, saúde, tendência e sinais locais de comandos e flags nos últimos 30 dias |
 
 `caramel usage --all-time` consulta todo o histórico; `--days N` escolhe uma janela; `--csv` exporta
 as contagens agregadas em CSV e `--json` usa o formato JSON comum da CLI. A coleta começa após a
-atualização e guarda apenas caminhos de comandos, nomes de flags e datas. Valores, argumentos e
-caminhos de arquivos não são armazenados. A frequência orienta análise e não determina se um comando
-deve ser removido.
+atualização e guarda apenas caminhos canônicos de comandos, nomes de flags, datas, durações e
+resultados. Valores, argumentos e caminhos de arquivos não são armazenados. A frequência orienta
+análise e não determina se um comando deve ser removido. Consulte [`USAGE_DECISIONS.md`](USAGE_DECISIONS.md)
+para anexar a evidência a uma issue.
 
 Os comandos produtores aceitam `--open` para abrir o resultado principal somente depois de sua
 publicação e persistência no vault. Outputs únicos abrem no aplicativo padrão; pacotes abrem no
