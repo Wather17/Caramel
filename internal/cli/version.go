@@ -20,7 +20,7 @@ está atualizada em relação às releases do GitHub.`,
 	Example: `# Exibir informações de versão
 caramel version`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}

@@ -35,7 +35,7 @@ caramel vault init
 caramel vault init "C:\Users\55689\Documents\Caramel"`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ Use para incluir um acervo existente, como Documents/docs-mae, sem migrá-lo.`,
 caramel vault source add "C:\Users\55689\Documents\docs-mãe"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ Use para confirmar quais pastas alimentam o autocomplete e a busca do vault.`,
 caramel vault source list`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ caramel vault sync
 caramel vault sync --full`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ Use para diagnosticar configuração, fontes indisponíveis ou um índice desatu
 caramel vault status`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := output.New(outputOptions(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		renderer, err := output.New(outputOptionsFor(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
