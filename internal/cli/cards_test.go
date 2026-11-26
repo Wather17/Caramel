@@ -52,6 +52,7 @@ func writeRealPNG(t *testing.T, path string) {
 }
 
 func TestCardsCmd_FolderGeraPDF(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	tmpDir := t.TempDir()
 	img1 := filepath.Join(tmpDir, "01_maca.png")
 	img2 := filepath.Join(tmpDir, "02_banana.png")
@@ -78,6 +79,7 @@ func TestCardsCmd_FolderGeraPDF(t *testing.T) {
 }
 
 func TestCardsCmd_ModoHTML(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	tmpDir := t.TempDir()
 	img1 := filepath.Join(tmpDir, "01_maca.png")
 	writeRealPNG(t, img1)

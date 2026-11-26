@@ -12,6 +12,7 @@ import (
 )
 
 func TestPDFSplitCommandUsesDefaultOutputFolder(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDFSplitTestFlags(t)
 	dir := t.TempDir()
 	input := filepath.Join(dir, "lesson.pdf")

@@ -11,6 +11,7 @@ import (
 )
 
 func TestDOCXSplitCommandUsesDefaultOutputFolder(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configureDOCXSplitTest(t)
 	dir := t.TempDir()
 	input := filepath.Join(dir, "lesson.docx")

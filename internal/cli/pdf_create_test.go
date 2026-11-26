@@ -14,6 +14,7 @@ import (
 )
 
 func TestPDFCreateCommandUsesDefaultFileName(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDFCreateTestFlags()
 	dir := t.TempDir()
 	input := filepath.Join(dir, "worksheet.png")
@@ -28,6 +29,7 @@ func TestPDFCreateCommandUsesDefaultFileName(t *testing.T) {
 }
 
 func TestPDFCreateCommandUsesNaturalFolderOrderAndName(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDFCreateTestFlags()
 	dir := t.TempDir()
 	folder := filepath.Join(dir, "activity_images")
@@ -71,6 +73,7 @@ func TestPDFCreateCommandPreservesExplicitOrderAndOutput(t *testing.T) {
 }
 
 func TestPDFCreateCommandUsesCollectionDefaultName(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDFCreateTestFlags()
 	dir := t.TempDir()
 	first := filepath.Join(dir, "cover.png")
