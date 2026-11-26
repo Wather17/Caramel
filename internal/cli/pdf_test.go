@@ -65,6 +65,7 @@ func configurePDF2UpTestFlags() {
 }
 
 func TestPDF2UpCmd_ArquivoJFIFMaiusculo(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDF2UpTestFlags()
 	tempDir := t.TempDir()
 	imgPath := filepath.Join(tempDir, "atividade.JFIF")
@@ -85,6 +86,7 @@ func TestPDF2UpCmd_ArquivoJFIFMaiusculo(t *testing.T) {
 }
 
 func TestPDF2UpCmd_PastaComFormatosMistos(t *testing.T) {
+	isolateLocalOutputConfig(t)
 	configurePDF2UpTestFlags()
 	tempDir := t.TempDir()
 	inputDir := filepath.Join(tempDir, "atividades")
