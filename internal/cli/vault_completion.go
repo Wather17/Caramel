@@ -29,6 +29,7 @@ func init() {
 	registerIndexedInputs(docxSplitCmd, docxExtensions)
 	registerIndexedInputs(docxMergeCmd, docxExtensions)
 	registerIndexedInputs(imageColorizeCmd, colorizeExtensions)
+	registerIndexedInputs(imageCompressCmd, printImageExtensions)
 	registerIndexedInputs(cardsCmd, printImageExtensions)
 	registerIndexedInputs(pdf2UpCmd, printImageExtensions)
 	registerIndexedInputs(pdfCreateCmd, printImageExtensions)
