@@ -200,7 +200,7 @@ func registerOpenFlag(cmd *cobra.Command) {
 func init() {
 	for _, command := range []*cobra.Command{
 		docxExtractCmd, docxImagesExtractCmd, docxSplitCmd, docxMergeCmd,
-		imageColorizeCmd, imageGenerateCmd, cardsCmd, pdf2UpCmd,
+		imageColorizeCmd, imageCompressCmd, imageGenerateCmd, cardsCmd, pdf2UpCmd,
 		pdfCreateCmd, pdfMergeCmd, pdfSplitCmd, pdfPagesRenderCmd, pdfImagesExtractCmd,
 		routineProcessCmd, routineConsolidateCmd,
 	} {
